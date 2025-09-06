@@ -51,7 +51,7 @@ interface Infraction {
   at: number | string; // token idx or pair key
 }
 
-const WORD_RE = /^[A-Za-z]+(?:[-''][A-Za-z]+)*$/;
+const WORD_RE = /^[A-Za-z]+(?:[-'’][A-Za-z]+)*$/;
 const NUMERAL_RE = /^\d+(?:[\.,]\d+)*/;
 const ESSENTIAL_PUNCT = new Set([".", "?", "!", ";", ":", "—", "–", "(", ")", '"', "'", "\u201C", "\u201D", "\u2018", "\u2019"]);
 
@@ -88,7 +88,8 @@ function buildLexicon(selected: string[], userLex: string): Set<string> {
 
 function tokenize(text: string): Token[] {
   const tokens: Token[] = [];
-  const regex = /[A-Za-z]+(?:[-''][A-Za-z]+)*|[\.!\?;:\u2014\u2013\-\(\)"'\u201C\u201D\u2018\u2019]|,|\d+(?:[\.,]\d+)*/g;
+  const regex = /[A-Za-z]+(?:[-'’][A-Za-z]+)*|[\.!\?;:\u2014\u2013\-\(\)"'\u201C\u201D\u2018\u2019]|,|\d+(?:[\.,]\d+)*/g
+
   let m: RegExpExecArray | null;
   while ((m = regex.exec(text)) !== null) {
     const raw = m[0];
@@ -198,7 +199,7 @@ function WritingScorer() {
     if (sc) {
       ok = sc.isCorrect(word);
     } else {
-      const base = word.replace(/['']/g, "'").toLowerCase();
+      const base = word.replace(/[’']/g, "'").toLowerCase();
       ok = userLexicon.has(base) || [base.replace(/(ing|ed|es|s)$/,''), base.replace(/(ly)$/,'')].some(s => s && userLexicon.has(s));
     }
 
@@ -278,7 +279,10 @@ function WritingScorer() {
         const words = s.raw.split(/\s+/).filter((w) => WORD_RE.test(w));
         if (words.length > 30) infractions.push({ kind: "possible", tag: "RUN_ON", msg: "Long sentence (>30 words) – possible run-on", at: s.raw.slice(0, 20) + "…" });
         const firstWord = words[0];
-        if (firstWord && !/^[A-Z]/.test(firstWord)) infractions.push({ kind: "definite", tag: "CAPITALIZATION", msg: "Sentence should start with a capital letter", at: firstWord });
+        const normalizedFirst = firstWord ? firstWord.replace(/[']/g, "'") : "";
+        if (normalizedFirst && !/^[A-Z]/.test(normalizedFirst)) {
+          infractions.push({ kind: "definite", tag: "CAPITALIZATION", msg: "Sentence should start with a capital letter", at: firstWord });
+        }
       });
     }
 
@@ -340,7 +344,6 @@ function WritingScorer() {
             </div>
 
             <div className="flex gap-2 mt-3">
-              <Button variant="secondary" onClick={() => setOverrides({})}>Reset overrides</Button>
               <Button variant="ghost" onClick={() => setText("")}>Clear text</Button>
 
               <Button

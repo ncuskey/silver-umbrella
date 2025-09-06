@@ -141,6 +141,21 @@ The tool is designed for easy extension:
 - **Dictionary Integration**: Easy integration with additional dictionary databases
 - **Web Worker Support**: Non-blocking spell checking for performance optimization
 
+## Recent Updates
+
+- **UI Improvements**: Removed duplicate "Reset overrides" button for cleaner interface
+- **Enhanced Capitalization**: Added curly apostrophe handling for consistent CWS capitalization checks
+- **Repository Cleanup**: Removed stray files and updated .gitignore for better version control
+- **Real Hunspell WASM**: Implemented `hunspell-asm` library for professional spell checking
+- **Dictionary Integration**: Real `en_US.aff` and `en_US.dic` file support with UTF-8 encoding
+- **Performance Optimization**: Aggressive caching (1-year) for dictionary files
+- **Spell Result Caching**: Intelligent in-memory caching for repeated word lookups
+- **Modern TypeScript**: Upgraded to ES2022 target for better performance
+- **Bundle Analysis**: Added @next/bundle-analyzer for performance monitoring
+- **ESLint Updates**: Aligned with Next.js 15 configuration
+- **LanguageTool Grammar**: Advisory grammar checking with API proxy
+- **Web Worker Support**: Non-blocking spell checking for large dictionaries
+
 ## References
 
 Aligned to research standards from:
