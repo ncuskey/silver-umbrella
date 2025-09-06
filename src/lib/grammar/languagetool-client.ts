@@ -6,18 +6,11 @@ interface LTMatch {
   offset: number;
   length: number;
   replacements: { value: string }[];
-  rule: {
-    id: string;
-    description: string;
-    issueType?: string;
-    category: { id: string; name: string };
-  };
+  rule: { id: string; description: string; issueType?: string; category: { id: string; name: string } };
 }
 interface LTResponse { matches: LTMatch[] }
 
-export function createLanguageToolChecker(
-  baseUrl = "https://api.languagetool.org"
-): GrammarChecker {
+export function createLanguageToolChecker(baseUrl = "https://api.languagetool.org"): GrammarChecker {
   const endpoint = `${baseUrl.replace(/\/$/, "")}/v2/check`;
   return {
     async check(text: string, lang = "en-US"): Promise<GrammarIssue[]> {
@@ -32,8 +25,8 @@ export function createLanguageToolChecker(
         body
       });
       if (!res.ok) throw new Error(`LanguageTool error: ${res.status}`);
-
       const data: LTResponse = await res.json();
+
       return (data.matches || []).map((m) => ({
         offset: m.offset,
         length: m.length,

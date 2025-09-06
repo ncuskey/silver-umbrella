@@ -136,20 +136,15 @@ function clsForWord(target: string, attempt: string): { cls: number; max: number
 // ———————————— Writing: Spellcheck + CWS + Infractions ————————————
 
 function isWordLikelyCorrect(word: string, userLexicon: Set<string>): boolean {
-  if (!WORD_RE.test(word)) return false; // not a word shape
-
-  // 1) If Hunspell is loaded, prefer that
+  if (!WORD_RE.test(word)) return false;
+  // 1) prefer external spell engine (Hunspell) when loaded
   const sc = getExternalSpellChecker();
-  if (sc) {
-    return sc.isCorrect(word);
-  }
-
-  // 2) Fallback: your existing lexicon + shape checks
-  const base = word.replace(/[\-'']/g, "");
-  if (base.length === 1) return true; // allow I/a
-  if (userLexicon.has(word.toLowerCase())) return true;
-  if (/^[A-Za-z]+$/.test(base)) return true;
-  return true; // conservative default; rely on manual overrides
+  if (sc) return sc.isCorrect(word);
+  // 2) strict fallback: lexicon + light stemming
+  const base = word.replace(/['']/g, "'").toLowerCase();
+  if (userLexicon.has(base)) return true;
+  const stems = [base.replace(/(ing|ed|es|s)$/,''), base.replace(/(ly)$/,'')];
+  return stems.some(s => s && userLexicon.has(s));
 }
 
 function computeTWW(tokens: Token[]): number {
@@ -339,9 +334,9 @@ function WritingScorer() {
               <Button variant="secondary" onClick={() => setOverrides({})}>Reset overrides</Button>
               <Button variant="ghost" onClick={() => setText("")}>Clear text</Button>
 
-              {/* Load Hunspell dictionaries on demand */}
               <Button
                 variant="outline"
+                title="Loads /public/dicts/en_US.aff & en_US.dic and enables Hunspell"
                 onClick={async () => {
                   try {
                     const { createHunspellSpellChecker } = await import("@/lib/spell/hunspell-adapter");
@@ -349,10 +344,9 @@ function WritingScorer() {
                     setExternalSpellChecker(sc);
                   } catch (e) {
                     console.error(e);
-                    alert("Failed to load Hunspell. Check that /public/dicts/en_US.aff and en_US.dic exist, and wire a WASM loader.");
+                    alert("Hunspell load failed. Confirm /public/dicts/en_US.aff & en_US.dic and WASM loader wiring.");
                   }
                 }}
-                title="Loads dictionaries from /public/dicts/"
               >
                 Load Hunspell
               </Button>
@@ -364,12 +358,13 @@ function WritingScorer() {
                   setLtBusy(true);
                   try {
                     const { createLanguageToolChecker } = await import("@/lib/grammar/languagetool-client");
-                    const lt = createLanguageToolChecker("https://api.languagetool.org"); // Use direct API for now
+                    const lt = createLanguageToolChecker("/api/languagetool");
                     const issues = await lt.check(text, "en-US");
-                    setLtIssues(issues.slice(0, 12).map(i => `${i.category}: ${i.message}`));
+                    const msgs = issues.slice(0, 12).map(i => `${i.category}: ${i.message}`);
+                    setLtIssues(msgs);
                   } catch (e) {
                     console.error(e);
-                    alert("LanguageTool check failed. If using the public API, you may hit rate limits. Consider the /api proxy.");
+                    alert("LanguageTool check failed. Consider the /api proxy or a self-hosted instance.");
                   } finally {
                     setLtBusy(false);
                   }
@@ -469,7 +464,7 @@ function WritingScorer() {
           <p className="font-medium">Scoring guidance</p>
           <ul className="list-disc ml-5 space-y-1">
             <li><strong>TWW</strong>: all words written; include misspellings; exclude numerals.</li>
-            <li><strong>WSC</strong>: words spelled correctly in isolation (dictionary packs + custom lexicon; override by clicking).</li>
+            <li><strong>WSC</strong>: each correctly spelled word in isolation (override by clicking). Click 'Load Hunspell' to use a real dictionary/affix checker; otherwise, a custom-lexicon fallback is used.</li>
             <li><strong>CWS</strong>: adjacent units (words & essential punctuation). Commas excluded. Initial valid word counts 1. Capitalize after terminals.</li>
           </ul>
         </div>

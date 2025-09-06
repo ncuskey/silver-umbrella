@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "size:report": "du -sh node_modules/* | sort -h | tail -n 30"
+    "size:report": "du -sh node_modules/* | sort -h | tail -n 30",
+    "analyze": "ANALYZE=1 next build"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.0",
@@ -20,6 +21,7 @@
     "tailwind-merge": "^2.2.0"
   },
   "devDependencies": {
+    "@next/bundle-analyzer": "^15.5.2",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
