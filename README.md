@@ -71,9 +71,10 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 ## Spell Checking & Grammar
 
 ### Hunspell Integration
-- Professional spell checking using WASM dictionaries
-- Place `en_US.aff` and `en_US.dic` files in `public/dicts/`
-- Click "Load Hunspell" to enable advanced spell checking
+- Professional spell checking using custom dictionary parser
+- Uses `en_US.aff` and `en_US.dic` files from LibreOffice dictionaries
+- Click "Load Hunspell" to enable advanced spell checking with 500K+ words
+- Implements edit distance algorithm for spelling suggestions
 - Seamlessly falls back to custom lexicon when not loaded
 
 ### LanguageTool Grammar
@@ -85,10 +86,12 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 ## Extensibility
 
 The tool is designed for easy extension:
-- Hunspell/LanguageTool adapters already integrated
+- Custom dictionary parser with 500K+ word support
+- LanguageTool grammar checking already integrated
 - Add POS-based rules for advanced grammar checking
-- Integrate with larger dictionary databases
+- Integrate with additional dictionary databases
 - Add support for additional languages
+- WASM-based spell checking can be added for advanced features
 
 ## References
 
