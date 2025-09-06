@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState, useRef } from "react";
+import React, { useMemo, useState, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -186,7 +186,14 @@ function WritingScorer() {
   // state near top of WritingScorer()
   const [ltBusy, setLtBusy] = useState(false);
   const [ltIssues, setLtIssues] = useState<string[]>([]);
+  const [spellStatus, setSpellStatus] = useState<"demo" | "hunspell">("demo");
   const spellCache = useRef<Map<string, boolean>>(new Map());
+
+  useEffect(() => { 
+    if (process.env.NODE_ENV !== "production") {
+      import("@/lib/spell/dev-probe").then(m => m.probeHunspell()); 
+    }
+  }, []);
 
   function isWordLikelyCorrect(word: string, userLexicon: Set<string>): boolean {
     if (!WORD_RE.test(word)) return false;
@@ -337,6 +344,13 @@ function WritingScorer() {
               </div>
             </div>
 
+            <div className="mt-2 text-xs flex items-center gap-2">
+              <span>Spell engine:</span>
+              {spellStatus === "hunspell"
+                ? <Badge>Hunspell (WASM)</Badge>
+                : <Badge variant="secondary">Demo lexicon</Badge>}
+            </div>
+
             <div className="flex items-center gap-2 mt-3">
               <Checkbox id="flags" checked={showFlags} onCheckedChange={(v) => setShowFlags(!!v)} />
               <label htmlFor="flags" className="text-sm">Show infractions & suggestions</label>
@@ -348,12 +362,24 @@ function WritingScorer() {
 
               <Button
                 variant="outline"
+                disabled={spellStatus === "hunspell"}
                 title="Loads /public/dicts/en_US.aff & en_US.dic and enables Hunspell"
                 onClick={async () => {
                   try {
                     const { createHunspellSpellChecker } = await import("@/lib/spell/hunspell-adapter");
                     const sc = await createHunspellSpellChecker("/dicts/en_US.aff", "/dicts/en_US.dic");
                     setExternalSpellChecker(sc);
+                    setSpellStatus("hunspell");
+                    alert("Hunspell loaded ✓");
+                    
+                    // Quick probe to confirm real dictionary behavior:
+                    const probe = ["believe","butter","worry","can't","we'll","O'Neill's"];
+                    const results = probe.map(w => `${w}:${getExternalSpellChecker()!.isCorrect(w)}`);
+                    console.log("[Hunspell probe]", results.join(" | "));
+
+                    if (results.filter(s => s.endsWith(":true")).length <= 1) {
+                      alert("Hunspell loaded but probe failed. Check /dicts paths or .aff/.dic content.");
+                    }
                   } catch (e) {
                     console.error(e);
                     alert("Hunspell load failed. Confirm /public/dicts/en_US.aff & en_US.dic and WASM loader wiring.");
@@ -417,12 +443,19 @@ function WritingScorer() {
                 const okWord = isWord && ((overrides[tok.idx] as WordOverride)?.csw ?? isWordLikelyCorrect(tok.raw, lexicon));
                 const pairKey = next ? `${tok.idx}-${next.idx}` : null;
                 const manual = pairKey ? (overrides[pairKey] as PairOverride | undefined)?.cws : undefined;
+                
+                const sc = getExternalSpellChecker();
+                const sugg = (isWord && sc && !okWord) ? (sc.suggestions?.(tok.raw, 3) || []) : [];
+                const title = isWord
+                  ? okWord ? "WSC: counted (click to mark incorrect)"
+                           : `WSC: NOT counted (click to mark correct)${sugg.length ? "\nSuggestions: " + sugg.join(", ") : ""}`
+                  : tok.type;
 
                 return (
                   <span key={tok.idx} className="flex items-center">
                     <button
                       className={`px-1 rounded hover:bg-muted transition ${isWord ? (okWord ? "ring-1 ring-green-500/40" : "ring-1 ring-red-500/40") : ""}`}
-                      title={isWord ? (okWord ? "WSC: counted (click to mark incorrect)" : "WSC: not counted (click to mark correct)") : tok.type}
+                      title={title}
                       onClick={() => {
                         if (!isWord) return;
                         setOverrides((o) => ({ ...o, [tok.idx]: { ...(o[tok.idx] as WordOverride), csw: !(okWord) } }));

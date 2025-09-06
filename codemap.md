@@ -43,7 +43,8 @@
 │   │   │   ├── types.ts       # SpellChecker & GrammarChecker interfaces
 │   │   │   ├── bridge.ts      # Spell checker bridge for dependency injection
 │   │   │   ├── hunspell-adapter.ts # Hunspell WASM integration (real implementation)
-│   │   │   └── hunspell-worker-client.ts # Web Worker client for Hunspell
+│   │   │   ├── hunspell-worker-client.ts # Web Worker client for Hunspell
+│   │   │   └── dev-probe.ts   # Development testing script for Hunspell validation
 │   │   ├── grammar/           # Grammar checking system
 │   │   │   └── languagetool-client.ts # LanguageTool API client
 │   │   └── utils.ts           # Utility functions (cn helper)
@@ -72,10 +73,14 @@
 - **Written Expression Scoring**: TWW, WSC, CWS calculations
 - **Spelling Assessment**: CLS (Correct Letter Sequences) scoring
 - **Hunspell Integration**: Professional spell checking with WASM dictionaries
+- **Spell Engine Status**: Visual indicator showing active spell engine (Demo/Hunspell)
+- **Auto-validation**: Automatic probe testing after Hunspell loading
+- **Spelling Suggestions**: Tooltip suggestions for misspelled words
 - **LanguageTool Grammar**: Optional grammar checking and suggestions
 - **Interactive Overrides**: Click-to-toggle word and pair scoring
 - **Dictionary Packs**: Grade-level appropriate word lists
 - **Infraction Flagging**: Automated issue detection
+- **Curly Apostrophe Support**: Proper handling of smart quotes and apostrophes
 
 **Main Components**:
 - `CBMApp`: Root component with tab navigation
@@ -203,11 +208,18 @@ interface PairOverride { cws?: boolean }
 - `createHunspellSpellChecker()`: Factory for dictionary-based spell checker
 - **Dictionary Loading**: Fetches and mounts `en_US.aff` and `en_US.dic` files from `public/dicts/`
 - **Spelling Engine**: Built-in Hunspell suggestion engine for misspelled words
+- **Apostrophe Normalization**: Handles curly apostrophes and smart quotes consistently
 - **Fallback System**: Uses custom lexicon with light stemming when Hunspell not loaded
 - **Memory Management**: Includes cleanup functions for repeated loads
 - **UTF-8 Support**: Properly handles UTF-8 encoded dictionary files
 - **Performance Optimized**: Dictionary files cached with 1-year expiration
 - **Spell Result Caching**: Intelligent in-memory caching for repeated word lookups
+
+#### Dev Probe (`dev-probe.ts`)
+- **Development Testing**: Quick validation script for Hunspell functionality
+- `probeHunspell()`: Tests common words to verify dictionary loading
+- **Console Output**: Logs probe results for debugging
+- **Auto-execution**: Runs automatically in development mode via useEffect
 
 #### Hunspell Worker Client (`hunspell-worker-client.ts`)
 - Web Worker-based spell checking for large dictionaries
@@ -304,6 +316,12 @@ The tool implements scoring methods aligned with educational research:
 - **Build Process**: Optimized for production builds with proper TypeScript compilation
 
 ### Recent Updates
+- **Spell Engine Status**: Added visual status indicator showing active spell engine (Demo/Hunspell)
+- **Auto-validation**: Automatic probe testing after Hunspell loading with sanity checks
+- **Enhanced Tooltips**: Spelling suggestions now appear in word tooltips when flagged
+- **Smart Button States**: Load Hunspell button disables after successful loading
+- **Development Testing**: Added dev probe script for quick Hunspell validation
+- **Curly Apostrophe Support**: Enhanced normalization for smart quotes and apostrophes
 - **UI Improvements**: Removed duplicate "Reset overrides" button for cleaner interface
 - **Enhanced Capitalization**: Added curly apostrophe handling for consistent CWS capitalization checks
 - **Repository Cleanup**: Removed stray files and updated .gitignore for better version control
