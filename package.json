@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "size:report": "du -sh node_modules/* | sort -h | tail -n 30"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.0",
