@@ -31,7 +31,7 @@ import type { GrammarIssue, SpellChecker } from "@/lib/spell/types";
 
 // ———————————— Types & Constants ————————————
 
-type UnitType = "word" | "numeral" | "comma" | "essentialPunct" | "other";
+type UnitType = "word" | "numeral" | "comma" | "essentialPunct" | "other" | "PUNCT" | "WORD" | "HYPHEN";
 
 interface Token {
   raw: string;
@@ -94,9 +94,10 @@ function tokenize(text: string): Token[] {
     const type: UnitType =
       NUMERAL_RE.test(raw) ? "numeral" :
       raw === "," ? "comma" :
-      WORD_RE.test(raw) ? "word" :
-      ESSENTIAL_PUNCT.has(raw) ? "essentialPunct" :
-      /[\.!\?;:]/.test(raw) ? "essentialPunct" :
+      WORD_RE.test(raw) ? "WORD" :
+      raw === "-" ? "HYPHEN" :
+      ESSENTIAL_PUNCT.has(raw) ? "PUNCT" :
+      /[\.!\?;:]/.test(raw) ? "PUNCT" :
       "other";
     tokens.push({ raw, type, idx: tokens.length });
   }
@@ -168,10 +169,36 @@ function filterLtIssues(text: string, issues: GrammarIssue[], sc: SpellChecker |
   return out;
 }
 
+function isTerminal(tok: Token) { return tok.type === "PUNCT" && /[.?!]/.test(tok.raw); }
+function isWord(tok: Token)     { return tok.type === "WORD"; }
+function isComma(tok: Token)    { return tok.type === "PUNCT" && tok.raw === ","; }
+function isHyphen(tok: Token)   { return tok.type === "HYPHEN" || (tok.type === "PUNCT" && tok.raw === "-"); }
+
+function cwsPairValid(a: Token, b: Token, wsc: (w: string) => boolean): { ok: boolean; reason?: string } {
+  // Commas don't count against pairs (CBM: ignore commas)
+  if (isComma(a) || isComma(b)) return { ok: true };
+
+  // WORD → WORD  => both words spelled correctly
+  if (isWord(a) && isWord(b)) return { ok: wsc(a.raw) && wsc(b.raw), reason: "misspelling" };
+
+  // WORD → TERMINAL  => preceding word must be spelled correctly; terminal must be . ? !
+  if (isWord(a) && isTerminal(b)) return { ok: wsc(a.raw), reason: "misspelling-before-terminal" };
+
+  // TERMINAL → WORD  => next word must start with capital letter
+  if (isTerminal(a) && isWord(b)) return { ok: /^[A-Z]/.test(b.raw), reason: "capitalization" };
+
+  // Hyphenated compound: WORD - WORD  => allow if both sides spelled correctly
+  if (isWord(a) && isHyphen(b)) return { ok: true };
+  if (isHyphen(a) && isWord(b)) return { ok: wsc(b.raw), reason: "misspelling-after-hyphen" };
+
+  // Everything else: treat as neutral valid (don't penalize style/semantics)
+  return { ok: true };
+}
+
 // ———————————— Writing: Spellcheck + CWS + Infractions ————————————
 
 function computeTWW(tokens: Token[]): number {
-  return tokens.filter((t) => t.type === "word").length;
+  return tokens.filter((t) => t.type === "WORD").length;
 }
 
 
@@ -314,7 +341,7 @@ function WritingScorer() {
   ): number {
     let count = 0;
     tokens.forEach((t) => {
-      if (t.type !== "word") return;
+      if (t.type !== "WORD") return;
       const ok = overrides[t.idx]?.csw ?? isWordLikelyCorrect(t.raw, lexicon);
       if (!ok) infractions.push({ kind: "definite", tag: "SPELLING", msg: `Possible misspelling: "${t.raw}"`, at: t.idx });
       if (ok) count += 1;
@@ -329,9 +356,7 @@ function WritingScorer() {
     infractions: Infraction[]
   ): number {
     const stream = tokens.filter((t) => t.type !== "comma" && t.type !== "other");
-    const isValidWord = (t: Token) => t.type === "word" && ((overrides[t.idx as number] as WordOverride)?.csw ?? isWordLikelyCorrect(t.raw, lexicon));
-    const isPunct = (t: Token) => t.type === "essentialPunct";
-    const isTerminal = (s: string) => s === "." || s === "?" || s === "!";
+    const isValidWord = (t: Token) => t.type === "WORD" && ((overrides[t.idx as number] as WordOverride)?.csw ?? isWordLikelyCorrect(t.raw, lexicon));
 
     let cws = 0;
     if (stream[0]) {
@@ -350,22 +375,19 @@ function WritingScorer() {
         continue;
       }
 
-      if (isValidWord(a) && isValidWord(b)) {
-        cws += 1;
-      } else if (isValidWord(a) && isPunct(b)) {
-        cws += 1;
-        if (!isTerminal(b.raw) && b.raw !== ";" && b.raw !== ":") {
-          infractions.push({ kind: "possible", tag: "PUNCT", msg: `Non-terminal punctuation in CWS: "${b.raw}"`, at: pairKey });
-        }
-      } else if (isPunct(a) && isValidWord(b)) {
-        if (isTerminal(a.raw)) {
-          if (/^[A-Z]/.test(b.raw)) { cws += 1; }
-          else { infractions.push({ kind: "definite", tag: "CAPITALIZATION", msg: "Expected capital after sentence-ending punctuation", at: pairKey }); }
-        } else {
-          cws += 1; // lenient after non-terminal/parenthetical/quotes
-        }
+      const wscFn = (w: string) => isWordLikelyCorrect(w, lexicon);
+      const { ok, reason } = cwsPairValid(a, b, wscFn);
+      if (ok) { 
+        cws++; 
       } else {
-        infractions.push({ kind: "possible", tag: "PAIR", msg: `Invalid adjacency: ${a.raw} ^ ${b.raw}`, at: pairKey });
+        // Only push a PAIR infraction for mechanical reasons
+        if (reason === "capitalization") {
+          infractions.push({ kind: "definite", tag: "CAPITALIZATION", msg: "Expected capital after sentence-ending punctuation", at: `${a.raw} ^ ${b.raw}` });
+        } else if (reason?.startsWith("misspelling")) {
+          // spelling errors are already counted under WSC and will surface separately; skip duplicating PAIR noise
+        } else {
+          // do nothing (we no longer penalize style like "off of", "to stay", etc.)
+        }
       }
     }
 
