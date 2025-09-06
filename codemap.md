@@ -320,6 +320,17 @@ The tool implements scoring methods aligned with educational research:
 - **Build Process**: Optimized for production builds with proper TypeScript compilation
 
 ### Recent Updates
+
+#### Latest Improvements (v2.1)
+- **Enhanced Cache Management**: Engine-aware spell caching with `engineTag` prevents demo results from being reused after Hunspell loads
+- **Automatic Cache Clearing**: Spell cache is automatically cleared when Hunspell loads via `spellCache.current.clear()` and `setSpellEpoch()`
+- **Improved Visual Feedback**: Red badges (`bg-red-100 text-red-700 border-red-300`) for misspelled words, green badges (`bg-emerald-50 text-emerald-700 border-emerald-200`) for correct words
+- **Stricter Grammar Filtering**: LanguageTool filtering now only shows spelling suggestions for genuine typos (`catId === "TYPOS" || ruleId.startsWith("MORFOLOGIK_RULE")`)
+- **Better Override Handling**: Manual overrides properly respected with `effectiveOk` logic in both scoring and visual display
+- **Enhanced Re-scoring**: All `useMemo` dependencies include `spellEpoch` to force re-computation when spell engine changes
+- **Improved Infraction Logic**: Spelling infractions now use `effectiveOk` to prevent showing correct words as misspellings
+
+#### Previous Updates
 - **Automatic Loading**: Hunspell now loads automatically on app startup for seamless experience
 - **Automatic Grammar Checking**: Grammar analysis runs automatically as you type with 800ms debounce
 - **Request Cancellation**: Added AbortSignal support to prevent stale grammar check results

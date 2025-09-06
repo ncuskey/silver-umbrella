@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Info, AlertTriangle, ListChecks } from "lucide-react";
 import { setExternalSpellChecker, getExternalSpellChecker } from "@/lib/spell/bridge";
 import type { GrammarIssue, SpellChecker } from "@/lib/spell/types";
+import { cn } from "@/lib/utils";
 
 /**
  * CBM Writing & Spelling – TypeScript Web Tool (with dictionary packs + rule flags)
@@ -134,37 +135,38 @@ function clsForWord(target: string, attempt: string): { cls: number; max: number
 }
 
 function filterLtIssues(text: string, issues: GrammarIssue[], sc: SpellChecker | null, userLexicon: Set<string>) {
-  const allowCats = ["CAPITALIZATION", "PUNCTUATION", "TYPOGRAPHY"]; // show these as advisory
   const out: GrammarIssue[] = [];
   const seen = new Set<string>();
 
   const isWordOk = (w: string) => {
     if (sc) return sc.isCorrect(w);
     const base = w.replace(/[''']/g, "'").toLowerCase();
-    return userLexicon.has(base) || [base.replace(/(ing|ed|es|s)$/,''), base.replace(/(ly)$/,'')].some(s => s && userLexicon.has(s));
+    return userLexicon.has(base) ||
+           [base.replace(/(ing|ed|es|s)$/,''), base.replace(/(ly)$/,'')].some(s => s && userLexicon.has(s));
   };
 
   for (const m of issues) {
-    const cat = (m.category || "").toUpperCase();
     const catId = (m.categoryId || "").toUpperCase();
     const ruleId = (m.ruleId || "").toUpperCase();
+    const catName = (m.category || "").toUpperCase();
     const span = text.slice(m.offset, m.offset + m.length);
     const token = span.trim();
 
-    const isSpelling = catId.includes("TYPOS") || cat.includes("SPELL") || ruleId.includes("MORFOLOGIK_RULE");
-    if (isSpelling) {
-      // show only if our CBM spell check says it's NOT correct
-      if (!token || isWordOk(token)) continue;
-      const k = `spell-${token}-${m.offset}`;
-      if (!seen.has(k)) { out.push({ ...m, category: "SPELLING" }); seen.add(k); }
+    // Only treat as spelling when LT says it's a true typo
+    const isTypos = catId === "TYPOS" || ruleId.startsWith("MORFOLOGIK_RULE");
+    if (isTypos) {
+      if (token && !isWordOk(token)) {
+        const k = `spell-${token}-${m.offset}`;
+        if (!seen.has(k)) { out.push({ ...m, category: "SPELLING" }); seen.add(k); }
+      }
       continue;
     }
 
-    // Show only mechanical advice (capitalization, punctuation, typography)
-    if (!allowCats.some(a => cat.includes(a))) continue;
-
-    const k = `${m.category}-${m.offset}-${m.length}-${m.message}`;
-    if (!seen.has(k)) { out.push(m); seen.add(k); }
+    // Keep purely mechanical advice
+    if (catName.includes("CAPITALIZATION") || catName.includes("PUNCTUATION") || catName.includes("TYPOGRAPHY")) {
+      const k = `${m.category}-${m.offset}-${m.length}-${m.message}`;
+      if (!seen.has(k)) { out.push(m); seen.add(k); }
+    }
   }
   return out;
 }
@@ -246,6 +248,7 @@ function WritingScorer() {
   const [showFlags, setShowFlags] = useState<boolean>(true);
   
   const [spellStatus, setSpellStatus] = useState<"loading" | "hunspell" | "demo" | "error">("loading");
+  const [spellEpoch, setSpellEpoch] = useState(0);
   const spellCache = useRef<Map<string, boolean>>(new Map()); // if not already present
 
   const [ltBusy, setLtBusy] = useState(false);
@@ -265,6 +268,8 @@ function WritingScorer() {
         if (!mounted) return;
         setExternalSpellChecker(sc);
         setSpellStatus("hunspell");
+        spellCache.current.clear();
+        setSpellEpoch((e) => e + 1);
         // Warm up cache with a few common words:
         ["the","and","because","friend","can't","we'll"].forEach(w => spellCache.current.set(w, sc.isCorrect(w)));
         console.log("[Hunspell] loaded ✓");
@@ -317,18 +322,24 @@ function WritingScorer() {
 
   function isWordLikelyCorrect(word: string, userLexicon: Set<string>): boolean {
     if (!WORD_RE.test(word)) return false;
-    const key = word.toLowerCase();
-    const cached = spellCache.current.get(key);
-    if (cached !== undefined) return cached;
 
+    // include engine id in cache key so we don't reuse "demo" results after Hunspell loads
     const sc = getExternalSpellChecker();
+    const engineTag = sc ? "hun" : "demo";
+    const key = `${engineTag}:${word.toLowerCase()}`;
+
+    const hit = spellCache.current.get(key);
+    if (hit !== undefined) return hit;
+
     let ok: boolean;
     if (sc) {
       ok = sc.isCorrect(word);
     } else {
-      const base = word.replace(/[’']/g, "'").toLowerCase();
-      ok = userLexicon.has(base) || [base.replace(/(ing|ed|es|s)$/,''), base.replace(/(ly)$/,'')].some(s => s && userLexicon.has(s));
+      const base = word.replace(/['']/g, "'").toLowerCase();
+      ok = userLexicon.has(base) ||
+           [base.replace(/(ing|ed|es|s)$/,''), base.replace(/(ly)$/,'')].some(s => s && userLexicon.has(s));
     }
+
     spellCache.current.set(key, ok);
     return ok;
   }
@@ -342,9 +353,15 @@ function WritingScorer() {
     let count = 0;
     tokens.forEach((t) => {
       if (t.type !== "WORD") return;
-      const ok = overrides[t.idx]?.csw ?? isWordLikelyCorrect(t.raw, lexicon);
-      if (!ok) infractions.push({ kind: "definite", tag: "SPELLING", msg: `Possible misspelling: "${t.raw}"`, at: t.idx });
-      if (ok) count += 1;
+      const ok = isWordLikelyCorrect(t.raw, lexicon);
+      // respect manual overrides if you support them:
+      const ov = overrides[t.idx]?.csw;
+      const effectiveOk = ov === true ? true : ov === false ? false : ok;
+
+      if (!effectiveOk) {
+        infractions.push({ kind: "possible", tag: "SPELLING", msg: `Possible misspelling: "${t.raw}"`, at: t.idx });
+      }
+      if (effectiveOk) count += 1;
     });
     return count;
   }
@@ -411,8 +428,8 @@ function WritingScorer() {
   }
 
   const lexicon = useMemo(() => buildLexicon(packSel, userLex), [packSel, userLex]);
-  const tokens = useMemo(() => tokenize(text), [text]);
-  const stream = useMemo(() => tokens.filter((t) => t.type !== "comma" && t.type !== "other"), [tokens]);
+  const tokens = useMemo(() => tokenize(text), [text, spellEpoch]);
+  const stream = useMemo(() => tokens.filter((t) => t.type !== "comma" && t.type !== "other"), [tokens, spellEpoch]);
 
   const tww = useMemo(() => computeTWW(tokens), [tokens]);
   
@@ -429,7 +446,7 @@ function WritingScorer() {
     }
     
     return { wsc, cws, infractions };
-  }, [tokens, overrides, lexicon, text, ltIssues]);
+  }, [tokens, overrides, lexicon, text, ltIssues, spellEpoch]);
 
   return (
     <Card>
@@ -517,26 +534,36 @@ function WritingScorer() {
             <div className="mt-3 flex flex-wrap gap-1 p-3 rounded-2xl bg-muted/40">
               {stream.map((tok, i) => {
                 const next = stream[i + 1];
-                const isWord = tok.type === "word";
-                const okWord = isWord && ((overrides[tok.idx] as WordOverride)?.csw ?? isWordLikelyCorrect(tok.raw, lexicon));
+                const isWordToken = tok.type === "word";
+                const ok = isWordLikelyCorrect(tok.raw, lexicon);
+                const ov = (overrides[tok.idx] as WordOverride)?.csw;
+                const effectiveOk = ov === true ? true : ov === false ? false : ok;
+                const bad = showFlags && isWordToken && !effectiveOk;
                 const pairKey = next ? `${tok.idx}-${next.idx}` : null;
                 const manual = pairKey ? (overrides[pairKey] as PairOverride | undefined)?.cws : undefined;
                 
                 const sc = getExternalSpellChecker();
-                const sugg = (isWord && sc && !okWord) ? (sc.suggestions?.(tok.raw, 3) || []) : [];
-                const title = isWord
-                  ? okWord ? "WSC: counted (click to mark incorrect)"
+                const sugg = (isWordToken && sc && !effectiveOk) ? (sc.suggestions?.(tok.raw, 3) || []) : [];
+                const title = isWordToken
+                  ? effectiveOk ? "WSC: counted (click to mark incorrect)"
                            : `WSC: NOT counted (click to mark correct)${sugg.length ? "\nSuggestions: " + sugg.join(", ") : ""}`
                   : tok.type;
 
                 return (
                   <span key={tok.idx} className="flex items-center">
                     <button
-                      className={`px-1 rounded hover:bg-muted transition ${isWord ? (okWord ? "ring-1 ring-green-500/40" : "ring-1 ring-red-500/40") : ""}`}
+                      className={cn(
+                        "px-2 py-1 rounded-xl border transition-colors",
+                        isWordToken
+                          ? bad
+                            ? "bg-red-100 text-red-700 border-red-300"
+                            : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                          : "bg-slate-50 text-slate-700 border-slate-200"
+                      )}
                       title={title}
                       onClick={() => {
-                        if (!isWord) return;
-                        setOverrides((o) => ({ ...o, [tok.idx]: { ...(o[tok.idx] as WordOverride), csw: !(okWord) } }));
+                        if (!isWordToken) return;
+                        setOverrides((o) => ({ ...o, [tok.idx]: { ...(o[tok.idx] as WordOverride), csw: !(effectiveOk) } }));
                       }}
                     >
                       {tok.raw}
