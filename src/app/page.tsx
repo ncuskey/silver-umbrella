@@ -254,6 +254,7 @@ function WritingScorer() {
   const [ltBusy, setLtBusy] = useState(false);
   const [ltIssues, setLtIssues] = useState<GrammarIssue[]>([]);
   const [grammarStatus, setGrammarStatus] = useState<"idle"|"checking"|"ok"|"error">("idle");
+  const [ltIsPublic, setLtIsPublic] = useState<boolean | null>(null);
   const lastCheckedText = useRef<string>("");    // to avoid duplicate checks
   const grammarRunId = useRef<number>(0);        // cancellation token for in-flight checks
 
@@ -267,8 +268,8 @@ function WritingScorer() {
         const sc = await createHunspellSpellChecker("/dicts/en_US.aff", "/dicts/en_US.dic");
         if (!mounted) return;
         setExternalSpellChecker(sc);
-        setSpellStatus("hunspell");
         spellCache.current.clear();
+        setSpellStatus("hunspell");
         setSpellEpoch((e) => e + 1);
         // Warm up cache with a few common words:
         ["the","and","because","friend","can't","we'll"].forEach(w => spellCache.current.set(w, sc.isCorrect(w)));
@@ -304,6 +305,7 @@ function WritingScorer() {
         const issues = await lt.check(trimmed, "en-US");
         if (grammarRunId.current !== myRun) return;
         setLtIssues(issues);
+        setLtIsPublic(lt.isPublic());
         setGrammarStatus("ok");
         lastCheckedText.current = trimmed;
       } catch (e) {
@@ -322,12 +324,8 @@ function WritingScorer() {
 
   function isWordLikelyCorrect(word: string, userLexicon: Set<string>): boolean {
     if (!WORD_RE.test(word)) return false;
-
-    // include engine id in cache key so we don't reuse "demo" results after Hunspell loads
     const sc = getExternalSpellChecker();
-    const engineTag = sc ? "hun" : "demo";
-    const key = `${engineTag}:${word.toLowerCase()}`;
-
+    const key = `${sc ? "hun" : "demo"}:${word.toLowerCase()}`;
     const hit = spellCache.current.get(key);
     if (hit !== undefined) return hit;
 
@@ -339,7 +337,6 @@ function WritingScorer() {
       ok = userLexicon.has(base) ||
            [base.replace(/(ing|ed|es|s)$/,''), base.replace(/(ly)$/,'')].some(s => s && userLexicon.has(s));
     }
-
     spellCache.current.set(key, ok);
     return ok;
   }
@@ -428,25 +425,33 @@ function WritingScorer() {
   }
 
   const lexicon = useMemo(() => buildLexicon(packSel, userLex), [packSel, userLex]);
-  const tokens = useMemo(() => tokenize(text), [text, spellEpoch]);
-  const stream = useMemo(() => tokens.filter((t) => t.type !== "comma" && t.type !== "other"), [tokens, spellEpoch]);
+  
+  // Add engine tag that changes when Hunspell loads
+  const engineTag = spellStatus === "hunspell" ? "hun" : "demo";
+  
+  const tokens = useMemo(() => tokenize(text), [text, engineTag]);
+  const stream = useMemo(() => tokens.filter((t) => t.type !== "comma" && t.type !== "other"), [tokens, engineTag]);
 
   const tww = useMemo(() => computeTWW(tokens), [tokens]);
+  
+  // Build filtered LT issues once
+  const filteredLt = useMemo(
+    () => filterLtIssues(text, ltIssues, getExternalSpellChecker(), lexicon),
+    [text, ltIssues, engineTag] // include engineTag so Hunspell changes re-filter
+  );
   
   const { wsc, cws, infractions } = useMemo(() => {
     const infractions: Infraction[] = [];
     const wsc = computeWSC(tokens, overrides as Record<number, WordOverride>, lexicon, infractions);
     const cws = computeCWS(tokens, overrides as Record<string, PairOverride | WordOverride>, lexicon, infractions);
     
-    // Add filtered LanguageTool issues
-    const sc = getExternalSpellChecker();
-    const filteredLt = filterLtIssues(text, ltIssues, sc, lexicon);
+    // Merge ONLY filteredLt into infractions
     for (const m of filteredLt) {
       infractions.push({ kind: "possible", tag: m.category.toUpperCase(), msg: m.message, at: `${m.offset}:${m.length}` });
     }
     
     return { wsc, cws, infractions };
-  }, [tokens, overrides, lexicon, text, ltIssues, spellEpoch]);
+  }, [tokens, overrides, lexicon, filteredLt, engineTag]);
 
   return (
     <Card>
@@ -501,7 +506,7 @@ function WritingScorer() {
 
                 <span className="ml-3">Grammar:</span>
                 {grammarStatus === "checking" && <Badge variant="secondary">checking…</Badge>}
-                {grammarStatus === "ok" && <Badge>auto</Badge>}
+                {grammarStatus === "ok" && <Badge>auto{ltIsPublic ? " (public)" : " (proxy)"}</Badge>}
                 {grammarStatus === "idle" && <Badge variant="secondary">idle</Badge>}
                 {grammarStatus === "error" && <Badge variant="destructive">error</Badge>}
               </div>
@@ -534,17 +539,17 @@ function WritingScorer() {
             <div className="mt-3 flex flex-wrap gap-1 p-3 rounded-2xl bg-muted/40">
               {stream.map((tok, i) => {
                 const next = stream[i + 1];
-                const isWordToken = tok.type === "word";
+                const isWordTok = tok.type === "WORD";
                 const ok = isWordLikelyCorrect(tok.raw, lexicon);
                 const ov = (overrides[tok.idx] as WordOverride)?.csw;
                 const effectiveOk = ov === true ? true : ov === false ? false : ok;
-                const bad = showFlags && isWordToken && !effectiveOk;
+                const bad = showFlags && isWordTok && !effectiveOk;
                 const pairKey = next ? `${tok.idx}-${next.idx}` : null;
                 const manual = pairKey ? (overrides[pairKey] as PairOverride | undefined)?.cws : undefined;
                 
                 const sc = getExternalSpellChecker();
-                const sugg = (isWordToken && sc && !effectiveOk) ? (sc.suggestions?.(tok.raw, 3) || []) : [];
-                const title = isWordToken
+                const sugg = (isWordTok && sc && !effectiveOk) ? (sc.suggestions?.(tok.raw, 3) || []) : [];
+                const title = isWordTok
                   ? effectiveOk ? "WSC: counted (click to mark incorrect)"
                            : `WSC: NOT counted (click to mark correct)${sugg.length ? "\nSuggestions: " + sugg.join(", ") : ""}`
                   : tok.type;
@@ -554,7 +559,7 @@ function WritingScorer() {
                     <button
                       className={cn(
                         "px-2 py-1 rounded-xl border transition-colors",
-                        isWordToken
+                        isWordTok
                           ? bad
                             ? "bg-red-100 text-red-700 border-red-300"
                             : "bg-emerald-50 text-emerald-700 border-emerald-200"
@@ -562,7 +567,7 @@ function WritingScorer() {
                       )}
                       title={title}
                       onClick={() => {
-                        if (!isWordToken) return;
+                        if (!isWordTok) return;
                         setOverrides((o) => ({ ...o, [tok.idx]: { ...(o[tok.idx] as WordOverride), csw: !(effectiveOk) } }));
                       }}
                     >
@@ -594,11 +599,11 @@ function WritingScorer() {
             )}
 
             {/* somewhere under your scoring cards (simple readout) */}
-            {ltIssues && filterLtIssues(text, ltIssues, getExternalSpellChecker(), lexicon).length > 0 && (
+            {filteredLt.length > 0 && (
               <div className="mt-3 text-xs p-2 rounded-xl border border-amber-300 bg-amber-50">
                 <div className="font-medium mb-1">Grammar suggestions (advisory):</div>
                 <ul className="list-disc ml-5 space-y-0.5">
-                  {filterLtIssues(text, ltIssues, getExternalSpellChecker(), lexicon)
+                  {filteredLt
                     .slice(0, 12)
                     .map((i, idx) => <li key={idx}>{i.category}: {i.message}</li>)}
                 </ul>

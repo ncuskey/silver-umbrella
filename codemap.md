@@ -321,14 +321,17 @@ The tool implements scoring methods aligned with educational research:
 
 ### Recent Updates
 
-#### Latest Improvements (v2.1)
-- **Enhanced Cache Management**: Engine-aware spell caching with `engineTag` prevents demo results from being reused after Hunspell loads
-- **Automatic Cache Clearing**: Spell cache is automatically cleared when Hunspell loads via `spellCache.current.clear()` and `setSpellEpoch()`
+#### Latest Improvements (v2.2)
+- **Smart Engine Tagging**: Added `engineTag` dependency tracking that forces all scoring to recompute when Hunspell loads
+- **Enhanced Cache Management**: Engine-tagged spell caching with `hun:word` vs `demo:word` keys prevents demo results from being reused after Hunspell loads
+- **Automatic Cache Clearing**: Spell cache is automatically cleared when Hunspell loads via `spellCache.current.clear()` after `setExternalSpellChecker()`
 - **Improved Visual Feedback**: Red badges (`bg-red-100 text-red-700 border-red-300`) for misspelled words, green badges (`bg-emerald-50 text-emerald-700 border-emerald-200`) for correct words
-- **Stricter Grammar Filtering**: LanguageTool filtering now only shows spelling suggestions for genuine typos (`catId === "TYPOS" || ruleId.startsWith("MORFOLOGIK_RULE")`)
+- **Stricter Grammar Filtering**: LanguageTool filtering now only shows spelling suggestions for genuine typos, filtered by Hunspell when available
 - **Better Override Handling**: Manual overrides properly respected with `effectiveOk` logic in both scoring and visual display
-- **Enhanced Re-scoring**: All `useMemo` dependencies include `spellEpoch` to force re-computation when spell engine changes
-- **Improved Infraction Logic**: Spelling infractions now use `effectiveOk` to prevent showing correct words as misspellings
+- **Enhanced Re-scoring**: All `useMemo` dependencies include `engineTag` to force re-computation when spell engine changes
+- **Sticky Grammar Client**: LanguageTool client now "sticks" to proxy or public endpoint to avoid repeated failed requests
+- **Grammar Status Display**: Grammar badge now shows whether using proxy or public endpoint for better transparency
+- **Memoized Filtered LT**: Created `filteredLt` memoized value to avoid redundant filtering operations
 
 #### Previous Updates
 - **Automatic Loading**: Hunspell now loads automatically on app startup for seamless experience

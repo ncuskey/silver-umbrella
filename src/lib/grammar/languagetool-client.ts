@@ -41,27 +41,36 @@ async function doCheck(baseUrl: string, text: string, lang: string, signal?: Abo
   });
 }
 
-/** Proxy-first, public fallback */
 export function createLanguageToolChecker(
   proxyBase = "/api/languagetool",
   publicBase = "https://api.languagetool.org"
-): GrammarChecker {
+): GrammarChecker & { isPublic: () => boolean | null } {
+  let active: "proxy" | "public" | null = null;
+
+  async function tryCheck(base: string, text: string, lang: string, signal?: AbortSignal) {
+    const endpoint = `${base.replace(/\/$/, "")}/v2/check`;
+    const body = new URLSearchParams();
+    body.set("text", text);
+    body.set("language", lang);
+    body.set("enabledOnly", "false");
+    return fetch(endpoint, { method: "POST", headers: { "Content-Type":"application/x-www-form-urlencoded" }, body, signal });
+  }
+
   return {
-    async check(text: string, lang = "en-US", signal?: AbortSignal): Promise<GrammarIssue[]> {
+    async check(text: string, lang = "en-US", signal?: AbortSignal) {
       try {
-        const r1 = await doCheck(proxyBase, text, lang, signal);
-        if (r1.ok) return mapIssues(await r1.json());
-        if ([404,405,500].includes(r1.status)) {
-          const r2 = await doCheck(publicBase, text, lang, signal);
-          if (r2.ok) return mapIssues(await r2.json());
-          throw new Error(`LanguageTool fallback failed: ${r2.status}`);
+        if (active !== "public") {
+          const r1 = await tryCheck(proxyBase, text, lang, signal);
+          if (r1.ok) { active = "proxy"; return mapIssues(await r1.json()); }
+          if ([404,405,500].includes(r1.status)) active = "public";
         }
-        throw new Error(`LanguageTool error: ${r1.status}`);
-      } catch {
-        const r2 = await doCheck(publicBase, text, lang, signal);
-        if (r2.ok) return mapIssues(await r2.json());
-        throw new Error("LanguageTool network error");
-      }
-    }
+      } catch { active = "public"; }
+
+      // fallback or sticky public
+      const r2 = await tryCheck(publicBase, text, lang, signal);
+      if (r2.ok) { active = "public"; return mapIssues(await r2.json()); }
+      throw new Error(`LanguageTool failed: ${r2.status}`);
+    },
+    isPublic: () => active === "public"
   };
 }
