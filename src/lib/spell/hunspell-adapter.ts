@@ -18,7 +18,7 @@ export async function createHunspellSpellChecker(
   const dicMounted = factory.mountBuffer(dicBuf, "en_US.dic");
   const engine = factory.create(affMounted, dicMounted);
 
-  const normalize = (w: string) => w.replace(/[']/g, "'");
+  const normalize = (w: string) => w.replace(/[’']/g, "'");
 
   return {
     isCorrect(word: string) {

@@ -304,6 +304,9 @@ The tool implements scoring methods aligned with educational research:
 - **Build Process**: Optimized for production builds with proper TypeScript compilation
 
 ### Recent Updates
+- **UI Improvements**: Removed duplicate "Reset overrides" button for cleaner interface
+- **Enhanced Capitalization**: Added curly apostrophe handling for consistent CWS capitalization checks
+- **Repository Cleanup**: Removed stray files and updated .gitignore for better version control
 - **Real Hunspell WASM**: Implemented `hunspell-asm` library for professional spell checking
 - **Dictionary Integration**: Real `en_US.aff` and `en_US.dic` file support with UTF-8 encoding
 - **Performance Optimization**: Aggressive caching (1-year) for dictionary files
