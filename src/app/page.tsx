@@ -139,84 +139,6 @@ function computeTWW(tokens: Token[]): number {
   return tokens.filter((t) => t.type === "word").length;
 }
 
-function computeWSC(
-  tokens: Token[],
-  overrides: Record<number, WordOverride>,
-  lexicon: Set<string>,
-  infractions: Infraction[]
-): number {
-  let count = 0;
-  tokens.forEach((t) => {
-    if (t.type !== "word") return;
-    const ok = overrides[t.idx]?.csw ?? isWordLikelyCorrect(t.raw, lexicon);
-    if (!ok) infractions.push({ kind: "definite", tag: "SPELLING", msg: `Possible misspelling: "${t.raw}"`, at: t.idx });
-    if (ok) count += 1;
-  });
-  return count;
-}
-
-function computeCWS(
-  tokens: Token[],
-  overrides: Record<string, PairOverride | WordOverride>,
-  lexicon: Set<string>,
-  infractions: Infraction[]
-): number {
-  const stream = tokens.filter((t) => t.type !== "comma" && t.type !== "other");
-  const isValidWord = (t: Token) => t.type === "word" && ((overrides[t.idx as number] as WordOverride)?.csw ?? isWordLikelyCorrect(t.raw, lexicon));
-  const isPunct = (t: Token) => t.type === "essentialPunct";
-  const isTerminal = (s: string) => s === "." || s === "?" || s === "!";
-
-  let cws = 0;
-  if (stream[0]) {
-    if (isValidWord(stream[0])) cws += 1;
-    else infractions.push({ kind: "definite", tag: "PAIR", msg: "Initial word not valid for CWS (spelling)", at: stream[0].idx });
-  }
-
-  for (let i = 0; i < stream.length - 1; i++) {
-    const a = stream[i];
-    const b = stream[i + 1];
-    const pairKey = `${a.idx}-${b.idx}`;
-    const manual = (overrides[pairKey] as PairOverride | undefined)?.cws;
-    if (manual !== undefined) {
-      if (manual) cws += 1;
-      else infractions.push({ kind: "possible", tag: "PAIR", msg: `Manual override: NOT CWS at ${a.raw} ^ ${b.raw}`, at: pairKey });
-      continue;
-    }
-
-    if (isValidWord(a) && isValidWord(b)) {
-      cws += 1;
-    } else if (isValidWord(a) && isPunct(b)) {
-      cws += 1;
-      if (!isTerminal(b.raw) && b.raw !== ";" && b.raw !== ":") {
-        infractions.push({ kind: "possible", tag: "PUNCT", msg: `Non-terminal punctuation in CWS: "${b.raw}"`, at: pairKey });
-      }
-    } else if (isPunct(a) && isValidWord(b)) {
-      if (isTerminal(a.raw)) {
-        if (/^[A-Z]/.test(b.raw)) { cws += 1; }
-        else { infractions.push({ kind: "definite", tag: "CAPITALIZATION", msg: "Expected capital after sentence-ending punctuation", at: pairKey }); }
-      } else {
-        cws += 1; // lenient after non-terminal/parenthetical/quotes
-      }
-    } else {
-      infractions.push({ kind: "possible", tag: "PAIR", msg: `Invalid adjacency: ${a.raw} ^ ${b.raw}`, at: pairKey });
-    }
-  }
-
-  // Sentence-level flags
-  const plain = tokens.map((t) => t.raw).join(" ");
-  const sentences = sentenceBoundaries(plain);
-  if (sentences.length > 0) {
-    sentences.forEach((s) => {
-      if (!/[\.!\?]$/.test(s.raw)) infractions.push({ kind: "possible", tag: "TERMINAL", msg: "Sentence may be missing terminal punctuation", at: s.raw.slice(0, 20) + "…" });
-      const words = s.raw.split(/\s+/).filter((w) => WORD_RE.test(w));
-      if (words.length > 30) infractions.push({ kind: "possible", tag: "RUN_ON", msg: "Long sentence (>30 words) – possible run-on", at: s.raw.slice(0, 20) + "…" });
-      const firstWord = words[0];
-      if (firstWord && !/^[A-Z]/.test(firstWord)) infractions.push({ kind: "definite", tag: "CAPITALIZATION", msg: "Sentence should start with a capital letter", at: firstWord });
-    });
-  }
-
-  return cws;
-}
 
 // ———————————— UI Components ————————————
 
@@ -282,6 +204,85 @@ function WritingScorer() {
 
     spellCache.current.set(key, ok);
     return ok;
+  }
+
+  function computeWSC(
+    tokens: Token[],
+    overrides: Record<number, WordOverride>,
+    lexicon: Set<string>,
+    infractions: Infraction[]
+  ): number {
+    let count = 0;
+    tokens.forEach((t) => {
+      if (t.type !== "word") return;
+      const ok = overrides[t.idx]?.csw ?? isWordLikelyCorrect(t.raw, lexicon);
+      if (!ok) infractions.push({ kind: "definite", tag: "SPELLING", msg: `Possible misspelling: "${t.raw}"`, at: t.idx });
+      if (ok) count += 1;
+    });
+    return count;
+  }
+
+  function computeCWS(
+    tokens: Token[],
+    overrides: Record<string, PairOverride | WordOverride>,
+    lexicon: Set<string>,
+    infractions: Infraction[]
+  ): number {
+    const stream = tokens.filter((t) => t.type !== "comma" && t.type !== "other");
+    const isValidWord = (t: Token) => t.type === "word" && ((overrides[t.idx as number] as WordOverride)?.csw ?? isWordLikelyCorrect(t.raw, lexicon));
+    const isPunct = (t: Token) => t.type === "essentialPunct";
+    const isTerminal = (s: string) => s === "." || s === "?" || s === "!";
+
+    let cws = 0;
+    if (stream[0]) {
+      if (isValidWord(stream[0])) cws += 1;
+      else infractions.push({ kind: "definite", tag: "PAIR", msg: "Initial word not valid for CWS (spelling)", at: stream[0].idx });
+    }
+
+    for (let i = 0; i < stream.length - 1; i++) {
+      const a = stream[i];
+      const b = stream[i + 1];
+      const pairKey = `${a.idx}-${b.idx}`;
+      const manual = (overrides[pairKey] as PairOverride | undefined)?.cws;
+      if (manual !== undefined) {
+        if (manual) cws += 1;
+        else infractions.push({ kind: "possible", tag: "PAIR", msg: `Manual override: NOT CWS at ${a.raw} ^ ${b.raw}`, at: pairKey });
+        continue;
+      }
+
+      if (isValidWord(a) && isValidWord(b)) {
+        cws += 1;
+      } else if (isValidWord(a) && isPunct(b)) {
+        cws += 1;
+        if (!isTerminal(b.raw) && b.raw !== ";" && b.raw !== ":") {
+          infractions.push({ kind: "possible", tag: "PUNCT", msg: `Non-terminal punctuation in CWS: "${b.raw}"`, at: pairKey });
+        }
+      } else if (isPunct(a) && isValidWord(b)) {
+        if (isTerminal(a.raw)) {
+          if (/^[A-Z]/.test(b.raw)) { cws += 1; }
+          else { infractions.push({ kind: "definite", tag: "CAPITALIZATION", msg: "Expected capital after sentence-ending punctuation", at: pairKey }); }
+        } else {
+          cws += 1; // lenient after non-terminal/parenthetical/quotes
+        }
+      } else {
+        infractions.push({ kind: "possible", tag: "PAIR", msg: `Invalid adjacency: ${a.raw} ^ ${b.raw}`, at: pairKey });
+      }
+    }
+
+    // Sentence-level flags
+    const plain = tokens.map((t) => t.raw).join(" ");
+    const sentences = sentenceBoundaries(plain);
+    if (sentences.length > 0) {
+      sentences.forEach((s) => {
+        if (!/[\.!\?]$/.test(s.raw)) infractions.push({ kind: "possible", tag: "TERMINAL", msg: "Sentence may be missing terminal punctuation", at: s.raw.slice(0, 20) + "…" });
+        const words = s.raw.split(/\s+/).filter((w) => WORD_RE.test(w));
+        if (words.length > 30) infractions.push({ kind: "possible", tag: "RUN_ON", msg: "Long sentence (>30 words) – possible run-on", at: s.raw.slice(0, 20) + "…" });
+        const firstWord = words[0];
+        if (firstWord && !/^[A-Z]/.test(firstWord)) infractions.push({ kind: "definite", tag: "CAPITALIZATION", msg: "Sentence should start with a capital letter", at: firstWord });
+      });
+    }
+
+    return cws;
   }
 
   const lexicon = useMemo(() => buildLexicon(packSel, userLex), [packSel, userLex]);
