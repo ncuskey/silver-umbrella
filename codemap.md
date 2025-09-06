@@ -36,14 +36,17 @@
 │   │       ├── input.tsx      # Text input
 │   │       ├── tabs.tsx       # Tab navigation
 │   │       └── textarea.tsx   # Textarea input
-│   └── lib/
-│       ├── spell/             # Spell checking system
-│       │   ├── types.ts       # SpellChecker & GrammarChecker interfaces
-│       │   ├── bridge.ts      # Spell checker bridge for dependency injection
-│       │   └── hunspell-adapter.ts # Hunspell WASM integration
-│       ├── grammar/           # Grammar checking system
-│       │   └── languagetool-client.ts # LanguageTool API client
-│       └── utils.ts           # Utility functions (cn helper)
+│   ├── lib/
+│   │   ├── spell/             # Spell checking system
+│   │   │   ├── types.ts       # SpellChecker & GrammarChecker interfaces
+│   │   │   ├── bridge.ts      # Spell checker bridge for dependency injection
+│   │   │   ├── hunspell-adapter.ts # Hunspell WASM integration (stub)
+│   │   │   └── hunspell-worker-client.ts # Web Worker client for Hunspell
+│   │   ├── grammar/           # Grammar checking system
+│   │   │   └── languagetool-client.ts # LanguageTool API client
+│   │   └── utils.ts           # Utility functions (cn helper)
+│   └── workers/               # Web Workers
+│       └── hunspell.worker.ts # Hunspell Web Worker implementation
 ├── public/
 │   └── dicts/                 # Dictionary files directory
 │       └── README.md          # Instructions for dictionary files
@@ -194,11 +197,19 @@ interface PairOverride { cws?: boolean }
 - `getExternalSpellChecker()`: Retrieve current spell checker
 
 #### Hunspell Adapter (`hunspell-adapter.ts`)
-- Custom dictionary parser for spell checking integration
+- WASM-ready spell checking integration (stub implementation)
 - `createHunspellSpellChecker()`: Factory for dictionary-based spell checker
-- Parses LibreOffice dictionary files from `public/dicts/`
+- Designed to parse LibreOffice dictionary files from `public/dicts/`
 - Implements edit distance algorithm for spelling suggestions
-- Fallback to custom lexicon when not loaded
+- Fallback to custom lexicon with light stemming when not loaded
+- Ready for real WASM Hunspell integration
+
+#### Hunspell Worker Client (`hunspell-worker-client.ts`)
+- Web Worker-based spell checking for large dictionaries
+- `createWorkerSpellChecker()`: Factory for worker-based spell checker
+- Prevents UI blocking during spell checking operations
+- Async communication with worker thread
+- Optimistic return values with proper error handling
 
 ### Grammar Checking System (`src/lib/grammar/`)
 
@@ -231,6 +242,8 @@ interface PairOverride { cws?: boolean }
 - `npm run build`: Production build
 - `npm run start`: Production server
 - `npm run lint`: ESLint checking
+- `npm run size:report`: Analyze dependency sizes
+- `npm run analyze`: Generate bundle analysis reports
 
 ## Research Alignment
 
@@ -283,9 +296,17 @@ The tool implements scoring methods aligned with educational research:
 - **Set Iteration**: Required for Hunspell adapter's dictionary word iteration
 - **Build Process**: Optimized for production builds with proper TypeScript compilation
 
+### Recent Updates
+- **Hunspell Integration**: WASM-ready spell checking with fallback to custom lexicon
+- **LanguageTool Grammar**: Advisory grammar checking with API proxy
+- **Web Worker Support**: Non-blocking spell checking for large dictionaries
+- **Bundle Analysis**: Detailed bundle size reporting with @next/bundle-analyzer
+- **Immutable Caching**: Dictionary files cached with 1-year expiration
+- **Light Stemming**: Improved fallback spell checking with word stemming
+
 ### Future Enhancements
 - Backend integration for data persistence
-- WASM-based spell checking for advanced features
+- Real WASM Hunspell integration (currently stub)
 - Advanced grammar checking with POS tagging
 - Multi-language support
 - Export functionality for assessment results

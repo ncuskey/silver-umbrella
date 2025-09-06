@@ -1,9 +1,9 @@
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  // Produce a minimal runtime bundle (no dev deps needed at runtime)
+const withBundleAnalyzer = require("@next/bundle-analyzer")({ enabled: process.env.ANALYZE === "1" });
+const nextConfig = withBundleAnalyzer({
   output: 'standalone',
-  // If you don't need next/image optimization, skip pulling sharp binaries
   images: { unoptimized: true },
-};
-
-module.exports = nextConfig
+  async headers() {
+    return [{ source: "/dicts/:path*", headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }] }];
+  },
+});
+module.exports = nextConfig;

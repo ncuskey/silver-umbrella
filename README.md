@@ -44,6 +44,7 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 - `npm run start` - Start production server
 - `npm run lint` - Run ESLint
 - `npm run size:report` - Analyze dependency sizes (shows top 30 largest packages)
+- `npm run analyze` - Generate bundle analysis reports (requires ANALYZE=1)
 
 ## Usage
 
@@ -80,11 +81,12 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 ## Spell Checking & Grammar
 
 ### Hunspell Integration
-- Professional spell checking using custom dictionary parser
+- Professional spell checking with WASM-ready architecture
 - Uses `en_US.aff` and `en_US.dic` files from LibreOffice dictionaries
 - Click "Load Hunspell" to enable advanced spell checking with 500K+ words
 - Implements edit distance algorithm for spelling suggestions
-- Seamlessly falls back to custom lexicon when not loaded
+- Seamlessly falls back to custom lexicon with light stemming when not loaded
+- Web Worker support available for large dictionaries to prevent UI blocking
 
 ### LanguageTool Grammar
 - Optional grammar checking and suggestions
@@ -117,6 +119,8 @@ The application is optimized for production deployment with minimal runtime requ
 
 - **Standalone Output**: Minimal runtime bundle with only production dependencies
 - **Unoptimized Images**: Skips sharp binary dependencies for faster deployments
+- **Immutable Caching**: Dictionary files cached with 1-year expiration for performance
+- **Bundle Analysis**: Use `npm run analyze` to generate detailed bundle size reports
 - **Dependency Analysis**: Use `npm run size:report` to identify large packages
 
 ## Extensibility
