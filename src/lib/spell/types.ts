@@ -18,3 +18,9 @@ export interface GrammarIssue {
 export interface GrammarChecker {
   check(text: string, lang?: string, signal?: AbortSignal): Promise<GrammarIssue[]>;
 }
+
+export interface Token {
+  raw: string;
+  type: "WORD" | "PUNCT";
+  idx: number; // global index in token stream
+}
