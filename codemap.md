@@ -194,9 +194,10 @@ interface PairOverride { cws?: boolean }
 - `getExternalSpellChecker()`: Retrieve current spell checker
 
 #### Hunspell Adapter (`hunspell-adapter.ts`)
-- WASM-based spell checking integration
-- `createHunspellSpellChecker()`: Factory for Hunspell spell checker
-- Dictionary loading from `public/dicts/`
+- Custom dictionary parser for spell checking integration
+- `createHunspellSpellChecker()`: Factory for dictionary-based spell checker
+- Parses LibreOffice dictionary files from `public/dicts/`
+- Implements edit distance algorithm for spelling suggestions
 - Fallback to custom lexicon when not loaded
 
 ### Grammar Checking System (`src/lib/grammar/`)
@@ -263,15 +264,17 @@ The tool implements scoring methods aligned with educational research:
 - Responsive design with mobile support
 
 ### Spell Checking Features
-- **Hunspell Integration**: Professional WASM-based spell checking
-- **Dictionary Support**: Place `en_US.aff` and `en_US.dic` in `public/dicts/`
-- **Seamless Fallback**: Uses custom lexicon when Hunspell not loaded
+- **Dictionary Integration**: Custom parser for LibreOffice dictionary files
+- **500K+ Word Support**: Full US English dictionary with professional spell checking
+- **Spelling Suggestions**: Edit distance algorithm for word suggestions
+- **Seamless Fallback**: Uses custom lexicon when dictionary not loaded
 - **Grammar Checking**: LanguageTool integration with advisory suggestions
 
 ### Future Enhancements
 - Backend integration for data persistence
-- Larger dictionary databases
+- WASM-based spell checking for advanced features
 - Advanced grammar checking with POS tagging
 - Multi-language support
 - Export functionality for assessment results
 - Offline dictionary support
+- Performance optimizations for large dictionaries
