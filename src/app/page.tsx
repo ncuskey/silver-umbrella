@@ -285,10 +285,14 @@ function WritingScorer() {
   const tokens = useMemo(() => tokenize(text), [text]);
   const stream = useMemo(() => tokens.filter((t) => t.type !== "comma" && t.type !== "other"), [tokens]);
 
-  const infractions: Infraction[] = [];
   const tww = useMemo(() => computeTWW(tokens), [tokens]);
-  const wsc = useMemo(() => computeWSC(tokens, overrides as Record<number, WordOverride>, lexicon, infractions), [tokens, overrides, lexicon]);
-  const cws = useMemo(() => computeCWS(tokens, overrides as Record<string, PairOverride | WordOverride>, lexicon, infractions), [tokens, overrides, lexicon]);
+  
+  const { wsc, cws, infractions } = useMemo(() => {
+    const infractions: Infraction[] = [];
+    const wsc = computeWSC(tokens, overrides as Record<number, WordOverride>, lexicon, infractions);
+    const cws = computeCWS(tokens, overrides as Record<string, PairOverride | WordOverride>, lexicon, infractions);
+    return { wsc, cws, infractions };
+  }, [tokens, overrides, lexicon]);
 
   return (
     <Card>
@@ -360,7 +364,7 @@ function WritingScorer() {
                   setLtBusy(true);
                   try {
                     const { createLanguageToolChecker } = await import("@/lib/grammar/languagetool-client");
-                    const lt = createLanguageToolChecker("/api/languagetool"); // or "https://api.languagetool.org"
+                    const lt = createLanguageToolChecker("https://api.languagetool.org"); // Use direct API for now
                     const issues = await lt.check(text, "en-US");
                     setLtIssues(issues.slice(0, 12).map(i => `${i.category}: ${i.message}`));
                   } catch (e) {
