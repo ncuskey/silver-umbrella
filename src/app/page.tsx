@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useRef } from "react";
 import { motion } from "framer-motion";
 import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -135,18 +135,6 @@ function clsForWord(target: string, attempt: string): { cls: number; max: number
 
 // ———————————— Writing: Spellcheck + CWS + Infractions ————————————
 
-function isWordLikelyCorrect(word: string, userLexicon: Set<string>): boolean {
-  if (!WORD_RE.test(word)) return false;
-  // 1) prefer external spell engine (Hunspell) when loaded
-  const sc = getExternalSpellChecker();
-  if (sc) return sc.isCorrect(word);
-  // 2) strict fallback: lexicon + light stemming
-  const base = word.replace(/['']/g, "'").toLowerCase();
-  if (userLexicon.has(base)) return true;
-  const stems = [base.replace(/(ing|ed|es|s)$/,''), base.replace(/(ly)$/,'')];
-  return stems.some(s => s && userLexicon.has(s));
-}
-
 function computeTWW(tokens: Token[]): number {
   return tokens.filter((t) => t.type === "word").length;
 }
@@ -275,6 +263,26 @@ function WritingScorer() {
   // state near top of WritingScorer()
   const [ltBusy, setLtBusy] = useState(false);
   const [ltIssues, setLtIssues] = useState<string[]>([]);
+  const spellCache = useRef<Map<string, boolean>>(new Map());
+
+  function isWordLikelyCorrect(word: string, userLexicon: Set<string>): boolean {
+    if (!WORD_RE.test(word)) return false;
+    const key = word.toLowerCase();
+    const cached = spellCache.current.get(key);
+    if (cached !== undefined) return cached;
+
+    const sc = getExternalSpellChecker();
+    let ok: boolean;
+    if (sc) {
+      ok = sc.isCorrect(word);
+    } else {
+      const base = word.replace(/['']/g, "'").toLowerCase();
+      ok = userLexicon.has(base) || [base.replace(/(ing|ed|es|s)$/,''), base.replace(/(ly)$/,'')].some(s => s && userLexicon.has(s));
+    }
+
+    spellCache.current.set(key, ok);
+    return ok;
+  }
 
   const lexicon = useMemo(() => buildLexicon(packSel, userLex), [packSel, userLex]);
   const tokens = useMemo(() => tokenize(text), [text]);

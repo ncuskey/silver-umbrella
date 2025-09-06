@@ -2,17 +2,19 @@
 
 ## Project Overview
 
-**CBM Writing & Spelling Tool** is a comprehensive TypeScript React web application for Curriculum-Based Measurement (CBM) writing and spelling assessment. Built with Next.js 14, it provides automated scoring for educational assessments with interactive override capabilities.
+**CBM Writing & Spelling Tool** is a comprehensive TypeScript React web application for Curriculum-Based Measurement (CBM) writing and spelling assessment. Built with Next.js 15, it provides automated scoring for educational assessments with interactive override capabilities and professional spell checking.
 
 ## Architecture
 
 ### Technology Stack
-- **Framework**: Next.js 14 with App Router
-- **Language**: TypeScript
+- **Framework**: Next.js 15 with App Router
+- **Language**: TypeScript (ES2022 target)
 - **Styling**: Tailwind CSS with shadcn/ui components
 - **Animations**: Framer Motion
 - **Icons**: Lucide React
 - **Build Tools**: PostCSS, Autoprefixer
+- **Spell Checking**: hunspell-asm (WASM)
+- **Bundle Analysis**: @next/bundle-analyzer
 
 ### Project Structure
 
@@ -40,7 +42,7 @@
 │   │   ├── spell/             # Spell checking system
 │   │   │   ├── types.ts       # SpellChecker & GrammarChecker interfaces
 │   │   │   ├── bridge.ts      # Spell checker bridge for dependency injection
-│   │   │   ├── hunspell-adapter.ts # Hunspell WASM integration (stub)
+│   │   │   ├── hunspell-adapter.ts # Hunspell WASM integration (real implementation)
 │   │   │   └── hunspell-worker-client.ts # Web Worker client for Hunspell
 │   │   ├── grammar/           # Grammar checking system
 │   │   │   └── languagetool-client.ts # LanguageTool API client
@@ -204,6 +206,8 @@ interface PairOverride { cws?: boolean }
 - **Fallback System**: Uses custom lexicon with light stemming when Hunspell not loaded
 - **Memory Management**: Includes cleanup functions for repeated loads
 - **UTF-8 Support**: Properly handles UTF-8 encoded dictionary files
+- **Performance Optimized**: Dictionary files cached with 1-year expiration
+- **Spell Result Caching**: Intelligent in-memory caching for repeated word lookups
 
 #### Hunspell Worker Client (`hunspell-worker-client.ts`)
 - Web Worker-based spell checking for large dictionaries
@@ -234,9 +238,10 @@ interface PairOverride { cws?: boolean }
 ## Configuration
 
 ### Build Configuration
-- **Next.js**: Default configuration with App Router
-- **TypeScript**: Strict mode enabled with downlevelIteration for Set iteration support
+- **Next.js**: Standalone output with bundle analyzer integration
+- **TypeScript**: ES2022 target with strict mode for modern performance
 - **PostCSS**: Autoprefixer for browser compatibility
+- **Bundle Analysis**: @next/bundle-analyzer for performance monitoring
 
 ### Development Scripts
 - `npm run dev`: Development server
@@ -287,25 +292,27 @@ The tool implements scoring methods aligned with educational research:
 ### TypeScript Configuration
 
 #### Build Compatibility (`tsconfig.json`)
-- **Target**: ES5 for broad browser compatibility
-- **Downlevel Iteration**: Enabled to support Set iteration in spell checking
+- **Target**: ES2022 for modern performance and WASM compatibility
+- **Downlevel Iteration**: Disabled for better performance with ES2022 target
 - **Strict Mode**: Full type checking enabled
 - **Module Resolution**: Bundler mode for Next.js compatibility
 
 #### Deployment Considerations
-- **Netlify Compatibility**: Configured for successful deployment with downlevelIteration flag
-- **Set Iteration**: Required for Hunspell adapter's dictionary word iteration
+- **Modern Browser Support**: ES2022 target provides better performance and WASM compatibility
+- **Performance Optimized**: Disabled downlevelIteration for faster builds
+- **Bundle Analysis**: Integrated bundle analyzer for performance monitoring
 - **Build Process**: Optimized for production builds with proper TypeScript compilation
 
 ### Recent Updates
 - **Real Hunspell WASM**: Implemented `hunspell-asm` library for professional spell checking
 - **Dictionary Integration**: Real `en_US.aff` and `en_US.dic` file support with UTF-8 encoding
 - **Performance Optimization**: Aggressive caching (1-year) for dictionary files
+- **Spell Result Caching**: Intelligent in-memory caching for repeated word lookups
+- **Modern TypeScript**: Upgraded to ES2022 target for better performance
+- **Bundle Analysis**: Added @next/bundle-analyzer for performance monitoring
+- **ESLint Updates**: Aligned with Next.js 15 configuration
 - **LanguageTool Grammar**: Advisory grammar checking with API proxy
 - **Web Worker Support**: Non-blocking spell checking for large dictionaries
-- **Bundle Analysis**: Detailed bundle size reporting with @next/bundle-analyzer
-- **Memory Management**: Proper cleanup functions for repeated Hunspell loads
-- **Light Stemming**: Improved fallback spell checking with word stemming
 
 ### Future Enhancements
 - Backend integration for data persistence
