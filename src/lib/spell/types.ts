@@ -6,11 +6,13 @@ export interface SpellChecker {
 }
 
 export interface GrammarIssue {
-  offset: number;     // 0-based char start in original text
+  offset: number;     // 0-based char start
   length: number;
-  category: string;   // e.g., "GRAMMAR", "PUNCTUATION", "CASING"
+  category: string;   // e.g., "GRAMMAR", "PUNCTUATION", "CASING", "TYPOS"
   message: string;
   replacements?: string[];
+  ruleId?: string;    // e.g., "MORFOLOGIK_RULE_EN_US"
+  categoryId?: string; // e.g., "TYPOS"
 }
 
 export interface GrammarChecker {

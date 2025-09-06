@@ -11,6 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Info, AlertTriangle, ListChecks } from "lucide-react";
 import { setExternalSpellChecker, getExternalSpellChecker } from "@/lib/spell/bridge";
+import type { GrammarIssue, SpellChecker } from "@/lib/spell/types";
 
 /**
  * CBM Writing & Spelling – TypeScript Web Tool (with dictionary packs + rule flags)
@@ -131,6 +132,42 @@ function clsForWord(target: string, attempt: string): { cls: number; max: number
   return { cls, max, correctWhole };
 }
 
+function filterLtIssues(text: string, issues: GrammarIssue[], sc: SpellChecker | null, userLexicon: Set<string>) {
+  const allowCats = ["CAPITALIZATION", "PUNCTUATION", "TYPOGRAPHY"]; // show these as advisory
+  const out: GrammarIssue[] = [];
+  const seen = new Set<string>();
+
+  const isWordOk = (w: string) => {
+    if (sc) return sc.isCorrect(w);
+    const base = w.replace(/[''']/g, "'").toLowerCase();
+    return userLexicon.has(base) || [base.replace(/(ing|ed|es|s)$/,''), base.replace(/(ly)$/,'')].some(s => s && userLexicon.has(s));
+  };
+
+  for (const m of issues) {
+    const cat = (m.category || "").toUpperCase();
+    const catId = (m.categoryId || "").toUpperCase();
+    const ruleId = (m.ruleId || "").toUpperCase();
+    const span = text.slice(m.offset, m.offset + m.length);
+    const token = span.trim();
+
+    const isSpelling = catId.includes("TYPOS") || cat.includes("SPELL") || ruleId.includes("MORFOLOGIK_RULE");
+    if (isSpelling) {
+      // show only if our CBM spell check says it's NOT correct
+      if (!token || isWordOk(token)) continue;
+      const k = `spell-${token}-${m.offset}`;
+      if (!seen.has(k)) { out.push({ ...m, category: "SPELLING" }); seen.add(k); }
+      continue;
+    }
+
+    // Show only mechanical advice (capitalization, punctuation, typography)
+    if (!allowCats.some(a => cat.includes(a))) continue;
+
+    const k = `${m.category}-${m.offset}-${m.length}-${m.message}`;
+    if (!seen.has(k)) { out.push(m); seen.add(k); }
+  }
+  return out;
+}
+
 // ———————————— Writing: Spellcheck + CWS + Infractions ————————————
 
 function computeTWW(tokens: Token[]): number {
@@ -185,7 +222,7 @@ function WritingScorer() {
   const spellCache = useRef<Map<string, boolean>>(new Map()); // if not already present
 
   const [ltBusy, setLtBusy] = useState(false);
-  const [ltIssues, setLtIssues] = useState<string[]>([]);
+  const [ltIssues, setLtIssues] = useState<GrammarIssue[]>([]);
   const [grammarStatus, setGrammarStatus] = useState<"idle"|"checking"|"ok"|"error">("idle");
   const lastCheckedText = useRef<string>("");    // to avoid duplicate checks
   const grammarRunId = useRef<number>(0);        // cancellation token for in-flight checks
@@ -233,9 +270,8 @@ function WritingScorer() {
         const { createLanguageToolChecker } = await import("@/lib/grammar/languagetool-client");
         const lt = createLanguageToolChecker("/api/languagetool"); // use your proxy
         const issues = await lt.check(trimmed, "en-US");
-        if (grammarRunId.current !== myRun) return; // stale
-        const msgs = issues.slice(0, 12).map(i => `${i.category}: ${i.message}`);
-        setLtIssues(msgs);
+        if (grammarRunId.current !== myRun) return;
+        setLtIssues(issues);
         setGrammarStatus("ok");
         lastCheckedText.current = trimmed;
       } catch (e) {
@@ -362,8 +398,16 @@ function WritingScorer() {
     const infractions: Infraction[] = [];
     const wsc = computeWSC(tokens, overrides as Record<number, WordOverride>, lexicon, infractions);
     const cws = computeCWS(tokens, overrides as Record<string, PairOverride | WordOverride>, lexicon, infractions);
+    
+    // Add filtered LanguageTool issues
+    const sc = getExternalSpellChecker();
+    const filteredLt = filterLtIssues(text, ltIssues, sc, lexicon);
+    for (const m of filteredLt) {
+      infractions.push({ kind: "possible", tag: m.category.toUpperCase(), msg: m.message, at: `${m.offset}:${m.length}` });
+    }
+    
     return { wsc, cws, infractions };
-  }, [tokens, overrides, lexicon]);
+  }, [tokens, overrides, lexicon, text, ltIssues]);
 
   return (
     <Card>
@@ -501,11 +545,13 @@ function WritingScorer() {
             )}
 
             {/* somewhere under your scoring cards (simple readout) */}
-            {ltIssues.length > 0 && (
+            {ltIssues && filterLtIssues(text, ltIssues, getExternalSpellChecker(), lexicon).length > 0 && (
               <div className="mt-3 text-xs p-2 rounded-xl border border-amber-300 bg-amber-50">
                 <div className="font-medium mb-1">Grammar suggestions (advisory):</div>
                 <ul className="list-disc ml-5 space-y-0.5">
-                  {ltIssues.map((m, i) => <li key={i}>{m}</li>)}
+                  {filterLtIssues(text, ltIssues, getExternalSpellChecker(), lexicon)
+                    .slice(0, 12)
+                    .map((i, idx) => <li key={idx}>{i.category}: {i.message}</li>)}
                 </ul>
               </div>
             )}
