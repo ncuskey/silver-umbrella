@@ -18,11 +18,15 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 - **Dictionary Packs**: Demo bundles for different grade levels (K-2, K-5, general)
 - **Custom Lexicon**: Add custom words for specialized vocabulary
 - **Hunspell Integration**: Professional spell checking with WASM dictionaries
+- **Spell Engine Status**: Visual indicator showing active spell engine (Demo/Hunspell)
+- **Auto-validation**: Automatic probe testing after Hunspell loading
+- **Spelling Suggestions**: Tooltip suggestions for misspelled words when Hunspell is active
 - **LanguageTool Grammar**: Optional grammar checking and suggestions
 - **Infraction Flagging**: Automated detection of definite vs. possible issues
 - **Interactive Overrides**: Click words to toggle WSC scoring, click carets to toggle CWS pairs
 - **Rule-based Checks**: Capitalization, terminal punctuation, and sentence structure validation
 - **Spell Result Caching**: Intelligent caching for repeated word lookups (big speedup on longer texts)
+- **Curly Apostrophe Support**: Proper handling of smart quotes and apostrophes
 
 ## Getting Started
 
@@ -88,11 +92,15 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 - **Real WASM Implementation**: Uses `hunspell-asm` library for professional spell checking
 - **Dictionary Files**: Uses `en_US.aff` and `en_US.dic` files from LibreOffice dictionaries
 - **Dynamic Loading**: Click "Load Hunspell" to enable advanced spell checking with 500K+ words
+- **Status Tracking**: Visual badge shows active spell engine (Demo lexicon vs Hunspell WASM)
+- **Auto-validation**: Automatic probe testing with common words after loading
 - **Spelling Suggestions**: Built-in Hunspell suggestion engine for misspelled words
+- **Tooltip Integration**: Suggestions appear in word tooltips when words are flagged
 - **Seamless Fallback**: Uses custom lexicon with light stemming when Hunspell not loaded
 - **Performance Optimized**: Aggressive caching (1-year) for dictionary files
 - **Spell Result Caching**: Intelligent in-memory caching for repeated word lookups
 - **Web Worker Ready**: Architecture supports moving to Web Worker for large dictionaries
+- **Development Testing**: Automatic probe in dev mode for quick validation
 
 ### LanguageTool Grammar
 - Optional grammar checking and suggestions
@@ -143,6 +151,12 @@ The tool is designed for easy extension:
 
 ## Recent Updates
 
+- **Spell Engine Status**: Added visual status indicator showing active spell engine (Demo/Hunspell)
+- **Auto-validation**: Automatic probe testing after Hunspell loading with sanity checks
+- **Enhanced Tooltips**: Spelling suggestions now appear in word tooltips when flagged
+- **Smart Button States**: Load Hunspell button disables after successful loading
+- **Development Testing**: Added dev probe script for quick Hunspell validation
+- **Curly Apostrophe Support**: Enhanced normalization for smart quotes and apostrophes
 - **UI Improvements**: Removed duplicate "Reset overrides" button for cleaner interface
 - **Enhanced Capitalization**: Added curly apostrophe handling for consistent CWS capitalization checks
 - **Repository Cleanup**: Removed stray files and updated .gitignore for better version control
