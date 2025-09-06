@@ -223,7 +223,7 @@ interface PairOverride { cws?: boolean }
 
 ### Build Configuration
 - **Next.js**: Default configuration with App Router
-- **TypeScript**: Strict mode enabled
+- **TypeScript**: Strict mode enabled with downlevelIteration for Set iteration support
 - **PostCSS**: Autoprefixer for browser compatibility
 
 ### Development Scripts
@@ -269,6 +269,19 @@ The tool implements scoring methods aligned with educational research:
 - **Spelling Suggestions**: Edit distance algorithm for word suggestions
 - **Seamless Fallback**: Uses custom lexicon when dictionary not loaded
 - **Grammar Checking**: LanguageTool integration with advisory suggestions
+
+### TypeScript Configuration
+
+#### Build Compatibility (`tsconfig.json`)
+- **Target**: ES5 for broad browser compatibility
+- **Downlevel Iteration**: Enabled to support Set iteration in spell checking
+- **Strict Mode**: Full type checking enabled
+- **Module Resolution**: Bundler mode for Next.js compatibility
+
+#### Deployment Considerations
+- **Netlify Compatibility**: Configured for successful deployment with downlevelIteration flag
+- **Set Iteration**: Required for Hunspell adapter's dictionary word iteration
+- **Build Process**: Optimized for production builds with proper TypeScript compilation
 
 ### Future Enhancements
 - Backend integration for data persistence
