@@ -164,13 +164,16 @@ The tool is designed for easy extension:
 
 ## Recent Updates
 
-### Latest Improvements (v2.1)
-- **Enhanced Cache Management**: Engine-aware spell caching prevents demo results from being reused after Hunspell loads
+### Latest Improvements (v2.2)
+- **Smart Engine Tagging**: Added engine-aware dependency tracking that forces all scoring to recompute when Hunspell loads
+- **Enhanced Cache Management**: Engine-tagged spell caching prevents demo results from being reused after Hunspell loads
 - **Automatic Cache Clearing**: Spell cache is automatically cleared when Hunspell loads to ensure fresh scoring
 - **Improved Visual Feedback**: Red badges for misspelled words, green badges for correct words with enhanced styling
-- **Stricter Grammar Filtering**: LanguageTool now only shows spelling suggestions for genuine typos, not style preferences
+- **Stricter Grammar Filtering**: LanguageTool now only shows spelling suggestions for genuine typos, filtered by Hunspell when available
 - **Better Override Handling**: Manual overrides are properly respected in both scoring and visual display
 - **Enhanced Re-scoring**: All derived values (tokens, WSC, CWS, infractions) are automatically re-computed when spell engine changes
+- **Sticky Grammar Client**: LanguageTool client now "sticks" to proxy or public endpoint to avoid repeated failed requests
+- **Grammar Status Display**: Grammar badge now shows whether using proxy or public endpoint for better transparency
 
 ### Previous Updates
 - **Automatic Loading**: Hunspell now loads automatically on app startup for seamless experience
