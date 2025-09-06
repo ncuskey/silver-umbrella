@@ -37,6 +37,14 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 
 3. Open [http://localhost:3000](http://localhost:3000) in your browser
 
+## Development Scripts
+
+- `npm run dev` - Start development server
+- `npm run build` - Build for production
+- `npm run start` - Start production server
+- `npm run lint` - Run ESLint
+- `npm run size:report` - Analyze dependency sizes (shows top 30 largest packages)
+
 ## Usage
 
 ### Written Expression Tab
@@ -55,11 +63,12 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 
 ## Technical Implementation
 
-- Built with Next.js 14, React 18, and TypeScript
+- Built with Next.js 15, React 18, and TypeScript
 - Uses Framer Motion for animations
 - Tailwind CSS for styling
 - Lucide React for icons
 - Modular UI components with shadcn/ui design system
+- Optimized for production with standalone output and minimal runtime bundles
 
 ## Scoring Guidelines
 
@@ -82,6 +91,33 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 - Uses proxy API route to avoid rate limits
 - Advisory-only suggestions (doesn't affect CBM scores)
 - Click "Grammar check" to analyze text
+
+## Deployment
+
+### Production Build
+
+The application is optimized for production deployment with minimal runtime requirements:
+
+1. **Build the application:**
+   ```bash
+   npm run build
+   ```
+
+2. **Deploy these directories only:**
+   - `.next/standalone/` - Contains the server and minimal dependencies
+   - `.next/static/` - Static assets
+   - `public/` - Public files
+
+3. **Run the production server:**
+   ```bash
+   node .next/standalone/server.js
+   ```
+
+### Optimization Features
+
+- **Standalone Output**: Minimal runtime bundle with only production dependencies
+- **Unoptimized Images**: Skips sharp binary dependencies for faster deployments
+- **Dependency Analysis**: Use `npm run size:report` to identify large packages
 
 ## Extensibility
 
