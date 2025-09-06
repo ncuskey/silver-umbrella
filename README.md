@@ -7,7 +7,7 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 ### Written Expression Scoring
 - **TWW (Total Words Written)**: Counts all words written, including misspellings, excluding numerals
 - **WSC (Words Spelled Correctly)**: Uses dictionary packs and custom lexicon for spell-checking
-- **CWS (Correct Writing Sequences)**: Scores adjacent unit pairs across words and essential punctuation
+- **CWS (Correct Writing Sequences)**: Mechanical, CBM-aligned scoring of adjacent unit pairs with visual caret indicators
 
 ### Spelling Assessment
 - **CLS (Correct Letter Sequences)**: Provides partial credit for spelling attempts
@@ -26,6 +26,7 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 - **Request Cancellation**: AbortSignal support for grammar checking requests
 - **Infraction Flagging**: Automated detection of definite vs. possible issues
 - **Interactive Overrides**: Click words to toggle WSC scoring, click carets to toggle CWS pairs
+- **CWS Engine**: Strictly mechanical, CBM-aligned engine with visual caret indicators and boundary validation
 - **Rule-based Checks**: Capitalization, terminal punctuation, and sentence structure validation
 - **Spell Result Caching**: Intelligent caching for repeated word lookups (big speedup on longer texts)
 - **Curly Apostrophe Support**: Proper handling of smart quotes and apostrophes
@@ -87,6 +88,23 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 - **WSC**: Words spelled correctly in isolation (dictionary packs + custom lexicon)
 - **CWS**: Adjacent units (words & essential punctuation). Commas excluded. Initial valid word counts 1. Capitalize after terminals
 - **CLS**: Counts boundary + adjacent letter pairs per target word (partial knowledge credit)
+
+### CWS Engine Details
+
+The CWS (Correct Writing Sequences) engine implements strictly mechanical, CBM-aligned scoring:
+
+- **Essential Punctuation**: Only `.`, `!`, `?`, `:`, `;` participate in CWS scoring
+- **Comma Exclusion**: Commas and other non-essential punctuation are ignored entirely
+- **Boundary Rules**:
+  - WORD↔WORD: Both words must be spelled correctly
+  - WORD→TERMINAL: The word must be spelled correctly
+  - TERMINAL→WORD: Next word must be capitalized AND spelled correctly
+  - Initial boundary: Counts when first word is spelled correctly and capitalized
+- **Visual Indicators**: Color-coded carets (^) show boundary status:
+  - Green: Valid CWS boundary
+  - Red: Invalid boundary (spelling/capitalization issue)
+  - Muted: Non-eligible boundary (comma/quote/etc.)
+- **Interactive Overrides**: Click carets to cycle through default→force-correct→force-incorrect→default
 
 ## Spell Checking & Grammar
 
@@ -164,7 +182,16 @@ The tool is designed for easy extension:
 
 ## Recent Updates
 
-### Latest Improvements (v2.2)
+### Latest Improvements (v2.3)
+- **CWS Engine**: Implemented strictly mechanical, CBM-aligned CWS engine with visual caret indicators
+- **Boundary Validation**: Added comprehensive boundary validation with spelling and capitalization checks
+- **Visual Feedback**: Color-coded carets show CWS boundary status (green/red/muted)
+- **Interactive Overrides**: Click carets to manually override CWS boundary scoring
+- **Infraction Integration**: CWS-specific infractions mirror caret reasons for consistent feedback
+- **Token Type Alignment**: Unified token types between CWS engine and main application
+- **Enhanced Scoring**: CWS count now uses the new engine with proper override handling
+
+### Previous Improvements (v2.2)
 - **Smart Engine Tagging**: Added engine-aware dependency tracking that forces all scoring to recompute when Hunspell loads
 - **Enhanced Cache Management**: Engine-tagged spell caching prevents demo results from being reused after Hunspell loads
 - **Automatic Cache Clearing**: Spell cache is automatically cleared when Hunspell loads to ensure fresh scoring

@@ -12,6 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { Info, AlertTriangle, ListChecks } from "lucide-react";
 import { setExternalSpellChecker, getExternalSpellChecker } from "@/lib/spell/bridge";
 import type { GrammarIssue, SpellChecker } from "@/lib/spell/types";
+import { buildCwsPairs, ESSENTIAL_PUNCT } from "@/lib/cws";
+import type { CwsPair } from "@/lib/cws";
 import { cn } from "@/lib/utils";
 
 /**
@@ -36,12 +38,13 @@ type UnitType = "word" | "numeral" | "comma" | "essentialPunct" | "other" | "PUN
 
 interface Token {
   raw: string;
-  type: UnitType;
+  type: "WORD" | "PUNCT";
   idx: number; // global index in token stream
 }
 
 interface WordOverride { csw?: boolean }
 interface PairOverride { cws?: boolean }
+type PairOverrides = Record<number, { cws?: boolean }>; // key = bIndex (-1 or token index)
 
 interface Infraction {
   kind: "definite" | "possible";
@@ -52,7 +55,6 @@ interface Infraction {
 
 const WORD_RE = /^[A-Za-z]+(?:[-'’][A-Za-z]+)*$/;
 const NUMERAL_RE = /^\d+(?:[\.,]\d+)*/;
-const ESSENTIAL_PUNCT = new Set([".", "?", "!", ";", ":", "—", "–", "(", ")", '"', "'", "\u201C", "\u201D", "\u2018", "\u2019"]);
 
 // ———————————— Demo Dictionary Packs ————————————
 // Tiny placeholder packs; in production, load larger dictionaries or WASM spellcheckers (Hunspell, etc.)
@@ -92,14 +94,8 @@ function tokenize(text: string): Token[] {
   let m: RegExpExecArray | null;
   while ((m = regex.exec(text)) !== null) {
     const raw = m[0];
-    const type: UnitType =
-      NUMERAL_RE.test(raw) ? "numeral" :
-      raw === "," ? "comma" :
-      WORD_RE.test(raw) ? "WORD" :
-      raw === "-" ? "HYPHEN" :
-      ESSENTIAL_PUNCT.has(raw) ? "PUNCT" :
-      /[\.!\?;:]/.test(raw) ? "PUNCT" :
-      "other";
+    const type: "WORD" | "PUNCT" =
+      WORD_RE.test(raw) ? "WORD" : "PUNCT";
     tokens.push({ raw, type, idx: tokens.length });
   }
   return tokens;
@@ -174,7 +170,28 @@ function filterLtIssues(text: string, issues: GrammarIssue[], sc: SpellChecker |
 function isTerminal(tok: Token) { return tok.type === "PUNCT" && /[.?!]/.test(tok.raw); }
 function isWord(tok: Token)     { return tok.type === "WORD"; }
 function isComma(tok: Token)    { return tok.type === "PUNCT" && tok.raw === ","; }
-function isHyphen(tok: Token)   { return tok.type === "HYPHEN" || (tok.type === "PUNCT" && tok.raw === "-"); }
+function isHyphen(tok: Token)   { return tok.type === "PUNCT" && tok.raw === "-"; }
+
+// helper to decide caret visual for a boundary
+function caretStateForBoundary(bIndex: number, cwsPairs: CwsPair[], pairOverrides: PairOverrides) {
+  const pair = cwsPairs.find(p => p.bIndex === bIndex);
+  if (!pair) return { eligible: false as const, ok: false as const, reason: "none" };
+
+  const ov = pairOverrides[bIndex]?.cws;
+  const ok = ov === true ? true : ov === false ? false : pair.valid;
+  return { eligible: pair.eligible, ok, reason: pair.reason || "none" };
+}
+
+function toggleCaret(bIndex: number, pairOverrides: PairOverrides, setPairOverrides: React.Dispatch<React.SetStateAction<PairOverrides>>) {
+  setPairOverrides(prev => {
+    const ov = prev[bIndex]?.cws;
+    const next = ov === true ? false : ov === false ? undefined : true; // cycle: default→true→false→default
+    const clone = { ...prev };
+    if (next === undefined) delete clone[bIndex];
+    else clone[bIndex] = { cws: next };
+    return clone;
+  });
+}
 
 function cwsPairValid(a: Token, b: Token, wsc: (w: string) => boolean): { ok: boolean; reason?: string } {
   // Commas don't count against pairs (CBM: ignore commas)
@@ -243,6 +260,7 @@ function WritingScorer() {
     "It was dark. nobody could see the trees of the forest The Terrible Day\n\nI woud drink water from the ocean and I woud eat the fruit off of the trees Then I woud bilit a house out of trees and I woud gather firewood to stay warm I woud try and fix my boat in my spare time"
   );
   const [overrides, setOverrides] = useState<Record<string | number, WordOverride | PairOverride>>({});
+  const [pairOverrides, setPairOverrides] = useState<PairOverrides>({});
   const [userLex, setUserLex] = useState<string>("ocean forest Terrible Day trees firewood bilit");
   const [packSel, setPackSel] = useState<string[]>(["us-k2", "us-k5", "general"]);
   const [showFlags, setShowFlags] = useState<boolean>(true);
@@ -369,7 +387,7 @@ function WritingScorer() {
     lexicon: Set<string>,
     infractions: Infraction[]
   ): number {
-    const stream = tokens.filter((t) => t.type !== "comma" && t.type !== "other");
+    const stream = tokens;
     const isValidWord = (t: Token) => t.type === "WORD" && ((overrides[t.idx as number] as WordOverride)?.csw ?? isWordLikelyCorrect(t.raw, lexicon));
 
     let cws = 0;
@@ -430,7 +448,25 @@ function WritingScorer() {
   const engineTag = spellStatus === "hunspell" ? "hun" : "demo";
   
   const tokens = useMemo(() => tokenize(text), [text, engineTag]);
-  const stream = useMemo(() => tokens.filter((t) => t.type !== "comma" && t.type !== "other"), [tokens, engineTag]);
+  const stream = useMemo(() => tokens, [tokens, engineTag]);
+
+  const cwsPairs = useMemo(() => {
+    const sc = getExternalSpellChecker();
+    const spell = (w: string) => sc ? sc.isCorrect(w) : isWordLikelyCorrect(w, lexicon);
+    return buildCwsPairs(tokens, spell);
+    // include engineTag so it recomputes when Hunspell loads
+  }, [tokens, engineTag, lexicon]);
+
+  const cwsCount = useMemo(() => {
+    let n = 0;
+    for (const p of cwsPairs) {
+      if (!p.eligible) continue;
+      const ov = pairOverrides[p.bIndex]?.cws;
+      const ok = ov === true ? true : ov === false ? false : p.valid;
+      if (ok) n++;
+    }
+    return n;
+  }, [cwsPairs, pairOverrides]);
 
   const tww = useMemo(() => computeTWW(tokens), [tokens]);
   
@@ -445,13 +481,31 @@ function WritingScorer() {
     const wsc = computeWSC(tokens, overrides as Record<number, WordOverride>, lexicon, infractions);
     const cws = computeCWS(tokens, overrides as Record<string, PairOverride | WordOverride>, lexicon, infractions);
     
+    // Add CWS-specific infractions based on caret reasons
+    for (const p of cwsPairs) {
+      const ov = pairOverrides[p.bIndex]?.cws;
+      const ok = ov === true ? true : ov === false ? false : p.valid;
+      if (p.eligible && !ok) {
+        if (p.reason === "capitalization") {
+          infractions.push({ 
+            kind: "definite", 
+            tag: "CAPITALIZATION", 
+            msg: "Expected capital after sentence-ending punctuation", 
+            at: `${p.leftTok ?? "START"} ^ ${p.rightTok}` 
+          });
+        } else if (p.reason === "misspelling") {
+          // spelling already appears under WSC, so usually skip duplicating
+        }
+      }
+    }
+    
     // Merge ONLY filteredLt into infractions
     for (const m of filteredLt) {
       infractions.push({ kind: "possible", tag: m.category.toUpperCase(), msg: m.message, at: `${m.offset}:${m.length}` });
     }
     
     return { wsc, cws, infractions };
-  }, [tokens, overrides, lexicon, filteredLt, engineTag]);
+  }, [tokens, overrides, lexicon, filteredLt, engineTag, cwsPairs, pairOverrides]);
 
   return (
     <Card>
@@ -527,7 +581,7 @@ function WritingScorer() {
               </div>
               <div className="p-3 rounded-2xl bg-white shadow-sm">
                 <div className="text-xs text-muted-foreground">Correct Writing Sequences</div>
-                <div className="text-2xl font-semibold">{cws}</div>
+                <div className="text-2xl font-semibold">{cwsCount}</div>
                 <div className="text-[10px] text-muted-foreground">adjacent-unit pairs</div>
               </div>
             </div>
@@ -537,15 +591,34 @@ function WritingScorer() {
             </div>
 
             <div className="mt-3 flex flex-wrap gap-1 p-3 rounded-2xl bg-muted/40">
-              {stream.map((tok, i) => {
-                const next = stream[i + 1];
+              {/* initial caret uses bIndex = -1 */}
+              {(() => {
+                const { eligible, ok, reason } = caretStateForBoundary(-1, cwsPairs, pairOverrides);
+                const muted = !eligible;
+                return (
+                  <button
+                    type="button"
+                    onClick={() => eligible && toggleCaret(-1, pairOverrides, setPairOverrides)}
+                    title={
+                      !eligible ? "Initial word is not a WORD unit"
+                      : ok ? "CWS: counted (click to toggle)"
+                      : reason === "capitalization" ? "CWS: needs capitalization"
+                      : "CWS: blocked (spelling)"
+                    }
+                    className={
+                      `mx-1 px-1 rounded ${muted ? "text-slate-300" : ok ? "bg-emerald-50 text-emerald-700" : "bg-red-100 text-red-700"}`
+                    }
+                  >
+                    ^
+                  </button>
+                );
+              })()}
+              {tokens.map((tok, i) => {
                 const isWordTok = tok.type === "WORD";
                 const ok = isWordLikelyCorrect(tok.raw, lexicon);
                 const ov = (overrides[tok.idx] as WordOverride)?.csw;
                 const effectiveOk = ov === true ? true : ov === false ? false : ok;
                 const bad = showFlags && isWordTok && !effectiveOk;
-                const pairKey = next ? `${tok.idx}-${next.idx}` : null;
-                const manual = pairKey ? (overrides[pairKey] as PairOverride | undefined)?.cws : undefined;
                 
                 const sc = getExternalSpellChecker();
                 const sugg = (isWordTok && sc && !effectiveOk) ? (sc.suggestions?.(tok.raw, 3) || []) : [];
@@ -555,7 +628,8 @@ function WritingScorer() {
                   : tok.type;
 
                 return (
-                  <span key={tok.idx} className="flex items-center">
+                  <React.Fragment key={`tok-${i}`}>
+                    {/* TOKEN */}
                     <button
                       className={cn(
                         "px-2 py-1 rounded-xl border transition-colors",
@@ -573,18 +647,36 @@ function WritingScorer() {
                     >
                       {tok.raw}
                     </button>
-                    {next && (
+
+                    {/* CARET */}
+                    {i < tokens.length - 1 && (
                       <button
-                        className={`mx-1 text-xs rounded px-1 py-0.5 border ${manual === undefined ? "border-transparent" : manual ? "border-green-500" : "border-red-500"}`}
-                        title={manual === undefined ? "Toggle this adjacent pair as a CWS override" : manual ? "Override: counts as CWS (click to flip)" : "Override: NOT a CWS (click to flip)"}
+                        type="button"
                         onClick={() => {
-                          setOverrides((o) => ({ ...o, [pairKey!]: { cws: !(manual ?? true) } }));
+                          const { eligible } = caretStateForBoundary(i, cwsPairs, pairOverrides);
+                          if (eligible) toggleCaret(i, pairOverrides, setPairOverrides);
                         }}
+                        title={
+                          (() => {
+                            const { eligible, ok, reason } = caretStateForBoundary(i, cwsPairs, pairOverrides);
+                            return !eligible ? "Not counted for CWS (comma/quote/etc.)"
+                            : ok ? "CWS: counted (click to toggle)"
+                            : reason === "capitalization" ? "CWS: needs capitalization"
+                            : "CWS: blocked (spelling)";
+                          })()
+                        }
+                        className={
+                          (() => {
+                            const { eligible, ok } = caretStateForBoundary(i, cwsPairs, pairOverrides);
+                            const muted = !eligible;
+                            return `mx-1 px-1 rounded ${muted ? "text-slate-300" : ok ? "bg-emerald-50 text-emerald-700" : "bg-red-100 text-red-700"}`;
+                          })()
+                        }
                       >
                         ^
                       </button>
                     )}
-                  </span>
+                  </React.Fragment>
                 );
               })}
             </div>
