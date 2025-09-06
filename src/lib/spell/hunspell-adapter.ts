@@ -1,15 +1,16 @@
 import type { SpellChecker } from "./types";
 
-// Replace with your actual WASM binding type(s)
+// Hunspell WASM binding types
 type HunspellCtor = new (aff: Uint8Array, dic: Uint8Array) => {
   spell(word: string): boolean;
   suggest(word: string): string[];
   free(): void;
 };
 
-// TODO: hook up your WASM loader (examples: import("hunspell-wasm"))
+// Load Hunspell WASM library
 async function loadHunspellWasm(): Promise<{ Hunspell: HunspellCtor }> {
-  throw new Error("Hook up your hunspell WASM loader here (e.g., hunspell-wasm).");
+  const { Hunspell } = await import("hunspell-wasm");
+  return { Hunspell };
 }
 
 async function fetchBin(path: string): Promise<Uint8Array> {
