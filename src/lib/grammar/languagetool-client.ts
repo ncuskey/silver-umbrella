@@ -13,7 +13,7 @@ interface LTResponse { matches: LTMatch[] }
 export function createLanguageToolChecker(baseUrl = "https://api.languagetool.org"): GrammarChecker {
   const endpoint = `${baseUrl.replace(/\/$/, "")}/v2/check`;
   return {
-    async check(text: string, lang = "en-US"): Promise<GrammarIssue[]> {
+    async check(text: string, lang = "en-US", signal?: AbortSignal): Promise<GrammarIssue[]> {
       const body = new URLSearchParams();
       body.set("text", text);
       body.set("language", lang);
@@ -22,7 +22,8 @@ export function createLanguageToolChecker(baseUrl = "https://api.languagetool.or
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body
+        body,
+        signal
       });
       if (!res.ok) throw new Error(`LanguageTool error: ${res.status}`);
       const data: LTResponse = await res.json();

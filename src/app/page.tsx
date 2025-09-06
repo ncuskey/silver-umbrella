@@ -10,10 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Info, AlertTriangle, ListChecks } from "lucide-react";
-// add with your other imports
 import { setExternalSpellChecker, getExternalSpellChecker } from "@/lib/spell/bridge";
-// (optional) grammar
-// import { createLanguageToolChecker } from "@/lib/grammar/languagetool-client";
 
 /**
  * CBM Writing & Spelling – TypeScript Web Tool (with dictionary packs + rule flags)
@@ -183,17 +180,77 @@ function WritingScorer() {
   const [userLex, setUserLex] = useState<string>("ocean forest Terrible Day trees firewood bilit");
   const [packSel, setPackSel] = useState<string[]>(["us-k2", "us-k5", "general"]);
   const [showFlags, setShowFlags] = useState<boolean>(true);
-  // state near top of WritingScorer()
+  
+  const [spellStatus, setSpellStatus] = useState<"loading" | "hunspell" | "demo" | "error">("loading");
+  const spellCache = useRef<Map<string, boolean>>(new Map()); // if not already present
+
   const [ltBusy, setLtBusy] = useState(false);
   const [ltIssues, setLtIssues] = useState<string[]>([]);
-  const [spellStatus, setSpellStatus] = useState<"demo" | "hunspell">("demo");
-  const spellCache = useRef<Map<string, boolean>>(new Map());
+  const [grammarStatus, setGrammarStatus] = useState<"idle"|"checking"|"ok"|"error">("idle");
+  const lastCheckedText = useRef<string>("");    // to avoid duplicate checks
+  const grammarRunId = useRef<number>(0);        // cancellation token for in-flight checks
 
-  useEffect(() => { 
-    if (process.env.NODE_ENV !== "production") {
-      import("@/lib/spell/dev-probe").then(m => m.probeHunspell()); 
-    }
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        setSpellStatus("loading");
+        const { createHunspellSpellChecker } = await import("@/lib/spell/hunspell-adapter");
+        // Adjust these paths if your dicts live in a subfolder:
+        const sc = await createHunspellSpellChecker("/dicts/en_US.aff", "/dicts/en_US.dic");
+        if (!mounted) return;
+        setExternalSpellChecker(sc);
+        setSpellStatus("hunspell");
+        // Warm up cache with a few common words:
+        ["the","and","because","friend","can't","we'll"].forEach(w => spellCache.current.set(w, sc.isCorrect(w)));
+        console.log("[Hunspell] loaded ✓");
+      } catch (e) {
+        console.error("[Hunspell] load failed → falling back to demo lexicon", e);
+        if (!mounted) return;
+        setSpellStatus("demo");
+      }
+    })();
+    return () => { mounted = false; };
   }, []);
+
+  // place INSIDE WritingScorer(), after the autoload effect above
+  useEffect(() => {
+    const minChars = 24;  // don't run for very short snippets
+    const trimmed = text.trim();
+    if (trimmed.length < minChars) {
+      setLtIssues([]);
+      setGrammarStatus("idle");
+      return;
+    }
+    // Skip if nothing changed
+    if (trimmed === lastCheckedText.current) return;
+
+    setGrammarStatus("checking");
+    const myRun = ++grammarRunId.current;
+    const handle = setTimeout(async () => {
+      setLtBusy(true);
+      try {
+        const { createLanguageToolChecker } = await import("@/lib/grammar/languagetool-client");
+        const lt = createLanguageToolChecker("/api/languagetool"); // use your proxy
+        const issues = await lt.check(trimmed, "en-US");
+        if (grammarRunId.current !== myRun) return; // stale
+        const msgs = issues.slice(0, 12).map(i => `${i.category}: ${i.message}`);
+        setLtIssues(msgs);
+        setGrammarStatus("ok");
+        lastCheckedText.current = trimmed;
+      } catch (e) {
+        if (grammarRunId.current !== myRun) return; // stale
+        console.error("[Grammar] check failed", e);
+        setGrammarStatus("error");
+      } finally {
+        if (grammarRunId.current === myRun) setLtBusy(false);
+      }
+    }, 800); // debounce ms
+
+    return () => {
+      clearTimeout(handle);
+    };
+  }, [text]);
 
   function isWordLikelyCorrect(word: string, userLexicon: Set<string>): boolean {
     if (!WORD_RE.test(word)) return false;
@@ -209,7 +266,6 @@ function WritingScorer() {
       const base = word.replace(/[’']/g, "'").toLowerCase();
       ok = userLexicon.has(base) || [base.replace(/(ing|ed|es|s)$/,''), base.replace(/(ly)$/,'')].some(s => s && userLexicon.has(s));
     }
-
     spellCache.current.set(key, ok);
     return ok;
   }
@@ -344,72 +400,28 @@ function WritingScorer() {
               </div>
             </div>
 
-            <div className="mt-2 text-xs flex items-center gap-2">
-              <span>Spell engine:</span>
-              {spellStatus === "hunspell"
-                ? <Badge>Hunspell (WASM)</Badge>
-                : <Badge variant="secondary">Demo lexicon</Badge>}
-            </div>
-
             <div className="flex items-center gap-2 mt-3">
               <Checkbox id="flags" checked={showFlags} onCheckedChange={(v) => setShowFlags(!!v)} />
               <label htmlFor="flags" className="text-sm">Show infractions & suggestions</label>
-              <Button className="ml-auto" variant="secondary" onClick={() => setOverrides({})}>Reset overrides</Button>
             </div>
 
-            <div className="flex gap-2 mt-3">
-              <Button variant="ghost" onClick={() => setText("")}>Clear text</Button>
+            <div className="flex flex-wrap items-center gap-2 mt-3">
+              <Button variant="secondary" onClick={() => { setOverrides({}); spellCache.current.clear(); }}>Reset overrides</Button>
+              <Button variant="ghost" onClick={() => { setText(""); setLtIssues([]); lastCheckedText.current=""; }}>Clear text</Button>
 
-              <Button
-                variant="outline"
-                disabled={spellStatus === "hunspell"}
-                title="Loads /public/dicts/en_US.aff & en_US.dic and enables Hunspell"
-                onClick={async () => {
-                  try {
-                    const { createHunspellSpellChecker } = await import("@/lib/spell/hunspell-adapter");
-                    const sc = await createHunspellSpellChecker("/dicts/en_US.aff", "/dicts/en_US.dic");
-                    setExternalSpellChecker(sc);
-                    setSpellStatus("hunspell");
-                    alert("Hunspell loaded ✓");
-                    
-                    // Quick probe to confirm real dictionary behavior:
-                    const probe = ["believe","butter","worry","can't","we'll","O'Neill's"];
-                    const results = probe.map(w => `${w}:${getExternalSpellChecker()!.isCorrect(w)}`);
-                    console.log("[Hunspell probe]", results.join(" | "));
+              <div className="ml-auto flex items-center gap-2 text-xs">
+                <span>Spell:</span>
+                {spellStatus === "hunspell" && <Badge>Hunspell</Badge>}
+                {spellStatus === "loading" && <Badge variant="secondary">loading…</Badge>}
+                {spellStatus === "demo" && <Badge variant="secondary">demo lexicon</Badge>}
+                {spellStatus === "error" && <Badge variant="destructive">error</Badge>}
 
-                    if (results.filter(s => s.endsWith(":true")).length <= 1) {
-                      alert("Hunspell loaded but probe failed. Check /dicts paths or .aff/.dic content.");
-                    }
-                  } catch (e) {
-                    console.error(e);
-                    alert("Hunspell load failed. Confirm /public/dicts/en_US.aff & en_US.dic and WASM loader wiring.");
-                  }
-                }}
-              >
-                Load Hunspell
-              </Button>
-
-              <Button
-                variant="outline"
-                disabled={ltBusy}
-                onClick={async () => {
-                  setLtBusy(true);
-                  try {
-                    const { createLanguageToolChecker } = await import("@/lib/grammar/languagetool-client");
-                    const lt = createLanguageToolChecker("/api/languagetool");
-                    const issues = await lt.check(text, "en-US");
-                    const msgs = issues.slice(0, 12).map(i => `${i.category}: ${i.message}`);
-                    setLtIssues(msgs);
-                  } catch (e) {
-                    console.error(e);
-                    alert("LanguageTool check failed. Consider the /api proxy or a self-hosted instance.");
-                  } finally {
-                    setLtBusy(false);
-                  }
-                }}
-              >
-                {ltBusy ? "Checking…" : "Grammar check"}
-              </Button>
+                <span className="ml-3">Grammar:</span>
+                {grammarStatus === "checking" && <Badge variant="secondary">checking…</Badge>}
+                {grammarStatus === "ok" && <Badge>auto</Badge>}
+                {grammarStatus === "idle" && <Badge variant="secondary">idle</Badge>}
+                {grammarStatus === "error" && <Badge variant="destructive">error</Badge>}
+              </div>
             </div>
           </div>
 
