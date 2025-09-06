@@ -73,10 +73,12 @@
 - **Written Expression Scoring**: TWW, WSC, CWS calculations
 - **Spelling Assessment**: CLS (Correct Letter Sequences) scoring
 - **Hunspell Integration**: Professional spell checking with WASM dictionaries
+- **Automatic Loading**: Hunspell loads automatically on app startup
 - **Spell Engine Status**: Visual indicator showing active spell engine (Demo/Hunspell)
 - **Auto-validation**: Automatic probe testing after Hunspell loading
 - **Spelling Suggestions**: Tooltip suggestions for misspelled words
-- **LanguageTool Grammar**: Optional grammar checking and suggestions
+- **LanguageTool Grammar**: Automatic grammar checking with debounced text analysis
+- **Request Cancellation**: AbortSignal support for grammar checking requests
 - **Interactive Overrides**: Click-to-toggle word and pair scoring
 - **Dictionary Packs**: Grade-level appropriate word lists
 - **Infraction Flagging**: Automated issue detection
@@ -233,6 +235,8 @@ interface PairOverride { cws?: boolean }
 #### LanguageTool Client (`languagetool-client.ts`)
 - `createLanguageToolChecker()`: Factory for LanguageTool grammar checker
 - API integration with rate limiting support
+- **AbortSignal Support**: Request cancellation to prevent stale results
+- **Automatic Grammar Checking**: Debounced text analysis with 800ms delay
 - Advisory-only suggestions (doesn't affect CBM scores)
 
 ### API Routes (`src/app/api/`)
@@ -316,13 +320,17 @@ The tool implements scoring methods aligned with educational research:
 - **Build Process**: Optimized for production builds with proper TypeScript compilation
 
 ### Recent Updates
+- **Automatic Loading**: Hunspell now loads automatically on app startup for seamless experience
+- **Automatic Grammar Checking**: Grammar analysis runs automatically as you type with 800ms debounce
+- **Request Cancellation**: Added AbortSignal support to prevent stale grammar check results
+- **Enhanced Status Display**: Real-time status indicators for both spell and grammar engines
+- **Improved UX**: Removed manual "Load Hunspell" and "Grammar check" buttons for streamlined workflow
 - **Spell Engine Status**: Added visual status indicator showing active spell engine (Demo/Hunspell)
 - **Auto-validation**: Automatic probe testing after Hunspell loading with sanity checks
 - **Enhanced Tooltips**: Spelling suggestions now appear in word tooltips when flagged
-- **Smart Button States**: Load Hunspell button disables after successful loading
 - **Development Testing**: Added dev probe script for quick Hunspell validation
 - **Curly Apostrophe Support**: Enhanced normalization for smart quotes and apostrophes
-- **UI Improvements**: Removed duplicate "Reset overrides" button for cleaner interface
+- **UI Improvements**: Streamlined interface with automatic background processing
 - **Enhanced Capitalization**: Added curly apostrophe handling for consistent CWS capitalization checks
 - **Repository Cleanup**: Removed stray files and updated .gitignore for better version control
 - **Real Hunspell WASM**: Implemented `hunspell-asm` library for professional spell checking

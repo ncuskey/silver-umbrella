@@ -18,10 +18,12 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 - **Dictionary Packs**: Demo bundles for different grade levels (K-2, K-5, general)
 - **Custom Lexicon**: Add custom words for specialized vocabulary
 - **Hunspell Integration**: Professional spell checking with WASM dictionaries
+- **Automatic Loading**: Hunspell loads automatically on app startup
 - **Spell Engine Status**: Visual indicator showing active spell engine (Demo/Hunspell)
 - **Auto-validation**: Automatic probe testing after Hunspell loading
 - **Spelling Suggestions**: Tooltip suggestions for misspelled words when Hunspell is active
-- **LanguageTool Grammar**: Optional grammar checking and suggestions
+- **LanguageTool Grammar**: Automatic grammar checking with debounced text analysis
+- **Request Cancellation**: AbortSignal support for grammar checking requests
 - **Infraction Flagging**: Automated detection of definite vs. possible issues
 - **Interactive Overrides**: Click words to toggle WSC scoring, click carets to toggle CWS pairs
 - **Rule-based Checks**: Capitalization, terminal punctuation, and sentence structure validation
@@ -57,8 +59,8 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 1. Paste student writing in the text area
 2. Select appropriate dictionary packs for the student's grade level
 3. Add custom words to the lexicon if needed
-4. (Optional) Click "Load Hunspell" for professional spell checking
-5. (Optional) Click "Grammar check" for LanguageTool suggestions
+4. Hunspell loads automatically on startup for professional spell checking
+5. Grammar checking runs automatically as you type (debounced)
 6. Review automated scoring and infraction flags
 7. Use interactive overrides to adjust scoring as needed
 
@@ -91,7 +93,7 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 ### Hunspell Integration
 - **Real WASM Implementation**: Uses `hunspell-asm` library for professional spell checking
 - **Dictionary Files**: Uses `en_US.aff` and `en_US.dic` files from LibreOffice dictionaries
-- **Dynamic Loading**: Click "Load Hunspell" to enable advanced spell checking with 500K+ words
+- **Automatic Loading**: Hunspell loads automatically on app startup for seamless experience
 - **Status Tracking**: Visual badge shows active spell engine (Demo lexicon vs Hunspell WASM)
 - **Auto-validation**: Automatic probe testing with common words after loading
 - **Spelling Suggestions**: Built-in Hunspell suggestion engine for misspelled words
@@ -103,10 +105,11 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 - **Development Testing**: Automatic probe in dev mode for quick validation
 
 ### LanguageTool Grammar
-- Optional grammar checking and suggestions
-- Uses proxy API route to avoid rate limits
-- Advisory-only suggestions (doesn't affect CBM scores)
-- Click "Grammar check" to analyze text
+- **Automatic Grammar Checking**: Runs automatically as you type with 800ms debounce
+- **Request Cancellation**: AbortSignal support prevents stale grammar check results
+- **Uses proxy API route** to avoid rate limits
+- **Advisory-only suggestions** (doesn't affect CBM scores)
+- **Status Indicators**: Visual feedback showing grammar check status (idle/checking/ok/error)
 
 ## Deployment
 
@@ -151,13 +154,17 @@ The tool is designed for easy extension:
 
 ## Recent Updates
 
+- **Automatic Loading**: Hunspell now loads automatically on app startup for seamless experience
+- **Automatic Grammar Checking**: Grammar analysis runs automatically as you type with 800ms debounce
+- **Request Cancellation**: Added AbortSignal support to prevent stale grammar check results
+- **Enhanced Status Display**: Real-time status indicators for both spell and grammar engines
+- **Improved UX**: Removed manual "Load Hunspell" and "Grammar check" buttons for streamlined workflow
 - **Spell Engine Status**: Added visual status indicator showing active spell engine (Demo/Hunspell)
 - **Auto-validation**: Automatic probe testing after Hunspell loading with sanity checks
 - **Enhanced Tooltips**: Spelling suggestions now appear in word tooltips when flagged
-- **Smart Button States**: Load Hunspell button disables after successful loading
 - **Development Testing**: Added dev probe script for quick Hunspell validation
 - **Curly Apostrophe Support**: Enhanced normalization for smart quotes and apostrophes
-- **UI Improvements**: Removed duplicate "Reset overrides" button for cleaner interface
+- **UI Improvements**: Streamlined interface with automatic background processing
 - **Enhanced Capitalization**: Added curly apostrophe handling for consistent CWS capitalization checks
 - **Repository Cleanup**: Removed stray files and updated .gitignore for better version control
 - **Real Hunspell WASM**: Implemented `hunspell-asm` library for professional spell checking

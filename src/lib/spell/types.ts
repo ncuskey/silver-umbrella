@@ -14,5 +14,5 @@ export interface GrammarIssue {
 }
 
 export interface GrammarChecker {
-  check(text: string, lang?: string): Promise<GrammarIssue[]>;
+  check(text: string, lang?: string, signal?: AbortSignal): Promise<GrammarIssue[]>;
 }
