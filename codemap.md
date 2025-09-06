@@ -197,12 +197,13 @@ interface PairOverride { cws?: boolean }
 - `getExternalSpellChecker()`: Retrieve current spell checker
 
 #### Hunspell Adapter (`hunspell-adapter.ts`)
-- WASM-ready spell checking integration (stub implementation)
+- **Real WASM Implementation**: Uses `hunspell-asm` library for professional spell checking
 - `createHunspellSpellChecker()`: Factory for dictionary-based spell checker
-- Designed to parse LibreOffice dictionary files from `public/dicts/`
-- Implements edit distance algorithm for spelling suggestions
-- Fallback to custom lexicon with light stemming when not loaded
-- Ready for real WASM Hunspell integration
+- **Dictionary Loading**: Fetches and mounts `en_US.aff` and `en_US.dic` files from `public/dicts/`
+- **Spelling Engine**: Built-in Hunspell suggestion engine for misspelled words
+- **Fallback System**: Uses custom lexicon with light stemming when Hunspell not loaded
+- **Memory Management**: Includes cleanup functions for repeated loads
+- **UTF-8 Support**: Properly handles UTF-8 encoded dictionary files
 
 #### Hunspell Worker Client (`hunspell-worker-client.ts`)
 - Web Worker-based spell checking for large dictionaries
@@ -297,18 +298,20 @@ The tool implements scoring methods aligned with educational research:
 - **Build Process**: Optimized for production builds with proper TypeScript compilation
 
 ### Recent Updates
-- **Hunspell Integration**: WASM-ready spell checking with fallback to custom lexicon
+- **Real Hunspell WASM**: Implemented `hunspell-asm` library for professional spell checking
+- **Dictionary Integration**: Real `en_US.aff` and `en_US.dic` file support with UTF-8 encoding
+- **Performance Optimization**: Aggressive caching (1-year) for dictionary files
 - **LanguageTool Grammar**: Advisory grammar checking with API proxy
 - **Web Worker Support**: Non-blocking spell checking for large dictionaries
 - **Bundle Analysis**: Detailed bundle size reporting with @next/bundle-analyzer
-- **Immutable Caching**: Dictionary files cached with 1-year expiration
+- **Memory Management**: Proper cleanup functions for repeated Hunspell loads
 - **Light Stemming**: Improved fallback spell checking with word stemming
 
 ### Future Enhancements
 - Backend integration for data persistence
-- Real WASM Hunspell integration (currently stub)
 - Advanced grammar checking with POS tagging
-- Multi-language support
+- Multi-language support with additional dictionary files
 - Export functionality for assessment results
 - Offline dictionary support
 - Performance optimizations for large dictionaries
+- Web Worker implementation for non-blocking spell checking

@@ -81,12 +81,13 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 ## Spell Checking & Grammar
 
 ### Hunspell Integration
-- Professional spell checking with WASM-ready architecture
-- Uses `en_US.aff` and `en_US.dic` files from LibreOffice dictionaries
-- Click "Load Hunspell" to enable advanced spell checking with 500K+ words
-- Implements edit distance algorithm for spelling suggestions
-- Seamlessly falls back to custom lexicon with light stemming when not loaded
-- Web Worker support available for large dictionaries to prevent UI blocking
+- **Real WASM Implementation**: Uses `hunspell-asm` library for professional spell checking
+- **Dictionary Files**: Uses `en_US.aff` and `en_US.dic` files from LibreOffice dictionaries
+- **Dynamic Loading**: Click "Load Hunspell" to enable advanced spell checking with 500K+ words
+- **Spelling Suggestions**: Built-in Hunspell suggestion engine for misspelled words
+- **Seamless Fallback**: Uses custom lexicon with light stemming when Hunspell not loaded
+- **Performance Optimized**: Aggressive caching (1-year) for dictionary files
+- **Web Worker Ready**: Architecture supports moving to Web Worker for large dictionaries
 
 ### LanguageTool Grammar
 - Optional grammar checking and suggestions
@@ -126,12 +127,12 @@ The application is optimized for production deployment with minimal runtime requ
 ## Extensibility
 
 The tool is designed for easy extension:
-- Custom dictionary parser with 500K+ word support
-- LanguageTool grammar checking already integrated
-- Add POS-based rules for advanced grammar checking
-- Integrate with additional dictionary databases
-- Add support for additional languages
-- WASM-based spell checking can be added for advanced features
+- **Real Hunspell WASM**: Professional spell checking with 500K+ word support
+- **LanguageTool Grammar**: Grammar checking already integrated
+- **Multi-language Ready**: Add support for additional languages with new dictionary files
+- **Advanced Grammar**: Add POS-based rules for enhanced grammar checking
+- **Dictionary Integration**: Easy integration with additional dictionary databases
+- **Web Worker Support**: Non-blocking spell checking for performance optimization
 
 ## References
 
