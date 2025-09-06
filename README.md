@@ -22,6 +22,7 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 - **Infraction Flagging**: Automated detection of definite vs. possible issues
 - **Interactive Overrides**: Click words to toggle WSC scoring, click carets to toggle CWS pairs
 - **Rule-based Checks**: Capitalization, terminal punctuation, and sentence structure validation
+- **Spell Result Caching**: Intelligent caching for repeated word lookups (big speedup on longer texts)
 
 ## Getting Started
 
@@ -70,6 +71,9 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 - Lucide React for icons
 - Modular UI components with shadcn/ui design system
 - Optimized for production with standalone output and minimal runtime bundles
+- Modern TypeScript configuration (ES2022 target) for better performance
+- ESLint configuration aligned with Next.js 15
+- Bundle analyzer integration for performance monitoring
 
 ## Scoring Guidelines
 
@@ -87,6 +91,7 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 - **Spelling Suggestions**: Built-in Hunspell suggestion engine for misspelled words
 - **Seamless Fallback**: Uses custom lexicon with light stemming when Hunspell not loaded
 - **Performance Optimized**: Aggressive caching (1-year) for dictionary files
+- **Spell Result Caching**: Intelligent in-memory caching for repeated word lookups
 - **Web Worker Ready**: Architecture supports moving to Web Worker for large dictionaries
 
 ### LanguageTool Grammar
@@ -123,6 +128,8 @@ The application is optimized for production deployment with minimal runtime requ
 - **Immutable Caching**: Dictionary files cached with 1-year expiration for performance
 - **Bundle Analysis**: Use `npm run analyze` to generate detailed bundle size reports
 - **Dependency Analysis**: Use `npm run size:report` to identify large packages
+- **Modern TypeScript**: ES2022 target for better performance and WASM compatibility
+- **Spell Result Caching**: In-memory caching eliminates repeated spell checks
 
 ## Extensibility
 
