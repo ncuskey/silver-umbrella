@@ -107,11 +107,21 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 ### LanguageTool Grammar
 - **Automatic Grammar Checking**: Runs automatically as you type with 800ms debounce
 - **Request Cancellation**: AbortSignal support prevents stale grammar check results
-- **Uses proxy API route** to avoid rate limits
+- **Smart Proxy with Fallback**: Uses local API proxy with automatic fallback to public service
+- **Netlify Function Support**: API routes deployed as Netlify Functions for optimal performance
 - **Advisory-only suggestions** (doesn't affect CBM scores)
 - **Status Indicators**: Visual feedback showing grammar check status (idle/checking/ok/error)
 
 ## Deployment
+
+### Netlify Deployment (Recommended)
+
+The application is configured for optimal Netlify deployment:
+
+1. **Automatic Build**: Netlify will run `npm run build` automatically
+2. **API Functions**: LanguageTool proxy routes are deployed as Netlify Functions
+3. **Smart Fallback**: Grammar checking automatically falls back to public API if functions aren't available
+4. **Configuration**: Uses `netlify.toml` with Next.js plugin for proper function deployment
 
 ### Production Build
 
@@ -174,7 +184,8 @@ The tool is designed for easy extension:
 - **Modern TypeScript**: Upgraded to ES2022 target for better performance
 - **Bundle Analysis**: Added @next/bundle-analyzer for performance monitoring
 - **ESLint Updates**: Aligned with Next.js 15 configuration
-- **LanguageTool Grammar**: Advisory grammar checking with API proxy
+- **LanguageTool Grammar**: Advisory grammar checking with smart proxy and fallback
+- **Netlify Function Support**: API routes deployed as serverless functions
 - **Web Worker Support**: Non-blocking spell checking for large dictionaries
 
 ## References
