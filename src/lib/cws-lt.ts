@@ -57,7 +57,7 @@ export function isCommaOnlyForCWS(m: any, tokens: any[]) {
   const id  = (m.rule?.id || "").toUpperCase();
   const msg = m.message || "";
   const reps = Array.isArray(m.replacements) ? m.replacements : [];
-  const commaOnly = reps.length > 0 && reps.every(r => (r?.value || "").trim() === ",");
+  const commaOnly = reps.length > 0 && reps.every((r: any) => (r?.value || "").trim() === ",");
   const mentionsComma = /(^|[^a-z])comma([^a-z]|$)/i.test(msg) || id.includes("COMMA");
 
   if (!(commaOnly || mentionsComma)) return false;
@@ -344,7 +344,7 @@ export function buildTerminalGroups(
 
 // ---- revised detector ----
 export function ltBoundaryInsertions(tokens: any[], issues: any[]) {
-  const out: { beforeBIndex: number; char: "."; reason: string }[] = [];
+  const out: { beforeBIndex: number; char: "." | "!" | "?"; reason: "CapitalAfterSpace" | "LT" | "Heuristic"; message: string }[] = [];
 
   for (const m of issues || []) {
     const id   = (m.rule?.id || "").toUpperCase();
@@ -386,10 +386,8 @@ export function ltBoundaryInsertions(tokens: any[], issues: any[]) {
       out.push({
         beforeBIndex: caret,
         char: ".",
-        reason:
-          repBoundary ? "LTBoundary(rep)" :
-          msgBoundary ? "LTBoundary(msg)" :
-                        "LTBoundary(struct)"
+        reason: "LT",
+        message: msg || "Possible missing sentence-ending punctuation (from LanguageTool)."
       });
     }
 

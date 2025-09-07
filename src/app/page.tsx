@@ -312,7 +312,7 @@ function cycleCaret(bIndex: number, pairOverrides: PairOverrides, setPairOverrid
   });
 }
 
-function dedupe(xs:{beforeBIndex:number;char:string;reason:string}[]) {
+function dedupe(xs:{beforeBIndex:number;char:"." | "!" | "?";reason:"CapitalAfterSpace" | "LT" | "Heuristic";message:string}[]) {
   const seen = new Set<number>(), out: typeof xs = [];
   for (const x of xs) if (!seen.has(x.beforeBIndex)) { seen.add(x.beforeBIndex); out.push(x); }
   return out;
