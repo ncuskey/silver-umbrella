@@ -409,22 +409,43 @@ function SentenceList({ text }: { text: string }) {
   );
 }
 
-function InfractionList({ items }: { items: Infraction[] }) {
+function InfractionList({ 
+  items, 
+  vtByBoundary, 
+  cycleGroup 
+}: { 
+  items: Infraction[];
+  vtByBoundary?: Map<number, VirtualTerminal>;
+  cycleGroup?: (group: VirtualTerminal) => void;
+}) {
   if (!items.length) return <div className="text-sm text-muted-foreground">No infractions flagged.</div>;
   return (
     <div className="space-y-2">
-      {items.map((f, i) => (
-        <div
-          key={i}
-          className={`text-sm p-2 rounded-xl border ${f.kind === "definite" ? "border-red-300 bg-red-50" : "border-amber-300 bg-amber-50"}`}
-        >
-          <div className="flex items-center gap-2">
-            {f.kind === "definite" ? <AlertTriangle className="h-4 w-4" /> : <ListChecks className="h-4 w-4" />}
-            <Badge variant={f.kind === "definite" ? "destructive" : "secondary"}>{f.tag}</Badge>
-            <span>{f.msg}</span>
-          </div>
-        </div>
-      ))}
+      {items.map((f, i) => {
+        // inside InfractionList row render
+        const maybeGroup =
+          (f.tag.startsWith("TERMINAL") && typeof f.at === "number")
+            ? vtByBoundary?.get(f.at as number)
+            : undefined;
+
+        const RowTag = maybeGroup ? "button" : "div";
+        const onClick = maybeGroup ? () => cycleGroup?.(maybeGroup) : undefined;
+
+        return (
+          <RowTag
+            key={i}
+            className={`text-sm p-2 rounded-xl border ${f.kind === "definite" ? "border-red-300 bg-red-50" : "border-amber-300 bg-amber-50"} ${maybeGroup ? "cursor-pointer hover:bg-opacity-80 transition-all duration-200" : ""}`}
+            onClick={onClick}
+            title={maybeGroup ? "Click to toggle all related carets (left, primary, right)" : undefined}
+          >
+            <div className="flex items-center gap-2">
+              {f.kind === "definite" ? <AlertTriangle className="h-4 w-4" /> : <ListChecks className="h-4 w-4" />}
+              <Badge variant={f.kind === "definite" ? "destructive" : "secondary"}>{f.tag}</Badge>
+              <span>{f.msg}</span>
+            </div>
+          </RowTag>
+        );
+      })}
     </div>
   );
 }
@@ -743,6 +764,15 @@ function WritingScorer() {
   const vtByDotIndex = useMemo(() => {
     const m = new Map<number, VirtualTerminal>();
     for (const v of virtualTerminals) m.set(v.dotTokenIndex, v);
+    return m;
+  }, [virtualTerminals]);
+
+  const vtByBoundary = useMemo(() => {
+    const m = new Map<number, VirtualTerminal>();
+    for (const v of virtualTerminals) {
+      m.set(v.leftBoundaryBIndex, v);
+      m.set(v.rightBoundaryBIndex, v);
+    }
     return m;
   }, [virtualTerminals]);
 
@@ -1316,7 +1346,11 @@ function WritingScorer() {
             {/* Infractions & Suggestions list — always visible now */}
             <div>
               <div className="mb-2 text-sm font-medium">Infractions &amp; Suggestions</div>
-              <InfractionList items={infractions} />
+              <InfractionList 
+                items={infractions} 
+                vtByBoundary={vtByBoundary}
+                cycleGroup={cycleGroup}
+              />
               <TerminalSuggestions 
                 groups={terminalGroups}
                 onGroupClick={(group) => {
