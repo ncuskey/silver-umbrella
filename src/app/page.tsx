@@ -763,32 +763,24 @@ function WritingScorer() {
     [text, ltIssues]
   );
 
-  // LT → insertions
+  // LT → insertions (caret placed at the boundary BEFORE the next token)
   const ltInsertions = useMemo<VirtualTerminalInsertion[]>(() => {
-    const ins = ltBoundaryInsertions(text, tokens, filteredLt);
-    return ins;
-  }, [text, tokens, filteredLt]);
+    return convertLTTerminalsToInsertions(tokens, filteredLt);
+  }, [tokens, filteredLt]);
 
   // Paragraph ends → insertions
   const eopInsertions = useMemo<VirtualTerminalInsertion[]>(() => {
     return detectParagraphEndInsertions(text, tokens);
   }, [text, tokens]);
 
-  // Final: accept LT first, then add paragraph ends, then dedupe
+  // LT-only terminal insertions (no heuristics)
   const terminalInsertions = useMemo<VirtualTerminalInsertion[]>(() => {
-    const all = [...ltInsertions, ...eopInsertions];
-    const byBoundary = new Map<number, VirtualTerminalInsertion>();
-    // Prefer LT over Heuristic when colliding
-    for (const v of all) {
-      const prev = byBoundary.get(v.beforeBIndex);
-      if (!prev || (prev.reason !== "LT" && v.reason === "LT")) byBoundary.set(v.beforeBIndex, v);
-    }
-    const out = [...byBoundary.values()];
+    const out = ltInsertions;
     if (typeof window !== "undefined" && (window as any).__CBM_DEBUG__) {
-      console.info("[VT] counts", { lt: ltInsertions.length, eop: eopInsertions.length, insertions: out.length });
+      console.info("[VT] counts", { lt: out.length, eop: 0, insertions: out.length });
     }
     return out;
-  }, [ltInsertions, eopInsertions]);
+  }, [ltInsertions]);
 
   // 2) insert virtual terminals for display + scoring
   const displayTokens = useMemo(

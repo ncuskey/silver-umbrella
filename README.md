@@ -181,11 +181,10 @@ The CWS (Correct Writing Sequences) engine implements strictly mechanical, CBM-a
 - **Grammar Mode Badge**: Always-visible indicator showing current grammar configuration (public/proxy/off)
 
 ### Virtual Terminal Insertion
-- **LT Boundary Integration**: LanguageTool boundary suggestions are converted to virtual terminal insertions for seamless CWS integration
-- **Smart Detection**: Automatically detects WORD [space] CapitalWord patterns that look like new sentences
-- **LT-First Priority**: LanguageTool boundary detection runs first, with heuristics as fallback
-- **Heuristic Filtering**: Uses contextual clues (newlines, 2+ spaces, sentence starters) to reduce false positives
-- **Title Case Avoidance**: Excludes TitleCase spans like "The Terrible Day" to prevent over-flagging
+- **LT-Only Mode**: Strict LanguageTool-only terminal boundary detection eliminates heuristic-driven false positives
+- **LT Authority**: LanguageTool has complete authority over terminal punctuation suggestions with no heuristic fallback
+- **Strict Rule Filtering**: Only reacts to specific LT rule families: `PUNCTUATION_PARAGRAPH_END`, `MISSING_SENTENCE_TERMINATOR`, and `UPPERCASE_SENTENCE_START`
+- **Precise Boundary Placement**: Correctly places boundaries BEFORE capitalized words (e.g., after "forest" before "The")
 - **Visual Insertion**: Inserts dotted "." tokens between words with distinct amber styling
 - **Two Caret System**: Creates two yellow advisory carets around each virtual terminal (word ^ . and . ^ NextWord)
 - **Interactive Control**: Teachers can click carets to cycle: yellow (advisory) → red (reject) → green (accept)
@@ -199,10 +198,9 @@ The CWS (Correct Writing Sequences) engine implements strictly mechanical, CBM-a
 - **Clickable Infraction Items**: TERMINAL (possible) items in the infractions panel are now clickable and toggle the entire virtual terminal group
 - **Dual Interaction Methods**: Users can toggle virtual terminal groups either by clicking the virtual dots in the text stream or by clicking TERMINAL items in the infractions panel
 - **Stable Group System**: Groups are now built from rendered display tokens, making them stable across re-renders
-- **LT Authority Integration**: When LanguageTool is active, it provides authoritative terminal punctuation suggestions
-- **Consistent Dot Rendering**: Dot chips render consistently whether using heuristics or LanguageTool analysis
-- **Smart Deduplication**: When LT and heuristics suggest the same boundary, LT takes precedence
-- **Paragraph-End Detection**: Robust fallback detection for missing terminal punctuation at paragraph breaks
+- **Consistent Dot Rendering**: Dot chips render consistently using only LanguageTool analysis
+- **Reduced False Positives**: Eliminates spurious dots inside phrases like "... nobody could ..."
+- **Enhanced Console Logging**: Console shows `{ lt: <N>, eop: 0, insertions: <N> }` confirming LT-only mode
 
 ### Terminal Group System
 - **LT-Driven Grouping**: LanguageTool punctuation/grammar issues automatically grouped with three related carets
@@ -360,7 +358,17 @@ The tool is designed for easy extension:
 
 ## Recent Updates
 
-### Latest Improvements (v4.0) - LT Boundary Integration & Virtual Terminal System
+### Latest Improvements (v4.1) - LT-Only Mode & Strict Boundary Detection
+- **LT-Only Mode**: Implemented strict LanguageTool-only terminal boundary detection, eliminating heuristic-driven false positives
+- **Strict LT Rules**: Now only reacts to specific LT rule families: `PUNCTUATION_PARAGRAPH_END`, `MISSING_SENTENCE_TERMINATOR`, and `UPPERCASE_SENTENCE_START`
+- **Precise Caret Placement**: Fixed `convertLTTerminalsToInsertions()` to correctly place boundaries BEFORE capitalized words (e.g., after "forest" before "The")
+- **Eliminated Heuristics**: Disabled paragraph-end and "CapitalAfterSpace" heuristics to show only LT-driven boundaries
+- **Enhanced Console Logging**: Console now shows `{ lt: <N>, eop: 0, insertions: <N> }` confirming LT-only mode
+- **Unit Test Coverage**: Added comprehensive test for LT caret placement verification
+- **Reduced False Positives**: Spurious dots inside phrases like "... nobody could ..." are eliminated
+- **LT Authority**: LanguageTool now has complete authority over terminal punctuation suggestions
+
+### Previous Improvements (v4.0) - LT Boundary Integration & Virtual Terminal System
 - **LT Boundary Integration**: Complete integration of LanguageTool boundary suggestions with CWS virtual terminal system
 - **Virtual Terminal Insertions**: LT boundary suggestions are now converted to `VirtualTerminalInsertion` format for seamless integration
 - **Smart Comma Filtering**: Enhanced comma filtering that preserves list commas while filtering clause-structuring commas for CWS

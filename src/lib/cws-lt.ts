@@ -150,6 +150,7 @@ const isPunctOrGrammar = (m: any) => {
 // Rules that indicate sentence-end problems straight from LT:
 const LT_TERMINAL_RULE_IDS = new Set<string>([
   "PUNCTUATION_PARAGRAPH_END",   // "No punctuation mark at the end of paragraph"
+  "MISSING_SENTENCE_TERMINATOR", // "Missing sentence terminator"
   "SENTENCE_WHITESPACE"          // "Missing space between sentences"
 ]);
 
@@ -185,17 +186,16 @@ export function deriveTerminalFromLT(tokens: Token[], issues: any[]) {
 
   // B) Missing boundary *inside* a paragraph (e.g., "forest The", "trees Then")
   for (const m of ltIssuesForCWS) {
-    if (!isPunctOrGrammar(m)) continue;
     const msg = m.message || "";
     const rId = (m.rule?.id || "").toUpperCase();
 
     // Check for UPPERCASE_SENTENCE_START rule specifically
     if (rId === "UPPERCASE_SENTENCE_START") {
-      // Find the token that starts right after the issue offset
-      const tokenAfterIssue = tokens.find(t => (t.start ?? 0) >= m.offset + m.length);
-      if (tokenAfterIssue && tokenAfterIssue.type === "WORD" && /^[A-Z]/.test(tokenAfterIssue.raw)) {
+      // Find the token that the issue points to (the capitalized word)
+      const capitalizedToken = tokens.find(t => (t.start ?? 0) >= m.offset && (t.start ?? 0) < m.offset + m.length);
+      if (capitalizedToken && capitalizedToken.type === "WORD" && /^[A-Z]/.test(capitalizedToken.raw)) {
         // Find the previous word token
-        const prevWordIdx = tokenAfterIssue.idx - 1;
+        const prevWordIdx = capitalizedToken.idx - 1;
         if (prevWordIdx >= 0) {
           const prevToken = tokens[prevWordIdx];
           if (prevToken && prevToken.type === "WORD") {
@@ -205,8 +205,11 @@ export function deriveTerminalFromLT(tokens: Token[], issues: any[]) {
       }
     }
 
-    // Heuristic, but **driven by LT** (not our old detector):
-    if (!LT_TERMINAL_RULE_IDS.has(rId) && !looksLikeSentenceEndMsg(msg)) continue;
+    // For other rules, check if they're punctuation/grammar related
+    if (!isPunctOrGrammar(m)) continue;
+    
+    // Strict LT-only: only react to specific terminal rules
+    if (!LT_TERMINAL_RULE_IDS.has(rId)) continue;
 
     // find the token that starts *right after* the match
     const after = m.offset + m.length;
