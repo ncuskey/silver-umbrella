@@ -87,6 +87,8 @@
 - **Curly Apostrophe Support**: Proper handling of smart quotes and apostrophes
 - **Derived Metrics**: CIWS, %CWS, and CWS/min calculations with time control
 - **Missing Punctuation Detection**: Heuristic advisory for capitalized words not preceded by terminal punctuation
+- **Combined Boundary Detection**: LanguageTool + paragraph-end fallback with intelligent deduplication
+- **Context-Aware Comma Filtering**: Smart filtering that keeps list commas but removes clause-structuring commas
 - **Grammar Mode Badge**: Always-visible indicator showing current grammar configuration
 - **Export Functionality**: CSV audit export and PDF report generation
 - **Privacy Controls**: FERPA/COPPA compliant local-only mode with session data clearing
@@ -254,10 +256,25 @@ interface CwsHint {
 
 ### CWS-LanguageTool Integration (`src/lib/cws-lt.ts`)
 
+#### Intelligent Comma Filtering System
+- `isCommaOnlyForCWS()`: Context-aware comma suggestion filtering for CWS boundaries
+- **List Context Detection**: Keeps Oxford commas and mid-list commas using `isLikelyListComma()`
+- **Clause Filtering**: Removes clause-structuring commas (e.g., "…, and I") from CWS suggestions
+- **Smart Detection**: Scans up to 7 tokens ahead and 5 tokens back to determine list context
+- **Replacement Analysis**: Checks both rule IDs and actual replacement values for comma detection
+
+#### Enhanced Boundary Detection
+- `suggestsTerminal()`: Detects terminal punctuation suggestions in LanguageTool replacements
+- `ltBoundaryInsertions()`: Comprehensive boundary detection combining multiple detection methods
+- **Replacement-Based Detection**: Catches cases like "warm I" → "warm. I" through replacement analysis
+- **Message Pattern Matching**: Enhanced regex patterns for boundary-related suggestions
+- **Category-Aware Filtering**: Respects punctuation/grammar categories while applying comma filtering
+
 #### CWS Advisory Hints System
 - `buildLtCwsHints()`: Maps LanguageTool grammar issues to CWS boundaries
 - **Smart Boundary Mapping**: Grammar issues mapped to nearest CWS boundaries within ±2 characters
 - **Enhanced Category Filtering**: Properly excludes spelling issues (TYPOS, MORFOLOGIK_RULE_*) from CWS boundary mapping
+- **Comma-Filtered Processing**: Uses refined comma filtering to improve hint quality
 - **Advisory Hints**: Grammar suggestions shown as yellow carets and advisory infractions
 - **Override Awareness**: Advisory hints disappear when users explicitly override boundary states
 
@@ -277,6 +294,10 @@ interface CwsHint {
 
 #### Virtual Terminal Insertion System
 - `detectMissingTerminalInsertions()`: Advanced detection algorithm for missing sentence-ending punctuation
+- `detectParagraphEndInsertions()`: Fallback detection for paragraph endings without terminal punctuation
+- **Paragraph-End Detection**: Uses regex pattern to find paragraph breaks and end-of-text boundaries
+- **Terminal Check**: Verifies if terminal punctuation already exists after the last word
+- **Fallback Safety**: Ensures coverage of cases like "The Terrible Day." even when LanguageTool misses them
 - `createVirtualTerminals()`: Converts insertion objects to comprehensive VirtualTerminal type with boundary tracking
 - **Smart Pattern Recognition**: Detects WORD [space] CapitalWord sequences that look like new sentences
 - **Heuristic Filtering**: Uses contextual clues (newlines, 2+ spaces, sentence starters) to reduce false positives

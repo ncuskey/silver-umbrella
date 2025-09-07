@@ -10,9 +10,9 @@ import { Info, AlertTriangle, ListChecks, Settings } from "lucide-react";
 import type { GrammarIssue, Token } from "@/lib/spell/types";
 import { buildCwsPairs, ESSENTIAL_PUNCT } from "@/lib/cws";
 import type { CwsPair } from "@/lib/cws";
-import { buildLtCwsHints, convertLTTerminalsToInsertions, buildTerminalGroups, ltBoundaryInsertions, type TerminalGroup } from "@/lib/cws-lt";
+import { buildLtCwsHints, convertLTTerminalsToInsertions, buildTerminalGroups, ltBoundaryInsertions, isCommaOnlyForCWS, type TerminalGroup } from "@/lib/cws-lt";
 import type { CwsHint } from "@/lib/cws-lt";
-import { detectMissingTerminalInsertionsSmart, VirtualTerminalInsertion, createVirtualTerminals, createVirtualTerminalsFromDisplay, VirtualTerminal } from "@/lib/cws-heuristics";
+import { detectMissingTerminalInsertionsSmart, detectParagraphEndInsertions, VirtualTerminalInsertion, createVirtualTerminals, createVirtualTerminalsFromDisplay, VirtualTerminal } from "@/lib/cws-heuristics";
 import { cn, DEBUG, dgroup, dtable, dlog } from "@/lib/utils";
 import { toCSV, download } from "@/lib/export";
 import jsPDF from "jspdf";
@@ -747,18 +747,21 @@ function WritingScorer() {
   );
   
   // 1) base tokens exist already as `tokens` from your tokenizer
-  // Use LT-derived terminals when LT is available, otherwise fall back to heuristics
+  // Combine LT and paragraph-end detection with deduplication
+  const ltFiltered = useMemo(() => ltIssues.filter(m => !isCommaOnlyForCWS(m, tokens)), [ltIssues, tokens]);
+  const fromLT = useMemo(() => ltBoundaryInsertions(tokens, ltFiltered), [tokens, ltFiltered]);
+  const fromEoP = useMemo(() => detectParagraphEndInsertions(text, tokens), [text, tokens]);
+
   const terminalInsertions = useMemo(() => {
-    const fromLT = ltBoundaryInsertions(tokens, ltIssues);
-    const fromHeur = detectMissingTerminalInsertionsSmart(text, tokens);
-    const chosen = fromLT.length ? fromLT : fromHeur;
+    const seen = new Set<number>(), out: any[] = [];
+    for (const x of [...fromLT, ...fromEoP]) if (!seen.has(x.beforeBIndex)) { seen.add(x.beforeBIndex); out.push(x); }
     console.log("[VT] counts", {
-      insertions: chosen.length,
+      insertions: out.length,
       lt: fromLT.length,
-      heur: fromHeur.length
+      eop: fromEoP.length
     });
-    return chosen;
-  }, [text, tokens, ltIssues]);
+    return out;
+  }, [fromLT, fromEoP]);
 
   // 2) insert virtual terminals for display + scoring
   const displayTokens = useMemo(
@@ -907,8 +910,8 @@ function WritingScorer() {
       }
     }
     
-    return buildTerminalGroups(tokens, caretStateMap, ltIssues);
-  }, [tokens, pairOverrides, ltIssues]);
+    return buildTerminalGroups(tokens, caretStateMap, ltFiltered);
+  }, [tokens, pairOverrides, ltFiltered]);
 
   // Fast lookup maps
   const pairByBoundary = useMemo(() => {
