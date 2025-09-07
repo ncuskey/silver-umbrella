@@ -488,7 +488,16 @@ The tool implements scoring methods aligned with educational research:
 
 ### Recent Updates
 
-#### Latest Improvements (v4.5) - UPPERCASE Boundary-Aware Insertion
+#### Latest Improvements (v5.2) - API Proxy Rule Filtering Fix
+- **Fixed Rule Filtering**: Updated API proxy to properly handle form data and prevent artificial rule restrictions
+- **Full Grammar Checking**: Client now explicitly requests comprehensive checks with `level=default` and `enabledOnly=false`
+- **Enhanced Debug Logging**: Added detailed request parameter logging and match count tracking
+- **Form Data Processing**: API proxy now uses `req.formData()` instead of `req.text()` for proper parameter handling
+- **Rule Parameter Cleanup**: Explicitly removes `enabledCategories`, `enabledRules`, `disabledCategories`, and `disabledRules` unless client sends them
+- **Client Parameter Enhancement**: Updated `checkWithLT()` to include proper parameters for full grammar checking
+- **Debug Visibility**: Enhanced logging shows all request parameters and response match counts for troubleshooting
+
+#### Previous Improvements (v4.5) - UPPERCASE Boundary-Aware Insertion
 - **Boundary-Aware UPPERCASE Detection**: Enhanced UPPERCASE_SENTENCE_START processing that uses boundary caret ("^") ownership for proper VT integration
 - **Helper Functions**: Added `isWord()`, `prevWordIndex()`, and `nearestBoundaryLeftOf()` for sophisticated boundary detection
 - **VT Ownership System**: Virtual terminals now use `beforeBIndex: boundaryIdx` for boundary-based ownership instead of word-based positioning
