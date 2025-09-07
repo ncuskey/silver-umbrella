@@ -180,30 +180,18 @@ The CWS (Correct Writing Sequences) engine implements strictly mechanical, CBM-a
 - **Smart Filtering**: Only grammar issues (not spelling/punctuation) mapped to boundaries
 - **Grammar Mode Badge**: Always-visible indicator showing current grammar configuration (public/proxy/off)
 
-### Virtual Terminal Insertion
-- **LT-Only Mode**: Strict LanguageTool-only terminal boundary detection eliminates heuristic-driven false positives
-- **LT Authority**: LanguageTool has complete authority over terminal punctuation suggestions with no heuristic fallback
-- **Strict Rule Filtering**: Only reacts to specific LT rule families: `PUNCTUATION_PARAGRAPH_END`, `MISSING_SENTENCE_TERMINATOR`, and `UPPERCASE_SENTENCE_START`
-- **UPPERCASE_SENTENCE_START Detection**: Advanced boundary detection that places terminals BEFORE capitalized words (e.g., after "forest" before "The")
-- **Smart Boundary Placement**: Uses sophisticated logic to avoid placing terminals before opening quotes, brackets, or existing terminals
-- **Safety Guardrails**: Prevents double-insertion and includes comprehensive checks for existing punctuation
-- **Visual Insertion**: Inserts dotted "." tokens between words with distinct amber styling
-- **Two Caret System**: Creates two yellow advisory carets around each virtual terminal (word ^ . and . ^ NextWord)
-- **Interactive Control**: Teachers can click carets to cycle: yellow (advisory) → red (reject) → green (accept)
-- **One-Click Group Cycling**: Click virtual terminal dots to cycle both adjacent carets simultaneously in lock-step
-- **CWS Integration**: When accepted (green), virtual terminals count as essential punctuation creating two CWS boundaries
-- **Advisory by Default**: Virtual terminals don't affect CWS scores unless explicitly accepted by teacher
-- **Clear Visual Feedback**: Dashed amber borders, hover effects, and tooltips clearly indicate proposed insertions
-- **Accessibility**: Keyboard navigation support with Enter/Space key activation for virtual terminal dots
-- **Comprehensive Boundary Tracking**: Each virtual terminal tracks its dot token index and associated CWS boundary indices
-- **Fixed Boundary Mapping**: Corrected virtual terminal boundary index calculation to ensure proper group-to-caret mapping
-- **Clickable Infraction Items**: TERMINAL (possible) items in the infractions panel are now clickable and toggle the entire virtual terminal group
-- **Dual Interaction Methods**: Users can toggle virtual terminal groups either by clicking the virtual dots in the text stream or by clicking TERMINAL items in the infractions panel
-- **Stable Group System**: Groups are now built from rendered display tokens, making them stable across re-renders
-- **Consistent Dot Rendering**: Dot chips render consistently using only LanguageTool analysis
-- **Reduced False Positives**: Eliminates spurious dots inside phrases like "... nobody could ..."
-- **Enhanced Console Logging**: Console shows `{ lt: <N>, eop: 0, insertions: <N> }` confirming LT-only mode
-- **LT-Only Infractions Toggle**: Optional toggle to show only LanguageTool issues in the infractions panel for focused review
+### Virtual Terminal Insertion (LT-Only Architecture)
+- **Pure LT Architecture**: Completely redesigned to use only LanguageTool for terminal punctuation suggestions
+- **Eliminated Heuristics**: Removed all heuristic-based logic including paragraph-end detection, capitalization rules, and smart comma detection
+- **Minimal Rule Set**: Only processes three specific LT rules: `UPPERCASE_SENTENCE_START`, `MISSING_SENTENCE_TERMINATOR`, and `PUNCTUATION_PARAGRAPH_END`
+- **Robust Field Shims**: Tolerant field accessors handle different LanguageTool server response formats
+- **Caret-Aware Logic**: Advanced boundary detection that places terminals using caret ("^") ownership for proper VT integration
+- **Simple Tokenizer**: Clean tokenization that yields WORD/PUNCT/BOUNDARY tokens including caret markers
+- **Streamlined Pipeline**: LT issues → filter → convert to insertions → display, with no complex fusion layers
+- **Proven Functionality**: Comprehensive test suite validates the LT-only pipeline works independently
+- **Clean Codebase**: Removed 1000+ lines of complex heuristic logic and wrapper functions
+- **Better Maintainability**: Single source of truth for terminal insertions (LanguageTool only)
+- **Reduced Complexity**: Simplified UI and logic focused solely on LT results
 
 ### Terminal Group System
 - **LT-Driven Grouping**: LanguageTool punctuation/grammar issues automatically grouped with three related carets
@@ -361,7 +349,21 @@ The tool is designed for easy extension:
 
 ## Recent Updates
 
-### Latest Improvements (v4.5) - UPPERCASE Boundary-Aware Insertion
+### Latest Improvements (v5.0) - LT-Only Architecture Refactoring
+- **Complete Architecture Overhaul**: Redesigned the entire codebase to use only LanguageTool for terminal punctuation suggestions
+- **Eliminated Heuristic Logic**: Removed all heuristic-based detection including paragraph-end rules, capitalization heuristics, and smart comma detection
+- **Minimal Rule Processing**: Now only processes three specific LT rules: `UPPERCASE_SENTENCE_START`, `MISSING_SENTENCE_TERMINATOR`, and `PUNCTUATION_PARAGRAPH_END`
+- **Robust Field Shims**: Added tolerant field accessors (`ltRuleId`, `ltCategory`, `ltOffset`, `ltLength`, `ltMarked`) that handle different LT server response formats
+- **Caret-Aware Boundary Logic**: Advanced boundary detection that places terminals using caret ("^") ownership for proper VT integration
+- **Simple Tokenizer**: Clean tokenization that yields WORD/PUNCT/BOUNDARY tokens including caret markers
+- **Streamlined Pipeline**: LT issues → filter → convert to insertions → display, with no complex fusion layers
+- **Clean Codebase**: Removed 1000+ lines of complex heuristic logic, wrapper functions, and fusion layers
+- **Proven Functionality**: Comprehensive test suite validates the LT-only pipeline works independently
+- **Better Maintainability**: Single source of truth for terminal insertions (LanguageTool only)
+- **Reduced Complexity**: Simplified UI and logic focused solely on LT results
+- **New File Structure**: Created minimal, focused modules (`types.ts`, `ltClient.ts`, `ltFilter.ts`, `ltToVT.ts`, `tokenize.ts`)
+
+### Previous Improvements (v4.5) - UPPERCASE Boundary-Aware Insertion
 - **Boundary-Aware UPPERCASE Detection**: Enhanced UPPERCASE_SENTENCE_START processing that uses boundary caret ("^") ownership for proper VT integration
 - **Helper Functions**: Added `isWord()`, `prevWordIndex()`, and `nearestBoundaryLeftOf()` for sophisticated boundary detection
 - **VT Ownership System**: Virtual terminals now use `beforeBIndex: boundaryIdx` for boundary-based ownership instead of word-based positioning
