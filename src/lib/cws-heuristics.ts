@@ -225,7 +225,7 @@ export function detectMissingTerminalInsertions(text: string, tokens: Token[]): 
 }
 
 export function detectParagraphEndInsertions(text: string, tokens: any[]) {
-  const out: { beforeBIndex:number; char:"."; reason:string }[] = [];
+  const out: { beforeBIndex:number; char:"." | "!" | "?"; reason:"CapitalAfterSpace" | "LT" | "Heuristic"; message:string }[] = [];
   const re = /\r?\n\s*\r?\n|$/g; let m: RegExpExecArray|null;
   while ((m = re.exec(text))) {
     const endPos = m.index;
@@ -240,7 +240,7 @@ export function detectParagraphEndInsertions(text: string, tokens: any[]) {
       if ((t.start ?? 0) >= endPos) break;
       if (t.type === "PUNCT" && /[.!?…]/.test(t.raw)) { hasTerm = true; break; }
     }
-    if (!hasTerm) out.push({ beforeBIndex: lastIdx, char: ".", reason: "ParagraphEnd" });
+    if (!hasTerm) out.push({ beforeBIndex: lastIdx, char: ".", reason: "Heuristic", message: "Possible missing sentence-ending punctuation at paragraph end." });
   }
   return out;
 }
