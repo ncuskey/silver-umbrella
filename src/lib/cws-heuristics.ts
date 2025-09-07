@@ -224,33 +224,39 @@ export function detectMissingTerminalInsertions(text: string, tokens: Token[]): 
   return result;
 }
 
-export function detectParagraphEndInsertions(text: string, tokens: any[]) {
-  const out: { beforeBIndex:number; char:"." | "!" | "?"; reason:"CapitalAfterSpace" | "LT" | "Heuristic"; message:string }[] = [];
-  const re = /\r?\n\s*\r?\n|$/g; 
+export function detectParagraphEndInsertions(
+  text: string,
+  tokens: any[]
+): { beforeBIndex: number; char: "."; reason: "Heuristic"; message: string }[] {
+  const out: { beforeBIndex: number; char: "."; reason: "Heuristic"; message: string }[] = [];
+  const re = /\r?\n\s*\r?\n|$/g;
   let m: RegExpExecArray | null;
   let lastIndex = -1;
-  
+
   while ((m = re.exec(text))) {
-    // Prevent infinite loop if regex matches same position
-    if (m.index === lastIndex) {
-      re.lastIndex++;
-      continue;
-    }
+    if (m.index === lastIndex) { re.lastIndex++; continue; }
     lastIndex = m.index;
-    
+
     const endPos = m.index;
     let lastIdx = -1, hasTerm = false;
-    for (let i=tokens.length-1;i>=0;i--) {
-      const t=tokens[i];
+
+    for (let i = tokens.length - 1; i >= 0; i--) {
+      const t = tokens[i];
       if ((t.end ?? 0) <= endPos && t.type === "WORD") { lastIdx = i; break; }
     }
     if (lastIdx < 0) continue;
-    for (let j=lastIdx+1;j<tokens.length;j++) {
-      const t=tokens[j];
+
+    for (let j = lastIdx + 1; j < tokens.length; j++) {
+      const t = tokens[j];
       if ((t.start ?? 0) >= endPos) break;
       if (t.type === "PUNCT" && /[.!?…]/.test(t.raw)) { hasTerm = true; break; }
     }
-    if (!hasTerm) out.push({ beforeBIndex: lastIdx, char: ".", reason: "Heuristic", message: "Possible missing sentence-ending punctuation at paragraph end." });
+    if (!hasTerm) out.push({
+      beforeBIndex: lastIdx,
+      char: ".",
+      reason: "Heuristic",
+      message: "Possible missing sentence-ending punctuation at paragraph end."
+    });
   }
   return out;
 }

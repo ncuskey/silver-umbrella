@@ -356,17 +356,19 @@ The tool is designed for easy extension:
 
 ## Recent Updates
 
-### Latest Improvements (v3.8) - Smart LanguageTool Boundary Detection
-- **Multi-Signal Boundary Detection**: Enhanced `ltBoundaryInsertions()` with three detection signals:
+### Latest Improvements (v3.9) - Smarter LT Boundary Extraction
+- **Enhanced Multi-Signal Detection**: Completely rewritten `ltBoundaryInsertions()` with sophisticated boundary detection:
   - **Replacement Signals**: Detects when LT suggests adding terminal punctuation (`.`, `!`, `?`)
-  - **Message Signals**: Analyzes LT messages for explicit boundary mentions
+  - **Message Signals**: Analyzes LT messages for explicit boundary mentions using regex patterns
   - **Structural Signals**: Detects patterns like "forest The" with capitalized words following non-terminal words
-- **Smart CWS Comma Policy**: Updated `isCommaOnlyForCWS()` to preserve Oxford/serial commas while filtering clause-structuring commas
-- **Enhanced Token Analysis**: Added `tokenIndexAt()` helper for precise character position to token mapping
+- **Smart Category Filtering**: Added `BOUNDARY_CATEGORIES` set to filter relevant LT categories (PUNCTUATION, GRAMMAR, STYLE, TYPOGRAPHY)
+- **Improved Comma Policy**: Enhanced `isCommaOnlyForCWS()` with better Oxford/serial comma preservation logic
+- **Enhanced Token Analysis**: Improved `tokenIndexAt()` helper for precise character position to token mapping
 - **Coordinating Conjunction Filtering**: Prevents false positives with conjunctions like "and", "or", "but", "so", "then", "yet"
-- **Debug Logging**: Added conditional debug output for boundary detection troubleshooting
-- **Efficient Deduplication**: Clean `dedupe()` function for removing duplicate boundary insertions
+- **Debug Logging**: Added conditional debug output for boundary detection troubleshooting with `window.__CBM_DEBUG__`
+- **Efficient Deduplication**: Clean deduplication using `Set<number>` for `beforeBIndex` tracking
 - **LT-First Priority**: LanguageTool boundary detection runs first, with paragraph-end detection as fallback
+- **Type Safety**: Fixed TypeScript compatibility issues with proper union types for terminal insertions
 
 ### Previous Improvements (v3.7) - LT Authority & Debug Visibility
 - **LT Authority Priority**: LanguageTool now provides authoritative terminal punctuation suggestions, with heuristics as fallback only

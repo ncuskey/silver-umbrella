@@ -265,13 +265,14 @@ interface CwsHint {
 
 #### Smart LanguageTool Boundary Detection
 - `suggestsTerminal()`: Detects terminal punctuation suggestions in LanguageTool replacements
-- `ltBoundaryInsertions()`: Multi-signal boundary detection with three detection approaches:
+- `ltBoundaryInsertions()`: Completely rewritten multi-signal boundary detection with sophisticated analysis:
   - **Replacement Signals**: Detects when LT suggests adding terminal punctuation (`.`, `!`, `?`)
   - **Message Signals**: Analyzes LT messages for explicit boundary mentions using regex patterns
   - **Structural Signals**: Detects patterns like "forest The" with capitalized words following non-terminal words
-- `tokenIndexAt()`: Helper function for precise character position to token mapping
+- `tokenIndexAt()`: Enhanced helper function for precise character position to token mapping
+- `BOUNDARY_CATEGORIES`: New constant set for filtering relevant LT categories (PUNCTUATION, GRAMMAR, STYLE, TYPOGRAPHY)
 - **Coordinating Conjunction Filtering**: Prevents false positives with conjunctions like "and", "or", "but", "so", "then", "yet"
-- **Debug Logging**: Conditional debug output for boundary detection troubleshooting
+- **Debug Logging**: Conditional debug output for boundary detection troubleshooting with `window.__CBM_DEBUG__`
 - **Category-Aware Filtering**: Respects punctuation/grammar categories while applying comma filtering
 
 #### CWS Advisory Hints System
@@ -283,11 +284,12 @@ interface CwsHint {
 - **Override Awareness**: Advisory hints disappear when users explicitly override boundary states
 
 #### Integration & Wiring Logic (`src/app/page.tsx`)
-- `dedupe()`: Efficient deduplication function for removing duplicate boundary insertions
+- **Enhanced Deduplication**: Clean deduplication using `Set<number>` for `beforeBIndex` tracking instead of simple array filtering
 - **LT-First Priority**: LanguageTool boundary detection runs first, with paragraph-end detection as fallback
 - **Smart Filtering**: Uses `isCommaOnlyForCWS()` to filter comma-only issues before boundary detection
 - **Comprehensive Logging**: Console output shows counts for LT insertions, paragraph-end insertions, and final deduplicated count
 - **Efficient Memoization**: All computations properly memoized to avoid unnecessary recalculations
+- **Type Safety**: Fixed TypeScript compatibility with proper union types for terminal insertions
 
 #### Terminal Group System
 - `buildTerminalGroups()`: Groups LT punctuation/grammar issues with three related carets
@@ -470,7 +472,21 @@ The tool implements scoring methods aligned with educational research:
 
 ### Recent Updates
 
-#### Latest Improvements (v3.0) - LanguageTool Only
+#### Latest Improvements (v3.9) - Smarter LT Boundary Extraction
+- **Enhanced Multi-Signal Detection**: Completely rewritten `ltBoundaryInsertions()` with sophisticated boundary detection:
+  - **Replacement Signals**: Detects when LT suggests adding terminal punctuation (`.`, `!`, `?`)
+  - **Message Signals**: Analyzes LT messages for explicit boundary mentions using regex patterns
+  - **Structural Signals**: Detects patterns like "forest The" with capitalized words following non-terminal words
+- **Smart Category Filtering**: Added `BOUNDARY_CATEGORIES` set to filter relevant LT categories (PUNCTUATION, GRAMMAR, STYLE, TYPOGRAPHY)
+- **Improved Comma Policy**: Enhanced `isCommaOnlyForCWS()` with better Oxford/serial comma preservation logic
+- **Enhanced Token Analysis**: Improved `tokenIndexAt()` helper for precise character position to token mapping
+- **Coordinating Conjunction Filtering**: Prevents false positives with conjunctions like "and", "or", "but", "so", "then", "yet"
+- **Debug Logging**: Added conditional debug output for boundary detection troubleshooting with `window.__CBM_DEBUG__`
+- **Efficient Deduplication**: Clean deduplication using `Set<number>` for `beforeBIndex` tracking
+- **LT-First Priority**: LanguageTool boundary detection runs first, with paragraph-end detection as fallback
+- **Type Safety**: Fixed TypeScript compatibility issues with proper union types for terminal insertions
+
+#### Previous Improvements (v3.0) - LanguageTool Only
 - **Simplified Architecture**: Removed Hunspell and local dictionaries, now uses LanguageTool API exclusively
 - **Enhanced Spell Checking**: Professional spell checking via LanguageTool's MORFOLOGIK_RULE_EN_US and TYPOS categories
 - **Improved Performance**: Eliminated local dictionary loading and WASM dependencies

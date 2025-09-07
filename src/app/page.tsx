@@ -752,16 +752,22 @@ function WritingScorer() {
     [tokens, ltIssues]
   );
   
-  // 1) base tokens exist already as `tokens` from your tokenizer
-  // Combine LT and paragraph-end detection with deduplication
-  const ltFiltered = useMemo(() => ltIssues.filter(m => !isCommaOnlyForCWS(m, tokens)), [ltIssues, tokens]);
-  const fromLT = useMemo(() => ltBoundaryInsertions(tokens, ltFiltered), [tokens, ltFiltered]);
+  const ltFiltered = useMemo(
+    () => ltIssues.filter((m) => !isCommaOnlyForCWS(m, tokens)),
+    [ltIssues, tokens]
+  );
+
+  const fromLT  = useMemo(() => ltBoundaryInsertions(tokens, ltFiltered), [tokens, ltFiltered]);
   const fromEoP = useMemo(() => detectParagraphEndInsertions(text, tokens), [text, tokens]);
 
   const terminalInsertions = useMemo(() => {
-    const chosen = dedupe([...fromLT, ...fromEoP]);
-    console.log("[VT] counts", { lt: fromLT.length, eop: fromEoP.length, insertions: chosen.length });
-    return chosen;
+    const seen = new Set<number>();
+    const out: Array<{ beforeBIndex: number; char: "." | "!" | "?"; reason: "LT" | "Heuristic"; message: string }> = [];
+    for (const x of [...fromLT, ...fromEoP]) {
+      if (!seen.has(x.beforeBIndex)) { seen.add(x.beforeBIndex); out.push(x); }
+    }
+    console.log("[VT] counts", { lt: fromLT.length, eop: fromEoP.length, insertions: out.length });
+    return out;
   }, [fromLT, fromEoP]);
 
   // 2) insert virtual terminals for display + scoring
