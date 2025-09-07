@@ -184,7 +184,9 @@ The CWS (Correct Writing Sequences) engine implements strictly mechanical, CBM-a
 - **LT-Only Mode**: Strict LanguageTool-only terminal boundary detection eliminates heuristic-driven false positives
 - **LT Authority**: LanguageTool has complete authority over terminal punctuation suggestions with no heuristic fallback
 - **Strict Rule Filtering**: Only reacts to specific LT rule families: `PUNCTUATION_PARAGRAPH_END`, `MISSING_SENTENCE_TERMINATOR`, and `UPPERCASE_SENTENCE_START`
-- **Precise Boundary Placement**: Correctly places boundaries BEFORE capitalized words (e.g., after "forest" before "The")
+- **UPPERCASE_SENTENCE_START Detection**: Advanced boundary detection that places terminals BEFORE capitalized words (e.g., after "forest" before "The")
+- **Smart Boundary Placement**: Uses sophisticated logic to avoid placing terminals before opening quotes, brackets, or existing terminals
+- **Safety Guardrails**: Prevents double-insertion and includes comprehensive checks for existing punctuation
 - **Visual Insertion**: Inserts dotted "." tokens between words with distinct amber styling
 - **Two Caret System**: Creates two yellow advisory carets around each virtual terminal (word ^ . and . ^ NextWord)
 - **Interactive Control**: Teachers can click carets to cycle: yellow (advisory) → red (reject) → green (accept)
@@ -201,6 +203,7 @@ The CWS (Correct Writing Sequences) engine implements strictly mechanical, CBM-a
 - **Consistent Dot Rendering**: Dot chips render consistently using only LanguageTool analysis
 - **Reduced False Positives**: Eliminates spurious dots inside phrases like "... nobody could ..."
 - **Enhanced Console Logging**: Console shows `{ lt: <N>, eop: 0, insertions: <N> }` confirming LT-only mode
+- **LT-Only Infractions Toggle**: Optional toggle to show only LanguageTool issues in the infractions panel for focused review
 
 ### Terminal Group System
 - **LT-Driven Grouping**: LanguageTool punctuation/grammar issues automatically grouped with three related carets
@@ -358,7 +361,16 @@ The tool is designed for easy extension:
 
 ## Recent Updates
 
-### Latest Improvements (v4.1) - LT-Only Mode & Strict Boundary Detection
+### Latest Improvements (v4.2) - UPPERCASE_SENTENCE_START Boundary Detection & LT-Only Infractions
+- **UPPERCASE_SENTENCE_START Detection**: Implemented advanced boundary detection that places terminals BEFORE capitalized words identified by LanguageTool
+- **Smart Boundary Placement**: Added sophisticated logic to avoid placing terminals before opening quotes, brackets, or existing terminals
+- **Safety Guardrails**: Comprehensive checks prevent double-insertion and include validation for existing punctuation
+- **LT-Only Infractions Toggle**: Added optional toggle to show only LanguageTool issues in the infractions panel for focused review
+- **Enhanced Rule Filtering**: Strict filtering to only three specific LT rules: `PUNCTUATION_PARAGRAPH_END`, `MISSING_SENTENCE_TERMINATOR`, and `UPPERCASE_SENTENCE_START`
+- **Improved User Experience**: Clear visual feedback and intuitive controls for teachers to review and accept/reject boundary suggestions
+- **Reduced False Positives**: Eliminates spurious dots inside phrases like "... nobody could ..." while maintaining accurate boundary detection
+
+### Previous Improvements (v4.1) - LT-Only Mode & Strict Boundary Detection
 - **LT-Only Mode**: Implemented strict LanguageTool-only terminal boundary detection, eliminating heuristic-driven false positives
 - **Strict LT Rules**: Now only reacts to specific LT rule families: `PUNCTUATION_PARAGRAPH_END`, `MISSING_SENTENCE_TERMINATOR`, and `UPPERCASE_SENTENCE_START`
 - **Precise Caret Placement**: Fixed `convertLTTerminalsToInsertions()` to correctly place boundaries BEFORE capitalized words (e.g., after "forest" before "The")
