@@ -10,9 +10,9 @@ import { Info, AlertTriangle, ListChecks, Settings } from "lucide-react";
 import type { GrammarIssue, Token } from "@/lib/spell/types";
 import { buildCwsPairs, ESSENTIAL_PUNCT } from "@/lib/cws";
 import type { CwsPair } from "@/lib/cws";
-import { buildLtCwsHints, convertLTTerminalsToInsertions, buildTerminalGroups, type TerminalGroup } from "@/lib/cws-lt";
+import { buildLtCwsHints, convertLTTerminalsToInsertions, buildTerminalGroups, ltBoundaryInsertions, type TerminalGroup } from "@/lib/cws-lt";
 import type { CwsHint } from "@/lib/cws-lt";
-import { detectMissingTerminalInsertions, VirtualTerminalInsertion, createVirtualTerminals, VirtualTerminal } from "@/lib/cws-heuristics";
+import { detectMissingTerminalInsertions, VirtualTerminalInsertion, createVirtualTerminals, createVirtualTerminalsFromDisplay, VirtualTerminal } from "@/lib/cws-heuristics";
 import { cn, DEBUG, dgroup, dtable, dlog } from "@/lib/utils";
 import { toCSV, download } from "@/lib/export";
 import jsPDF from "jspdf";
@@ -748,13 +748,12 @@ function WritingScorer() {
   // 1) base tokens exist already as `tokens` from your tokenizer
   // Use LT-derived terminals when LT is available, otherwise fall back to heuristics
   const terminalInsertions = useMemo(() => {
-    // If we have LT issues, use LT-derived terminals instead of heuristics
+    // If LT is active, derive insertions from LT; otherwise use heuristic
     if (ltIssues && ltIssues.length > 0) {
-      return convertLTTerminalsToInsertions(tokens, ltIssues);
+      return ltBoundaryInsertions(tokens, ltIssues);
     }
-    // Fall back to heuristics when LT is not available
     return detectMissingTerminalInsertions(text, tokens);
-  }, [text, tokens, ltIssues]);
+  }, [tokens, ltIssues, text]);
 
   // 2) insert virtual terminals for display + scoring
   const displayTokens = useMemo(
@@ -764,8 +763,8 @@ function WritingScorer() {
 
   // 2.5) create virtual terminals with boundary indices
   const virtualTerminals = useMemo(
-    () => createVirtualTerminals(terminalInsertions, tokens, displayTokens),
-    [terminalInsertions, tokens, displayTokens]
+    () => createVirtualTerminalsFromDisplay(displayTokens),
+    [displayTokens]
   );
   DEBUG && dgroup("[VT] virtualTerminals (groups)", () => dlog(virtualTerminals));
 

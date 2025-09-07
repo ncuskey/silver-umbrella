@@ -84,6 +84,38 @@ export function createVirtualTerminals(
  *  - Avoid common abbreviations (Dr., Mr., etc.), initials (A., J.), and ellipses
  *  - Newlines count as soft boundaries (suppresses virtual terminal)
  */
+// NEW: robust group builder that only looks at the rendered stream
+export function createVirtualTerminalsFromDisplay(displayTokens: Token[]) {
+  type VT = {
+    insertAfterIdx: number;      // original token idx to the left of "."
+    dotTokenIndex: number;       // index in displayTokens of the "."
+    leftBoundaryBIndex: number;  // caret between [leftWord ^ "."]
+    rightBoundaryBIndex: number; // caret between ["." ^ rightWord]
+  };
+
+  const out: VT[] = [];
+  for (let i = 0; i < displayTokens.length; i++) {
+    const t: any = displayTokens[i];
+    if (!t?.virtual || t.type !== "PUNCT" || !/[.?!]/.test(t.raw)) continue;
+
+    // find the nearest ORIGINAL token to the left (has idx >= 0)
+    let leftOriginalIdx = -1;
+    for (let j = i - 1; j >= 0; j--) {
+      const dj: any = displayTokens[j];
+      if (Number.isInteger(dj?.idx) && dj.idx >= 0) { leftOriginalIdx = dj.idx; break; }
+    }
+    if (leftOriginalIdx < 0) continue;
+
+    out.push({
+      insertAfterIdx: leftOriginalIdx,
+      dotTokenIndex: i,
+      leftBoundaryBIndex: leftOriginalIdx,       // caret index system = "between originals"
+      rightBoundaryBIndex: leftOriginalIdx + 1,
+    });
+  }
+  return out;
+}
+
 export function detectMissingTerminalInsertions(text: string, tokens: Token[]): VirtualTerminalInsertion[] {
   const result: VirtualTerminalInsertion[] = [];
   if (!tokens.length) return result;
