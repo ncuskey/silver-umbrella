@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import { score, tokenize, buildPairs } from "@/lib/cws-core";
 import { buildCwsPairs } from "@/lib/cws";
 import type { VirtualTerminal } from "@/lib/cws-heuristics";
+import { deriveTerminalFromLT, convertLTTerminalsToInsertions } from "@/lib/cws-lt";
+import { tokenizeWithOffsets } from "@/lib/cws-core";
 
 const S = (t: string) => score(t);
 
@@ -149,5 +151,75 @@ describe("CWS rule goldens", () => {
     const r4 = applyGroupOverride(r3, vt, "yellow");
     expect(r4.boundaries[vt.leftBoundaryBIndex].override?.cws).toBeUndefined();
     expect(r4.boundaries[vt.rightBoundaryBIndex].override?.cws).toBeUndefined();
+  });
+});
+
+describe("LT Terminal Derivation", () => {
+  it("derives terminals from LT PUNCTUATION_PARAGRAPH_END rule", () => {
+    const text = "It was dark Nobody came";
+    const tokens = tokenizeWithOffsets(text);
+    
+    // Mock LT issue for missing paragraph end punctuation
+    const mockLtIssues = [{
+      offset: 0,
+      length: text.length,
+      rule: { id: "PUNCTUATION_PARAGRAPH_END" },
+      message: "No punctuation mark at the end of paragraph"
+    }];
+    
+    const carets = deriveTerminalFromLT(tokens, mockLtIssues);
+    expect(carets.size).toBeGreaterThan(0);
+  });
+
+  it("derives terminals from LT capitalization issues", () => {
+    const text = "forest The trees Then";
+    const tokens = tokenizeWithOffsets(text);
+    
+    // Mock LT issue for missing punctuation before capitalized word
+    const mockLtIssues = [{
+      offset: 6, // after "forest"
+      length: 1,
+      rule: { id: "UPPERCASE_SENTENCE_START" },
+      message: "Expected capital after sentence-ending punctuation",
+      category: { id: "PUNCTUATION" }
+    }];
+    
+    const carets = deriveTerminalFromLT(tokens, mockLtIssues);
+    expect(carets.size).toBeGreaterThan(0);
+  });
+
+  it("converts LT terminals to insertion format", () => {
+    const text = "forest The trees";
+    const tokens = tokenizeWithOffsets(text);
+    
+    const mockLtIssues = [{
+      offset: 6,
+      length: 1,
+      rule: { id: "UPPERCASE_SENTENCE_START" },
+      message: "Expected capital after sentence-ending punctuation",
+      category: { id: "PUNCTUATION" }
+    }];
+    
+    const insertions = convertLTTerminalsToInsertions(tokens, mockLtIssues);
+    expect(insertions.length).toBeGreaterThan(0);
+    expect(insertions[0].reason).toBe("LT");
+    expect(insertions[0].char).toBe(".");
+    expect(insertions[0].message).toContain("LanguageTool");
+  });
+
+  it("ignores non-punctuation LT issues", () => {
+    const text = "forest The trees";
+    const tokens = tokenizeWithOffsets(text);
+    
+    const mockLtIssues = [{
+      offset: 0,
+      length: 6,
+      rule: { id: "MORFOLOGIK_RULE_EN_US" },
+      message: "Spelling error",
+      category: { id: "TYPOS" }
+    }];
+    
+    const carets = deriveTerminalFromLT(tokens, mockLtIssues);
+    expect(carets.size).toBe(0);
   });
 });

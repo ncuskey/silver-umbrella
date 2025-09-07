@@ -32,6 +32,9 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 - **3-State Caret Cycling**: Yellow (advisory) → Red (incorrect) → Green (correct) → Yellow (default)
 - **Advisory Infractions**: LanguageTool grammar suggestions shown as yellow advisory entries
 - **Color Legend**: Visual guide for teachers explaining caret color meanings
+- **Terminal Group System**: LT punctuation/grammar issues grouped with three related carets for bulk operations
+- **Bulk Toggle Functionality**: One-click cycling of multiple carets simultaneously
+- **Visual Group Highlighting**: Hover effects show which carets belong to each terminal group
 - **Derived Metrics**: CIWS, %CWS, and CWS/min calculations with time control
 - **Time Control**: Configurable probe duration (mm:ss format) for fluency rate calculations
 - **IWS Categorization**: Detailed categorization of Incorrect Writing Sequences by reason
@@ -188,6 +191,18 @@ The CWS (Correct Writing Sequences) engine implements strictly mechanical, CBM-a
 - **Accessibility**: Keyboard navigation support with Enter/Space key activation for virtual terminal dots
 - **Comprehensive Boundary Tracking**: Each virtual terminal tracks its dot token index and associated CWS boundary indices
 
+### Terminal Group System
+- **LT-Driven Grouping**: LanguageTool punctuation/grammar issues automatically grouped with three related carets
+- **Three-Caret Structure**: Each group contains groupLeftCaret, primaryCaret, and groupRightCaret
+- **Smart Boundary Detection**: Uses LT match offset/length to find primary caret, then expands to sentence boundaries
+- **Bulk Toggle Operations**: One-click cycling of all three carets simultaneously (yellow → red → green → yellow)
+- **Visual Group Highlighting**: Hovering over terminal suggestions highlights all related carets with blue rings
+- **Independent Groups**: Each terminal group operates independently without cross-coupling
+- **Edge Case Handling**: Properly handles start-of-text and end-of-text boundaries
+- **Suggestion Panel Integration**: Terminal groups appear as blue-themed suggestions in the infractions panel
+- **Hover Preview**: Users can see which carets will be affected before clicking
+- **Smooth Transitions**: All visual changes use CSS transitions for polished user experience
+
 ## Deployment
 
 ### Netlify Deployment (Recommended)
@@ -278,7 +293,19 @@ The tool is designed for easy extension:
 
 ## Recent Updates
 
-### Latest Improvements (v3.2) - LanguageTool Parity Verification & Hardening
+### Latest Improvements (v3.3) - Terminal Group System & Bulk Toggle Operations
+- **Terminal Group System**: Revolutionary feature that groups LT punctuation/grammar issues with three related carets
+- **Bulk Toggle Functionality**: One-click cycling of multiple carets simultaneously for efficient teacher workflow
+- **Visual Group Highlighting**: Hover effects show which carets belong to each terminal group with blue ring highlighting
+- **LT-Driven Grouping**: LanguageTool issues automatically create terminal groups with smart boundary detection
+- **Three-Caret Structure**: Each group contains groupLeftCaret, primaryCaret, and groupRightCaret for comprehensive coverage
+- **Suggestion Panel Integration**: Terminal groups appear as blue-themed suggestions in the infractions panel
+- **Independent Operations**: Each terminal group operates independently without cross-coupling
+- **Edge Case Handling**: Properly handles start-of-text and end-of-text boundaries
+- **Smooth Transitions**: All visual changes use CSS transitions for polished user experience
+- **Hover Preview**: Users can see which carets will be affected before clicking for better UX
+
+### Previous Improvements (v3.2) - LanguageTool Parity Verification & Hardening
 - **Request Profile Presets**: Added exact parity constants matching LT website (siteDefault, sitePicky, autoDetect)
 - **No Pre/Post Processing**: Raw textarea values sent as-is to preserve offsets and trailing spaces/newlines
 - **Token Offsets Smoke Test**: Dev-only hover badges showing [start,end] and overlapping rule IDs for debugging
