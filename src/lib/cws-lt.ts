@@ -95,7 +95,14 @@ export function deriveTerminalFromLT(tokens: Token[], issues: any[]) {
 
     // anchor at the boundary after the last token covered by the match
     const endChar = m.offset + m.length;
-    const leftTok = tokens.findLast(t => (t.end ?? 0) <= endChar);
+    // Find the last token that ends before or at the endChar position
+    let leftTok: Token | undefined;
+    for (let i = tokens.length - 1; i >= 0; i--) {
+      if ((tokens[i].end ?? 0) <= endChar) {
+        leftTok = tokens[i];
+        break;
+      }
+    }
     if (leftTok) {
       carets.add(leftTok.idx);
     }
@@ -135,7 +142,7 @@ export function deriveTerminalFromLT(tokens: Token[], issues: any[]) {
     const prev = tokens[prevIdx];
     if (!prev || prev.type !== "WORD") continue;
     const nextWord = next && next.type === "WORD" ? next : null;
-    if (!nextWord) continue;
+    if (!nextWord || !next) continue;
 
     const gap = (prev.end ?? 0) === (next.start ?? 0) || /^[ \t]+$/.test(
       (prev.end ?? 0) < (next.start ?? 0) ? "" : "" // you already know they're adjacent; spaces-only gap is okay
