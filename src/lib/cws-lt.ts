@@ -259,6 +259,36 @@ export function buildTerminalGroups(
   return groups;
 }
 
+// src/lib/cws-lt.ts (or near other LT helpers)
+export function ltBoundaryInsertions(tokens: Token[], issues: any[]) {
+  // Choose only punctuation/grammar signals that imply a sentence boundary
+  const LT_TERMINAL_RULES = new Set([
+    "PUNCTUATION_PARAGRAPH_END",
+    // add others you want to anchor on; we also match by message below
+  ]);
+  const looksLikeBoundary = (m:any) => {
+    const rule = (m.rule?.id || "").toUpperCase();
+    const msg  = (m.message || "");
+    return LT_TERMINAL_RULES.has(rule)
+      || /missing.*punctuation.*sentence|paragraph/i.test(msg);
+  };
+
+  const out: { beforeBIndex: number; char: "."; reason: string }[] = [];
+
+  for (const m of issues) {
+    if (!looksLikeBoundary(m)) continue;
+    const after = m.offset + m.length;
+
+    // find the token that starts right after the match
+    const next = tokens.find(t => (t.start ?? 0) >= after);
+    const left = next ? next.idx - 1 : tokens.length - 1;
+    if (left >= 0) {
+      out.push({ beforeBIndex: left, char: ".", reason: "LTBoundary" });
+    }
+  }
+  return out;
+}
+
 export function buildLtCwsHints(text: string, tokens: Token[], issues: GrammarIssue[]) {
   if (DEBUG) {
     dgroup("[CWS/LT] tokens", () => dtable("tokens", tokens.map(t => ({

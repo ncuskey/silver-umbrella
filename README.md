@@ -193,6 +193,9 @@ The CWS (Correct Writing Sequences) engine implements strictly mechanical, CBM-a
 - **Fixed Boundary Mapping**: Corrected virtual terminal boundary index calculation to ensure proper group-to-caret mapping
 - **Clickable Infraction Items**: TERMINAL (possible) items in the infractions panel are now clickable and toggle the entire virtual terminal group
 - **Dual Interaction Methods**: Users can toggle virtual terminal groups either by clicking the virtual dots in the text stream or by clicking TERMINAL items in the infractions panel
+- **Stable Group System**: Groups are now built from rendered display tokens, making them stable across re-renders
+- **LT Authority Integration**: When LanguageTool is active, it provides authoritative terminal punctuation suggestions
+- **Consistent Dot Rendering**: Dot chips render consistently whether using heuristics or LanguageTool analysis
 
 ### Terminal Group System
 - **LT-Driven Grouping**: LanguageTool punctuation/grammar issues automatically grouped with three related carets
@@ -350,7 +353,17 @@ The tool is designed for easy extension:
 
 ## Recent Updates
 
-### Latest Improvements (v3.5) - Comprehensive Debug Logging System
+### Latest Improvements (v3.6) - Stable Virtual Terminal Group System
+- **Stable Group Building**: Implemented `createVirtualTerminalsFromDisplay()` function that builds groups from rendered display tokens instead of insertion arrays
+- **Re-render Stability**: Groups now remain stable across re-renders, even when insertion arrays become empty
+- **LT Authority Integration**: Added `ltBoundaryInsertions()` function to convert LanguageTool issues into terminal insertion format
+- **Consistent Dot Rendering**: Dot chips now render consistently whether using heuristic detection or LanguageTool analysis
+- **Simplified Dependencies**: Virtual terminal groups now only depend on `displayTokens`, eliminating complex insertion-based dependencies
+- **Enhanced LT Integration**: When LanguageTool is active, it provides authoritative terminal punctuation suggestions
+- **Robust Boundary Detection**: Groups are built by scanning the actual rendered stream for virtual terminal punctuation
+- **Improved User Experience**: Eliminates group disappearance issues during re-renders and mode switches
+
+### Previous Improvements (v3.5) - Comprehensive Debug Logging System
 - **Debug Logging Infrastructure**: Added comprehensive debug logging system to track terminal group pipeline
 - **LT Request/Response Logging**: Detailed logging of LanguageTool API requests and responses with match breakdowns
 - **Tokenization Debugging**: Logs token details, LT boundary hints, and issue mapping for troubleshooting
