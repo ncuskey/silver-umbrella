@@ -78,9 +78,12 @@ async function doCheck(baseUrl: string, text: string, lang: string, signal?: Abo
   body.set("level", "default"); // Match LT website defaults
   body.set("enabledOnly", "false");
   
-  // Ensure spelling is enabled by setting preferredVariants for auto-detection
+  // Use language=en-US or auto with preferredVariants=en-US to ensure spelling runs
   if (lang === "auto") {
     body.set("preferredVariants", "en-US");
+  } else if (lang === "en") {
+    // Convert generic "en" to "en-US" to ensure spelling is enabled
+    body.set("language", "en-US");
   }
   
   const response = await fetch(endpoint, {

@@ -151,6 +151,9 @@ The CWS (Correct Writing Sequences) engine implements strictly mechanical, CBM-a
 - **Enhanced Spelling Detection**: Properly configured to detect typos (MORFOLOGIK_RULE_* patterns) alongside grammar issues
 - **Language Variant Support**: Uses `en-US` variant and `preferredVariants` for auto-detection to ensure spelling rules remain active
 - **Website Parity**: Matches LanguageTool website defaults with `level=default` parameter
+- **Complete Category Support**: Processes all standard LT categories (TYPOS, CAPITALIZATION, PUNCTUATION, TYPOGRAPHY, GRAMMAR, STYLE, SEMANTICS)
+- **Intelligent Rule Mapping**: Maps common rules to user-friendly messages (UPPERCASE_SENTENCE_START, PUNCTUATION_PARAGRAPH_END, TOO_LONG_SENTENCE)
+- **Development Debugging**: Console logging for LT parity checks to verify results match the LanguageTool website
 - **Automatic Grammar Checking**: Grammar analysis runs automatically as you type with debounce
 - **Status Tracking**: Visual badge shows LanguageTool spell checking mode
 - **Spelling Suggestions**: Built-in LanguageTool suggestion engine for misspelled words
@@ -275,7 +278,16 @@ The tool is designed for easy extension:
 
 ## Recent Updates
 
-### Latest Improvements (v3.0) - LanguageTool Only
+### Latest Improvements (v3.1) - LanguageTool Parity & WSC Fixes
+- **Fixed WSC Scoring**: Implemented proper character offset tokenization to fix Words Spelled Correctly detection
+- **Enhanced LanguageTool Integration**: Updated API requests to use `language=en-US` and `preferredVariants=en-US` for proper spelling detection
+- **Complete Category Support**: Now processes all standard LT categories (GRAMMAR, STYLE, SEMANTICS) instead of filtering them out
+- **Improved Rule Mapping**: Added intelligent rule-to-message mapping for better user experience (UPPERCASE_SENTENCE_START, PUNCTUATION_PARAGRAPH_END, etc.)
+- **Development Debugging**: Added console logging for LT parity checks to verify results match the LanguageTool website
+- **Token Offset Preservation**: New tokenizer preserves exact character positions without trim/normalization for accurate overlap detection
+- **Spelling Detection Fix**: Now correctly identifies spelling issues using both TYPOS category and MORFOLOGIK_RULE_* patterns
+
+### Previous Improvements (v3.0) - LanguageTool Only
 - **Simplified Architecture**: Removed Hunspell and local dictionaries, now uses LanguageTool API exclusively
 - **Enhanced Spell Checking**: Professional spell checking via LanguageTool's MORFOLOGIK_RULE_EN_US and TYPOS categories
 - **Improved Performance**: Eliminated local dictionary loading and WASM dependencies

@@ -7,6 +7,30 @@ import { detectMissingTerminalInsertions, VirtualTerminal } from "@/lib/cws-heur
 const TOKEN_RE = /[A-Za-z]+(?:[-''][A-Za-z]+)*|[\.!\?;:\u2014\u2013\-]|,|\d+(?:[\.,]\d+)*/g;
 
 /**
+ * Tokenize text with proper character offsets to fix WSC
+ * This preserves spans in the original, unmodified text (no trim, no normalization)
+ */
+export function tokenizeWithOffsets(text: string): Token[] {
+  const out: Token[] = [];
+  let idx = 0;
+  // words vs single non-space punctuation; preserves newlines & spaces in offsets
+  const re = /\w+|[^\s\w]/g;
+  for (const m of text.matchAll(re)) {
+    const start = m.index!;
+    const end = start + m[0].length;
+    out.push({
+      idx,
+      raw: m[0],
+      type: /\w/.test(m[0][0]) ? "WORD" : "PUNCT",
+      start,
+      end
+    });
+    idx++;
+  }
+  return out;
+}
+
+/**
  * Tokenize text into words and punctuation tokens
  */
 export function tokenize(text: string): Token[] {

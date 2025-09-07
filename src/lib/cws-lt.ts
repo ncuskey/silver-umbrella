@@ -8,7 +8,16 @@ const isEssentialPunct = (t: Token) => t.type === "PUNCT" && ESSENTIAL_PUNCT.has
 
 // LanguageTool rule/category IDs related to punctuation and sentence structure
 const PUNCT_IDS = new Set([
-  "PUNCTUATION", "UPPERCASE_SENTENCE_START", "EN_QUOTES", "MISSING_SENTENCE_TERMINATOR"
+  "PUNCTUATION", "UPPERCASE_SENTENCE_START", "EN_QUOTES", "MISSING_SENTENCE_TERMINATOR", "PUNCTUATION_PARAGRAPH_END"
+]);
+
+// Map key rules to UI flags for better user experience
+const RULE_MAPPINGS = new Map([
+  ["UPPERCASE_SENTENCE_START", "Expected capital after sentence-ending punctuation"],
+  ["PUNCTUATION_PARAGRAPH_END", "Sentence may be missing terminal punctuation"],
+  ["TOO_LONG_SENTENCE", "Possible run-on sentence"],
+  ["MORFOLOGIK_RULE_EN_US", "Spelling error"],
+  ["MORFOLOGIK_RULE_EN_GB", "Spelling error"]
 ]);
 
 export interface CwsHint {
@@ -95,9 +104,11 @@ export function buildLtCwsHints(text: string, tokens: Token[], issues: GrammarIs
 
     // only keep the first hint per boundary
     if (!hints.has(bestB)) {
+      // Use mapped message if available, otherwise use original message
+      const mappedMessage = RULE_MAPPINGS.get(iss.ruleId || "") || iss.message;
       hints.set(bestB, {
         bIndex: bestB,
-        message: iss.message,
+        message: mappedMessage,
         ruleId: iss.ruleId,
         categoryId: iss.categoryId
       });
