@@ -59,7 +59,7 @@ export function gbEditsToInsertions(
     });
     seen.add(beforeIdx);
 
-    if ((window as any).__CBM_DEBUG__) {
+    if (typeof window !== "undefined" && (window as any).__CBM_DEBUG__) {
       console.info("[GB→VT] PUSH", { 
         term, 
         word: tokens[wordIdx].raw, 

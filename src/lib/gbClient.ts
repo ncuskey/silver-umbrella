@@ -22,7 +22,7 @@ export async function checkWithGrammarBot(text: string): Promise<GbResponse> {
     body: JSON.stringify({ text }),
   });
   const json = await res.json();
-  if ((window as any).__CBM_DEBUG__) {
+  if (typeof window !== "undefined" && (window as any).__CBM_DEBUG__) {
     console.info("[GB] raw", json);
     console.table((json.edits ?? []).map((e: GbEdit) => ({
       start: e.start, 
