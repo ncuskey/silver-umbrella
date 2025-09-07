@@ -4,6 +4,29 @@ import type { GrammarIssue } from "@/lib/spell/types";
 import { ESSENTIAL_PUNCT } from "@/lib/cws";
 import { DEBUG, dgroup, dtable, dlog } from "@/lib/utils";
 
+// ---- LT field shims (handles different server payload shapes)
+export function getRuleId(i: any): string {
+  return (i.ruleId ?? i.rule?.id ?? i.id ?? "").toString();
+}
+export function getCategoryId(i: any): string {
+  return (i.categoryId ?? i.rule?.category?.id ?? i.category ?? "").toString();
+}
+export function getMsg(i: any): string {
+  return (i.msg ?? i.message ?? "").toString();
+}
+export function getOffset(i: any): number {
+  return typeof i.offset === "number" ? i.offset
+       : typeof i.fromPos === "number" ? i.fromPos
+       : typeof i.context?.offset === "number" ? i.context.offset
+       : -1;
+}
+export function getLength(i: any): number {
+  return typeof i.length === "number" ? i.length
+       : typeof i.len === "number" ? i.len
+       : typeof i.context?.length === "number" ? i.context.length
+       : 0;
+}
+
 export function caretAfterMatch(m: any, tokens: any[]) {
   const after = m.offset + m.length;
   const next = tokens.find((t: any) => (t.start ?? 0) >= after);
@@ -252,20 +275,19 @@ function prevNonSpaceIndex(tokens: Token[], j: number) {
 
 export function convertLTTerminalsToInsertions(
   tokens: Token[],
-  ltIssues: GrammarIssue[]
+  ltIssues: any[]
 ): VirtualTerminalInsertion[] {
   const out: VirtualTerminalInsertion[] = [];
-  const seen = new Set<number>(); // beforeBIndex de-dupe
+  const seen = new Set<number>();
 
   for (const issue of ltIssues) {
-    const id = issue.ruleId as string;
+    const id = getRuleId(issue);
 
     if (id === "PUNCTUATION_PARAGRAPH_END" || id === "MISSING_SENTENCE_TERMINATOR") {
-      // Place at last non-space token in the paragraph/text span LT flagged.
-      // Fallback: use the token immediately before the issue offset.
-      const tok = tokenAtOffset(tokens, issue.offset) ?? tokens.at(-1);
-      if (!tok) continue;
-      const b = prevNonSpaceIndex(tokens, tok.idx + 1);
+      const off = getOffset(issue);
+      const refTok = off >= 0 ? tokenAtOffset(tokens, off) : tokens.at(-1);
+      if (!refTok) continue;
+      const b = prevNonSpaceIndex(tokens, refTok.idx + 1);
       if (b >= 0 && !SENTINEL_TERMINALS.has(tokens[b].raw) && !seen.has(b)) {
         out.push({ 
           beforeBIndex: b, 
@@ -279,19 +301,18 @@ export function convertLTTerminalsToInsertions(
     }
 
     if (id === "UPPERCASE_SENTENCE_START") {
-      // LT says "this is a sentence start"; we put a terminal BEFORE it.
-      const startTok = tokenAtOffset(tokens, issue.offset);
+      const off = getOffset(issue);
+      const startTok = off >= 0 ? tokenAtOffset(tokens, off) : undefined;
       if (!startTok) continue;
       const b = prevNonSpaceIndex(tokens, startTok.idx);
-      if (b < 0) continue;                 // beginning of text → no insert
-      const prev = tokens[b].raw;
+      if (b < 0) continue;
 
-      // Guardrails: don't double-insert, don't put before openers,
-      // don't add if prev already ends with . ! ?
+      const prevRaw = tokens[b].raw;
+      const alreadyTerminal = SENTINEL_TERMINALS.has(prevRaw);
       const isOpener = OPENERS.has(startTok.raw);
-      const isCloser = CLOSERS.has(prev);
-      const alreadyTerminal = SENTINEL_TERMINALS.has(prev);
-      if (!isOpener && !isCloser && !alreadyTerminal && !seen.has(b)) {
+      const isCloser = CLOSERS.has(prevRaw);
+
+      if (!alreadyTerminal && !isOpener && !isCloser && !seen.has(b)) {
         out.push({ 
           beforeBIndex: b, 
           char: ".", 

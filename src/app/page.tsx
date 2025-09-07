@@ -10,7 +10,7 @@ import { Info, AlertTriangle, ListChecks, Settings } from "lucide-react";
 import type { GrammarIssue, Token } from "@/lib/spell/types";
 import { buildCwsPairs, ESSENTIAL_PUNCT } from "@/lib/cws";
 import type { CwsPair } from "@/lib/cws";
-import { buildLtCwsHints, convertLTTerminalsToInsertions, buildTerminalGroups, ltBoundaryInsertions, isCommaOnlyForCWS, type TerminalGroup } from "@/lib/cws-lt";
+import { buildLtCwsHints, convertLTTerminalsToInsertions, buildTerminalGroups, ltBoundaryInsertions, isCommaOnlyForCWS, type TerminalGroup, getRuleId } from "@/lib/cws-lt";
 import type { CwsHint } from "@/lib/cws-lt";
 import { detectMissingTerminalInsertionsSmart, detectParagraphEndInsertions, VirtualTerminalInsertion, createVirtualTerminals, createVirtualTerminalsFromDisplay, VirtualTerminal } from "@/lib/cws-heuristics";
 import { cn, DEBUG, dgroup, dtable, dlog } from "@/lib/utils";
@@ -762,32 +762,34 @@ function WritingScorer() {
 
   // Build filtered LT issues once
   const filteredLt = useMemo(() => {
-    const ids = new Set([
-      "PUNCTUATION_PARAGRAPH_END",     // LT: missing end-of-paragraph punctuation
-      "MISSING_SENTENCE_TERMINATOR",   // LT: classic "needs . ! ?"
-      "UPPERCASE_SENTENCE_START"       // LT: new sentence detected; implies terminal before it
+    const keep = new Set([
+      "PUNCTUATION_PARAGRAPH_END",
+      "MISSING_SENTENCE_TERMINATOR",
+      "UPPERCASE_SENTENCE_START"
     ]);
-    return (ltIssues ?? []).filter(i => ids.has(i.ruleId as string));
+    const out = (ltIssues ?? []).filter(i => keep.has(getRuleId(i)));
+    if (typeof window !== "undefined" && (window as any).__CBM_DEBUG__) {
+      console.info("[LT] filtered", out.map(i => getRuleId(i)));
+    }
+    return out;
   }, [ltIssues]);
 
   // LT → insertions (caret placed at the boundary BEFORE the next token)
-  const ltInsertions = useMemo<VirtualTerminalInsertion[]>(() => {
-    return convertLTTerminalsToInsertions(tokens, filteredLt);
-  }, [tokens, filteredLt]);
-
-  // Paragraph ends → insertions
-  const eopInsertions = useMemo<VirtualTerminalInsertion[]>(() => {
-    return detectParagraphEndInsertions(text, tokens);
-  }, [text, tokens]);
+  const ltInsertions = useMemo<VirtualTerminalInsertion[]>(
+    () => convertLTTerminalsToInsertions(tokens, filteredLt),
+    [tokens, filteredLt]
+  );
 
   // LT-only terminal insertions (no heuristics)
-  const terminalInsertions = useMemo<VirtualTerminalInsertion[]>(() => {
-    const out = ltInsertions;
-    if (typeof window !== "undefined" && (window as any).__CBM_DEBUG__) {
-      console.info("[VT] counts", { lt: out.length, eop: 0, insertions: out.length });
-    }
-    return out;
-  }, [ltInsertions]);
+  const terminalInsertions = useMemo<VirtualTerminalInsertion[]>(
+    () => {
+      if (typeof window !== "undefined" && (window as any).__CBM_DEBUG__) {
+        console.info("[VT] counts", { lt: ltInsertions.length, eop: 0, insertions: ltInsertions.length });
+      }
+      return ltInsertions; // LT-only
+    },
+    [ltInsertions]
+  );
 
   // 2) insert virtual terminals for display + scoring
   const displayTokens = useMemo(

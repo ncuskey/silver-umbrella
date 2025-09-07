@@ -361,7 +361,17 @@ The tool is designed for easy extension:
 
 ## Recent Updates
 
-### Latest Improvements (v4.2) - UPPERCASE_SENTENCE_START Boundary Detection & LT-Only Infractions
+### Latest Improvements (v4.3) - Robust LT Issue Parsing & Field-Agnostic Processing
+- **Field-Agnostic LT Parsing**: Added robust accessor functions (`getRuleId`, `getCategoryId`, `getMsg`, `getOffset`, `getLength`) that handle different LanguageTool server payload shapes
+- **UPPERCASE_SENTENCE_START Enhancement**: Improved boundary detection that places terminals BEFORE capitalized words with offset-robust processing
+- **Cross-Server Compatibility**: Works seamlessly with different LanguageTool server configurations and response formats
+- **Enhanced Debug Logging**: Added comprehensive debug output showing filtered LT rules and virtual terminal counts
+- **SSR Compatibility**: Fixed server-side rendering issues with proper `window` object guards
+- **Improved Boundary Logic**: Enhanced UPPERCASE_SENTENCE_START processing with better token offset handling and boundary placement
+- **LT-Only Mode Optimization**: Streamlined terminal insertion logic to use only LanguageTool analysis without heuristic fallbacks
+- **Robust Error Handling**: Better handling of malformed or missing LT response fields
+
+### Previous Improvements (v4.2) - UPPERCASE_SENTENCE_START Boundary Detection & LT-Only Infractions
 - **UPPERCASE_SENTENCE_START Detection**: Implemented advanced boundary detection that places terminals BEFORE capitalized words identified by LanguageTool
 - **Smart Boundary Placement**: Added sophisticated logic to avoid placing terminals before opening quotes, brackets, or existing terminals
 - **Safety Guardrails**: Comprehensive checks prevent double-insertion and include validation for existing punctuation
