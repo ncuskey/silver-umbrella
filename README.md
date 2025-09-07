@@ -68,12 +68,12 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 
 ### Written Expression Tab
 1. Paste student writing in the text area
-2. Select appropriate dictionary packs for the student's grade level
-3. Add custom words to the lexicon if needed
-4. Hunspell loads automatically on startup for professional spell checking
-5. Grammar checking runs automatically as you type (debounced)
-6. Review automated scoring and infraction flags
-7. Use interactive overrides to adjust scoring as needed
+2. Set the probe time duration (mm:ss format) for fluency calculations
+3. Hunspell loads automatically on startup for professional spell checking
+4. Grammar checking runs automatically as you type (debounced)
+5. Review the 6 key metrics in the right column grid
+6. Check infractions and suggestions (always visible)
+7. Use interactive overrides to adjust scoring as needed (click words for WSC, click carets for CWS)
 
 ### Spelling Tab
 1. Enter target words (comma/semicolon/newline separated)
@@ -225,7 +225,17 @@ The tool is designed for easy extension:
 
 ## Recent Updates
 
-### Latest Improvements (v2.5)
+### Latest Improvements (v2.6)
+- **UI Refactoring**: Complete redesign with cleaner, more professional interface
+- **Two-Column Layout**: Left column for text input and controls, right column for metrics and infractions
+- **Compact Metrics Grid**: 6 metrics displayed in a responsive 2×3 grid using consistent StatCard components
+- **Streamlined Controls**: Removed obsolete dictionary pack toggles, custom lexicon input, and show/hide checkboxes
+- **Always-Visible Infractions**: Infractions and suggestions are now always displayed for immediate review
+- **Simplified Workflow**: Hardcoded defaults for dictionary packs and custom lexicon eliminate configuration overhead
+- **Enhanced Visual Hierarchy**: Better organization with logical grouping of related elements
+- **Responsive Design**: Grid layout adapts to different screen sizes for optimal viewing
+
+### Previous Improvements (v2.5)
 - **Derived Metrics**: Added CIWS, %CWS, and CWS/min calculations with comprehensive time control
 - **Time Control**: Configurable probe duration (mm:ss format) for accurate fluency rate calculations
 - **IWS Categorization**: Detailed categorization of Incorrect Writing Sequences by reason (capitalization, spelling, punctuation, pair)
