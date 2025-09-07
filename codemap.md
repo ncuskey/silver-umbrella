@@ -283,15 +283,19 @@ interface CwsHint {
 
 #### Virtual Terminal Insertion System
 - `detectMissingTerminalInsertions()`: Advanced detection algorithm for missing sentence-ending punctuation
+- `createVirtualTerminals()`: Converts insertion objects to comprehensive VirtualTerminal type with boundary tracking
 - **Smart Pattern Recognition**: Detects WORD [space] CapitalWord sequences that look like new sentences
 - **Heuristic Filtering**: Uses contextual clues (newlines, 2+ spaces, sentence starters) to reduce false positives
 - **Title Case Avoidance**: Excludes TitleCase spans like "The Terrible Day" to prevent over-flagging
 - **Visual Insertion**: Creates dotted "." tokens with distinct amber styling and dashed borders
 - **Two-Caret System**: Generates two yellow advisory carets around each virtual terminal (word ^ . and . ^ NextWord)
 - **Interactive Control**: Teachers can click carets to cycle: yellow (advisory) → red (reject) → green (accept)
+- **One-Click Group Cycling**: Click virtual terminal dots to cycle both adjacent carets simultaneously in lock-step
 - **CWS Integration**: When accepted (green), virtual terminals count as essential punctuation creating two CWS boundaries
 - **Advisory by Default**: Virtual terminals don't affect CWS scores unless explicitly accepted by teacher
-- **Clear Visual Feedback**: Distinct styling and tooltips clearly indicate proposed insertions vs. actual text
+- **Clear Visual Feedback**: Distinct styling, hover effects, and tooltips clearly indicate proposed insertions vs. actual text
+- **Accessibility**: Keyboard navigation support with Enter/Space key activation for virtual terminal dots
+- **Comprehensive Tracking**: Each virtual terminal tracks dotTokenIndex, leftBoundaryBIndex, and rightBoundaryBIndex
 
 #### Derived Metrics System
 - **CIWS (Correct Incorrect Writing Sequences)**: CWS minus IWS calculation
@@ -330,6 +334,8 @@ interface CwsHint {
 - **Vitest Integration**: Modern testing framework with UI and CLI modes
 - **CWS Rule Validation**: Tests for initial-word credit, terminal capitalization, comma handling
 - **Edge Cases**: Tests for quotes, parentheses, hyphens, apostrophes, and numerals
+- **Virtual Terminal Tests**: Tests for missing punctuation detection, Figure 4 behavior, and group cycling
+- **Behavior Locking**: Golden test ensures virtual terminal cycling behavior remains consistent
 - **Pure Functions**: `src/lib/cws-core.ts` provides testable scoring functions
 - **Continuous Integration**: Tests run automatically on build
 
@@ -417,7 +423,16 @@ The tool implements scoring methods aligned with educational research:
 
 ### Recent Updates
 
-#### Latest Improvements (v2.8)
+#### Latest Improvements (v2.10)
+- **Enhanced Virtual Terminal System**: Comprehensive boundary tracking with proper CWS integration when accepted
+- **One-Click Group Cycling**: Revolutionary feature allowing teachers to click virtual terminal dots to cycle both adjacent carets simultaneously
+- **Improved Accessibility**: Added keyboard navigation support with Enter/Space key activation for virtual terminal dots
+- **Visual Polish**: Enhanced hover effects and focus states for better user experience
+- **Golden Test Coverage**: Added comprehensive test for virtual terminal cycling behavior to prevent regressions
+- **Figure 4 Compliance**: Enhanced missing terminal detection with proper handling of quotes, parentheses, and TitleCase runs
+- **LanguageTool Integration**: Improved mapping of punctuation-related grammar issues to advisory carets
+
+#### Previous Improvements (v2.8)
 - **Export Functionality**: Added CSV audit export and PDF report generation for comprehensive data analysis
 - **Privacy Controls**: Implemented FERPA/COPPA compliant local-only mode with session data clearing
 - **Self-hosted LanguageTool**: Support for custom LanguageTool endpoints with privacy toggle and settings UI
@@ -433,10 +448,13 @@ The tool implements scoring methods aligned with educational research:
 - **Virtual Terminal Insertion**: Revolutionary feature that automatically detects and proposes missing sentence-ending punctuation
 - **Smart Heuristics**: Advanced detection algorithm that identifies WORD [space] CapitalWord patterns likely to be new sentences
 - **Interactive Teacher Control**: Two-caret system allows teachers to accept/reject virtual terminal suggestions
+- **One-Click Group Cycling**: Click virtual terminal dots to cycle both adjacent carets simultaneously in lock-step
 - **Visual Distinction**: Dotted amber styling clearly distinguishes proposed insertions from actual student text
 - **CWS Integration**: Virtual terminals integrate seamlessly with CWS scoring when accepted by teachers
 - **Advisory by Default**: Virtual suggestions don't affect scores unless explicitly accepted, maintaining assessment integrity
 - **Enhanced User Experience**: Clear visual feedback and intuitive interaction model for efficient teacher workflow
+- **Accessibility Support**: Keyboard navigation with Enter/Space key activation for virtual terminal dots
+- **Comprehensive Boundary Tracking**: Each virtual terminal tracks its dot token index and associated CWS boundary indices
 
 #### Previous Improvements (v2.6)
 - **UI Refactoring**: Complete redesign with cleaner, more professional interface

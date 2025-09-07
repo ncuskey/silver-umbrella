@@ -39,6 +39,8 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 - **Time Control**: Configurable probe duration (mm:ss format) for fluency rate calculations
 - **IWS Categorization**: Detailed categorization of Incorrect Writing Sequences by reason
 - **Virtual Terminal Insertion**: Smart detection and insertion of missing sentence-ending punctuation with interactive teacher controls
+- **One-Click Group Cycling**: Click virtual terminal dots to cycle both adjacent carets in lock-step (yellow→red→green→yellow)
+- **Enhanced Virtual Terminal System**: Comprehensive boundary tracking with proper CWS integration when accepted
 - **Grammar Mode Badge**: Always-visible indicator showing current grammar checking configuration
 - **Export Functionality**: CSV audit export and PDF report generation
 - **Privacy Controls**: FERPA/COPPA compliant local-only mode with session data clearing
@@ -180,9 +182,12 @@ The CWS (Correct Writing Sequences) engine implements strictly mechanical, CBM-a
 - **Visual Insertion**: Inserts dotted "." tokens between words with distinct amber styling
 - **Two Caret System**: Creates two yellow advisory carets around each virtual terminal (word ^ . and . ^ NextWord)
 - **Interactive Control**: Teachers can click carets to cycle: yellow (advisory) → red (reject) → green (accept)
+- **One-Click Group Cycling**: Click virtual terminal dots to cycle both adjacent carets simultaneously in lock-step
 - **CWS Integration**: When accepted (green), virtual terminals count as essential punctuation creating two CWS boundaries
 - **Advisory by Default**: Virtual terminals don't affect CWS scores unless explicitly accepted by teacher
-- **Clear Visual Feedback**: Dashed amber borders and tooltips clearly indicate proposed insertions
+- **Clear Visual Feedback**: Dashed amber borders, hover effects, and tooltips clearly indicate proposed insertions
+- **Accessibility**: Keyboard navigation support with Enter/Space key activation for virtual terminal dots
+- **Comprehensive Boundary Tracking**: Each virtual terminal tracks its dot token index and associated CWS boundary indices
 
 ## Deployment
 
@@ -253,6 +258,8 @@ The application is optimized for production deployment with minimal runtime requ
 - **Golden Tests**: Comprehensive test coverage for CWS rule validation
 - **Rule Validation**: Tests for initial-word credit, terminal capitalization, comma handling
 - **Edge Cases**: Tests for quotes, parentheses, hyphens, apostrophes, and numerals
+- **Virtual Terminal Tests**: Tests for missing punctuation detection, Figure 4 behavior, and group cycling
+- **Behavior Locking**: Golden tests ensure virtual terminal cycling behavior remains consistent
 - **Continuous Integration**: Tests run automatically on build
 
 ### Test Commands
@@ -274,7 +281,16 @@ The tool is designed for easy extension:
 
 ## Recent Updates
 
-### Latest Improvements (v2.9)
+### Latest Improvements (v2.10)
+- **Enhanced Virtual Terminal System**: Comprehensive boundary tracking with proper CWS integration when accepted
+- **One-Click Group Cycling**: Revolutionary feature allowing teachers to click virtual terminal dots to cycle both adjacent carets simultaneously
+- **Improved Accessibility**: Added keyboard navigation support with Enter/Space key activation for virtual terminal dots
+- **Visual Polish**: Enhanced hover effects and focus states for better user experience
+- **Golden Test Coverage**: Added comprehensive test for virtual terminal cycling behavior to prevent regressions
+- **Figure 4 Compliance**: Enhanced missing terminal detection with proper handling of quotes, parentheses, and TitleCase runs
+- **LanguageTool Integration**: Improved mapping of punctuation-related grammar issues to advisory carets
+
+### Previous Improvements (v2.9)
 - **Hydration Fixes**: Resolved React hydration error #418 by fixing server-client mismatch issues
 - **Date.now() Fix**: Replaced Date.now() in exportCSV with hydration-safe timestamp generation
 - **localStorage Hydration**: Fixed localStorage access during component initialization to prevent hydration mismatches

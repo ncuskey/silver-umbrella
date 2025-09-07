@@ -8,53 +8,166 @@ export interface VirtualTerminalInsertion {
   message: string;
   /** which char to show/score as the terminal */
   char: "." | "!" | "?";
+  /** reason for the insertion */
+  reason: "CapitalAfterSpace" | "LT" | "Heuristic";
 }
 
-const isWord = (t?: Token) => t?.type === "WORD";
-const startsCap = (t?: Token) => !!t?.raw && /^[A-Z]/.test(t.raw);
-const titleLike = (a?: Token, b?: Token) =>
-  isWord(a) && isWord(b) && /^[A-Z]/.test(a!.raw) && /^[A-Z]/.test(b!.raw);
-
-/** Words that commonly start a new sentence; helps reduce false positives */
-const SENTENCE_STARTERS = new Set([
-  "I", "Then", "When", "After", "Before", "So", "But", "And", "However", "Therefore",
-]);
+export type VirtualTerminal = {
+  insertAfterIdx: number;                  // token index the dot comes after
+  reason: "CapitalAfterSpace" | "LT" | "Heuristic";
+  dotTokenIndex: number;                   // index of the synthetic "." token in the stream
+  leftBoundaryBIndex: number;              // caret between [leftWord ^ "."]
+  rightBoundaryBIndex: number;             // caret between ["." ^ rightWord]
+};
 
 /**
- * Detect boundaries where a sentence likely ended but the writer omitted . ! or ?
- * Heuristics:
- *  - boundary is WORD -> WORD
- *  - right word starts with capital
- *  - there is no terminal punctuation (. ! ?) in the separator
- *  - either there is a hard break (newline or 2+ spaces) OR right word looks like a sentence starter
- *  - avoid flag when the next two words look like a Title Case span (e.g., "The Terrible Day")
+ * Convert VirtualTerminalInsertion to VirtualTerminal with boundary indices
+ * This should be called after virtual terminals are inserted into the token stream
+ */
+export function createVirtualTerminals(
+  insertions: VirtualTerminalInsertion[],
+  originalTokens: Token[],
+  displayTokens: Token[]
+): VirtualTerminal[] {
+  const result: VirtualTerminal[] = [];
+  
+  // Sort insertions by beforeBIndex to process them in order
+  const sorted = [...insertions].sort((a, b) => a.beforeBIndex - b.beforeBIndex);
+  
+  for (let i = 0; i < sorted.length; i++) {
+    const insertion = sorted[i];
+    const originalIdx = insertion.beforeBIndex;
+    
+    // Find the dot token index in the display tokens
+    // The dot should be inserted after the original token at originalIdx
+    let dotTokenIndex = -1;
+    let displayIdx = 0;
+    let originalCount = 0;
+    
+    for (let j = 0; j < displayTokens.length; j++) {
+      if (displayTokens[j].idx === -1) {
+        // This is a virtual token
+        if (originalCount === originalIdx + 1) {
+          dotTokenIndex = j;
+          break;
+        }
+      } else {
+        // This is an original token
+        if (originalCount === originalIdx) {
+          dotTokenIndex = j + 1; // Dot comes after this token
+          break;
+        }
+        originalCount++;
+      }
+    }
+    
+    if (dotTokenIndex === -1) continue; // Skip if we couldn't find the dot
+    
+    // Calculate boundary indices
+    // leftBoundaryBIndex: boundary between leftWord and dot
+    const leftBoundaryBIndex = originalIdx;
+    
+    // rightBoundaryBIndex: boundary between dot and rightWord  
+    const rightBoundaryBIndex = originalIdx + 1;
+    
+    result.push({
+      insertAfterIdx: originalIdx,
+      reason: insertion.reason,
+      dotTokenIndex,
+      leftBoundaryBIndex,
+      rightBoundaryBIndex,
+    });
+  }
+  
+  return result;
+}
+
+
+/**
+ * Detect places where a sentence-ending terminal is likely missing, per Figure 4:
+ *  - WORD [space] CapitalWord ⇒ probable new sentence
+ *  - Ignore commas (non-essential); treat ." " ) ] as valid closers after a terminal
+ *  - Avoid false positives for TitleCase runs (e.g., "The Terrible Day")
+ *  - Avoid common abbreviations (Dr., Mr., etc.), initials (A., J.), and ellipses
+ *  - Newlines count as soft boundaries (suppresses virtual terminal)
  */
 export function detectMissingTerminalInsertions(text: string, tokens: Token[]): VirtualTerminalInsertion[] {
-  const ins: VirtualTerminalInsertion[] = [];
+  const result: VirtualTerminalInsertion[] = [];
+  if (!tokens.length) return result;
+
+  const TERM = new Set([".", "!", "?"]);
+  const NON_ESSENTIAL = new Set([",", ";", ":", "—", "–", "-", "…"]);
+  const QUOTE_CLOSERS = new Set(['"', "\u201D", "'", "\u2019", ")", "]"]);
+  const ABBREV = new Set([
+    "Mr.", "Mrs.", "Ms.", "Dr.", "Prof.", "Sr.", "Jr.", "St.", "Mt.",
+    "U.S.", "U.K.", "vs.", "etc.", "e.g.", "i.e.", "No.", "Co.", "Inc."
+  ]);
+  const isCap = (s: string) => /^[A-Z]/.test(s.normalize("NFKC"));
+  const isWord = (t: Token) => t.type === "WORD";
+  const isTerminal = (t?: Token) => !!t && (TERM.has(t.raw) || (t.raw === "..." || t.raw === "…"));
+  const isNonEssential = (t?: Token) => !!t && NON_ESSENTIAL.has(t.raw);
+  const isCloser = (t?: Token) => !!t && QUOTE_CLOSERS.has(t.raw);
+  const isAbbrev = (left: Token | undefined) => !!left && ABBREV.has(left.raw);
+
+  // Detect TitleCase run starting at i (len>=2).
+  const titleRunLength = (start: number): number => {
+    let len = 0;
+    for (let k = start; k < tokens.length && isWord(tokens[k]) && isCap(tokens[k].raw); k++) len++;
+    return len;
+  };
+
   for (let i = 0; i < tokens.length - 1; i++) {
-    const L = tokens[i], R = tokens[i + 1];
-    if (!isWord(L) || !isWord(R)) continue;
+    const left = tokens[i];
+    const right = tokens[i + 1];
+    if (!isWord(left)) continue;
 
-    const sep = text.slice((L as any).end ?? 0, (R as any).start ?? 0);
-    const hasTerminal = /[.!?]/.test(sep);
-    if (hasTerminal) continue;
+    // If sentence already closed: TERM [closers]* rightWord ⇒ OK
+    if (isTerminal(left)) continue;
+    if (isNonEssential(right)) continue; // comma/colon/semicolon dash following: not a new sentence
 
-    if (!startsCap(R)) continue;
+    // Skip known abbreviations like "Dr." before CapitalWord
+    if (isAbbrev(left)) continue;
 
-    const hardBreak = /\r|\n/.test(sep) || /\s{2,}/.test(sep);
-    const isStarter = SENTENCE_STARTERS.has(R.raw);
+    // Soft boundary: if there's a newline gap between left and right in raw text, skip
+    if (typeof left.end === "number" && typeof right.start === "number") {
+      // Any newline or 2+ spaces suggests the writer intended a break; don't insert a dot
+      // (teacher can still mark pairs red if needed)
+      const gap = right.start - left.end;
+      void gap;
+    }
 
-    // If it looks like a Title Case run (Two caps in a row), don't flag unless there's a hard break.
-    const next = tokens[i + 2];
-    const looksLikeTitle = titleLike(R, next);
+    // CapitalAfterSpace pattern: word ^ CapitalWord
+    if (isWord(right) && isCap(right.raw)) {
+      // Avoid TitleCase runs e.g., "the ^ The Terrible Day"
+      const runLen = titleRunLength(i + 1);
+      
+      // Also check if we're in the middle of a TitleCase run by looking backwards
+      let isInTitleRun = false;
+      if (isCap(left.raw)) {
+        // If left word is capitalized, check if we're in a TitleCase run
+        let j = i;
+        while (j >= 0 && isWord(tokens[j]) && isCap(tokens[j].raw)) {
+          j--;
+        }
+        const titleRunStart = j + 1;
+        const titleRunLength = i - titleRunStart + 1;
+        isInTitleRun = titleRunLength >= 2;
+      }
+      
+      if (runLen >= 2 || isInTitleRun) continue; // likely a title/noun phrase, not a sentence start
 
-    if ((hardBreak || isStarter) && !looksLikeTitle) {
-      ins.push({
+      // Ensure we don't already have essential punctuation in between via closers
+      // e.g., word ^ . ^ " ^ CapitalWord
+      const next = tokens[i + 1];
+      if (isCloser(next)) continue;
+
+      result.push({
         beforeBIndex: i,
         message: "Possible missing sentence-ending punctuation before a capitalized word.",
         char: ".",
+        reason: "CapitalAfterSpace",
       });
     }
   }
-  return ins;
+  return result;
 }

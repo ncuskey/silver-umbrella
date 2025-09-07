@@ -9,6 +9,34 @@ export const isWord = (t: Token) => t.type === "WORD";
 export const isPunct = (t: Token) => t.type === "PUNCT";
 export const isEssentialPunct = (t: Token) => isPunct(t) && ESSENTIAL_PUNCT.has(t.raw);
 
+/**
+ * Check if a boundary is essential for CWS scoring
+ * @param left Left token
+ * @param right Right token  
+ * @param pairOverrides Optional overrides for virtual boundaries
+ * @param bIndex Boundary index for override lookup
+ * @returns true if boundary is essential
+ */
+function isEssentialBoundary(
+  left: Token | null, 
+  right: Token, 
+  pairOverrides?: Record<number, { cws?: boolean }>,
+  bIndex?: number
+): boolean {
+  // Real essential punctuation boundaries
+  if (left && isEssentialPunct(left)) return true;
+  if (isEssentialPunct(right)) return true;
+  
+  // Virtual terminal accepted by teacher ⇒ counts as essential
+  if (bIndex !== undefined && pairOverrides) {
+    const pair = { virtualBoundary: true }; // This would be set by the calling code
+    const acceptedVirtual = pair.virtualBoundary && pairOverrides[bIndex]?.cws === true;
+    if (acceptedVirtual) return true;
+  }
+  
+  return false;
+}
+
 /** A boundary (caret) between writing units. index = -1 is the initial boundary before the first unit. */
 export interface CwsPair {
   /** boundary index relative to the *full token list*: -1 is initial, otherwise i means between tokens[i] and tokens[i+1] */
@@ -35,10 +63,12 @@ export interface CwsPair {
  *  - WORD→TERM(.!?:;) : the word must be spelled correctly
  *  - TERM(.!?:;)→WORD : the next word must begin with a capital letter AND be spelled correctly
  *  - Initial boundary (^First) counts when the first WORD is spelled correctly and capitalized
+ *  - Virtual terminal accepted by teacher ⇒ counts as essential
  */
 export function buildCwsPairs(
   tokens: Token[],
-  isCorrectSpelling: (word: string) => boolean
+  isCorrectSpelling: (word: string) => boolean,
+  pairOverrides?: Record<number, { cws?: boolean }>
 ): CwsPair[] {
   // Identify "writing units" (WORD or ESSENTIAL PUNCT)
   const unitIdxs: number[] = [];
@@ -81,7 +111,12 @@ export function buildCwsPairs(
     const L = tokens[li];
     const R = tokens[ri];
 
-    let eligible = true;
+    // baseline eligibility (real text)
+    const baseEligible = isEssentialBoundary(L, R, pairOverrides, li);
+    // virtual terminal accepted by teacher ⇒ counts as essential
+    const acceptedVirtual = (tokens[li] as any).virtual && pairOverrides?.[li]?.cws === true;
+    const eligible = baseEligible || acceptedVirtual;
+    
     let valid = true;
     let reason: CwsPair["reason"] | undefined = undefined;
 
@@ -107,7 +142,6 @@ export function buildCwsPairs(
     }
     // Anything involving non-essential punctuation is *not eligible* (commas, quotes, hyphens, etc.)
     else {
-      eligible = false;
       valid = false;
       reason = "nonessential-punct";
     }
@@ -117,7 +151,7 @@ export function buildCwsPairs(
       leftTok: li,
       rightTok: ri,
       eligible,
-      valid,
+      valid: eligible && valid,
       reason,
       virtualBoundary: (tokens[li] as any).virtual || (tokens[ri] as any).virtual,
     });
