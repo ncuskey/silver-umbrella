@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState, useRef, useEffect } from "react";
+import React, { useMemo, useState, useRef, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,7 +13,7 @@ import { buildCwsPairs, ESSENTIAL_PUNCT } from "@/lib/cws";
 import type { CwsPair } from "@/lib/cws";
 import { buildLtCwsHints } from "@/lib/cws-lt";
 import type { CwsHint } from "@/lib/cws-lt";
-import { detectMissingTerminalInsertions, VirtualTerminalInsertion } from "@/lib/cws-heuristics";
+import { detectMissingTerminalInsertions, VirtualTerminalInsertion, createVirtualTerminals, VirtualTerminal } from "@/lib/cws-heuristics";
 import { cn } from "@/lib/utils";
 import { toCSV, download } from "@/lib/export";
 import jsPDF from "jspdf";
@@ -53,6 +53,19 @@ type DisplayToken = Token & { virtual?: boolean; essential?: boolean; display?: 
 interface WordOverride { csw?: boolean }
 interface PairOverride { cws?: boolean }
 type PairOverrides = Record<number, { cws?: boolean }>; // key = bIndex (-1 or token index)
+
+type Tri = "yellow" | "red" | "green";
+const triFromOverride = (ov?: { cws?: boolean }): Tri =>
+  ov?.cws === true ? "green" : ov?.cws === false ? "red" : "yellow";
+
+const triForGroup = (group: VirtualTerminal, pairOverrides: Record<number, { cws?: boolean }>): Tri => {
+  const l = triFromOverride(pairOverrides[group.leftBoundaryBIndex]);
+  const r = triFromOverride(pairOverrides[group.rightBoundaryBIndex]);
+  // keep them in lock-step; if they ever diverge, show the "worst" (red > yellow > green)
+  if (l === "red" || r === "red") return "red";
+  if (l === "yellow" || r === "yellow") return "yellow";
+  return "green";
+};
 
 interface Infraction {
   kind: "definite" | "possible";
@@ -248,6 +261,7 @@ function cycleCaret(bIndex: number, pairOverrides: PairOverrides, setPairOverrid
     return clone;
   });
 }
+
 
 function cwsPairValid(a: Token, b: Token, wsc: (w: string) => boolean): { ok: boolean; reason?: string } {
   // Commas don't count against pairs (CBM: ignore commas)
@@ -580,6 +594,19 @@ function WritingScorer() {
     [tokens, terminalInsertions]
   );
 
+  // 2.5) create virtual terminals with boundary indices
+  const virtualTerminals = useMemo(
+    () => createVirtualTerminals(terminalInsertions, tokens, displayTokens),
+    [terminalInsertions, tokens, displayTokens]
+  );
+
+  // Find a virtual terminal by dot index (you already pass them down with scoring)
+  const vtByDotIndex = useMemo(() => {
+    const m = new Map<number, VirtualTerminal>();
+    for (const v of virtualTerminals) m.set(v.dotTokenIndex, v);
+    return m;
+  }, [virtualTerminals]);
+
   // 3) create a quick map of advisory carets around each virtual terminal
   const virtualBoundaryHints = useMemo(() => {
     const m = new Map<number, { message: string }>();
@@ -597,9 +624,9 @@ function WritingScorer() {
   const cwsPairs = useMemo(() => {
     const sc = getExternalSpellChecker();
     const spell = (w: string) => sc ? sc.isCorrect(w) : isWordLikelyCorrect(w, lexicon);
-    return buildCwsPairs(displayTokens, spell);
+    return buildCwsPairs(displayTokens, spell, pairOverrides);
     // include engineTag so it recomputes when Hunspell loads
-  }, [displayTokens, engineTag, lexicon]);
+  }, [displayTokens, engineTag, lexicon, pairOverrides]);
 
   // Audit data for CSV export
   const audit = useMemo(() => {
@@ -729,8 +756,19 @@ function WritingScorer() {
       infractions.push({ kind: "possible", tag: m.category.toUpperCase(), msg: m.message, at: `${m.offset}:${m.length}` });
     }
     
+    // Add infractions for proposed virtual terminals
+    for (const v of terminalInsertions) {
+      infractions.push({
+        kind: "possible",
+        tag: "TERMINAL",
+        msg: "Possible missing sentence-ending punctuation before \"" +
+             tokens[v.beforeBIndex + 1]?.raw + "\" (Figure 4). Click caret to accept/reject.",
+        at: v.beforeBIndex
+      });
+    }
+    
     return { wsc, cws, infractions };
-  }, [tokens, overrides, lexicon, filteredLt, engineTag, cwsPairs, pairOverrides, ltHintsMap, pairByBoundary]);
+  }, [tokens, overrides, lexicon, filteredLt, engineTag, cwsPairs, pairOverrides, ltHintsMap, pairByBoundary, terminalInsertions]);
 
   // Export functions
   const exportCSV = () => {
@@ -738,6 +776,21 @@ function WritingScorer() {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
     download(`cbm-audit-${timestamp}.csv`, toCSV(audit));
   };
+
+  const cycleGroup = useCallback((group: VirtualTerminal) => {
+    setPairOverrides(prev => {
+      const next = { ...prev };
+      const state = triForGroup(group, prev);
+      const to = state === "yellow" ? "red" : state === "red" ? "green" : "yellow";
+      const apply = (b: number, tri: Tri) => {
+        if (tri === "yellow") delete next[b];
+        else next[b] = { cws: tri === "green" };
+      };
+      apply(group.leftBoundaryBIndex, to);
+      apply(group.rightBoundaryBIndex, to);
+      return next;
+    });
+  }, []);
 
   const exportPDF = async () => {
     const el = document.getElementById("report-pane");
@@ -940,6 +993,9 @@ function WritingScorer() {
               {displayTokens.map((tok, i) => {
                 const isWordTok = tok.type === "WORD";
                 const isVirtual = (tok as DisplayToken).virtual;
+                const isVirtualDot = isVirtual && tok.raw === ".";
+                const vt = isVirtualDot ? vtByDotIndex.get(i) : undefined;
+                const groupTri: Tri | undefined = vt ? triForGroup(vt, pairOverrides) : undefined;
                 const ok = isWordLikelyCorrect(tok.raw, lexicon);
                 const ov = (overrides[tok.idx] as WordOverride)?.csw;
                 const effectiveOk = ov === true ? true : ov === false ? false : ok;
@@ -953,9 +1009,15 @@ function WritingScorer() {
                   : tok.type;
 
                 // token chip classes
-                const baseChip = "inline-flex items-center rounded px-2 py-1 text-sm border";
+                const baseChip = "inline-flex items-center rounded px-2 py-1 text-sm border select-none";
                 const virtualClasses = isVirtual
-                  ? "bg-amber-50 border-amber-300 text-amber-800 border-dashed"
+                  ? isVirtualDot
+                    ? groupTri === "green"
+                      ? "bg-emerald-50 border-emerald-300 text-emerald-700"
+                      : groupTri === "red"
+                        ? "bg-red-50 border-red-300 text-red-700"
+                        : "bg-amber-50 border-amber-300 text-amber-700 border-dashed"
+                    : "bg-amber-50 border-amber-300 text-amber-800 border-dashed"
                   : "bg-slate-50 border-slate-200";
 
                 return (
@@ -970,13 +1032,24 @@ function WritingScorer() {
                             ? bad
                               ? "bg-red-100 text-red-700 border-red-300"
                               : "bg-emerald-50 text-emerald-700 border-emerald-200"
-                            : "bg-slate-50 text-slate-700 border-slate-200"
+                            : "bg-slate-50 text-slate-700 border-slate-200",
+                        vt && "cursor-pointer hover:ring-2 hover:ring-amber-200 focus:outline-none focus:ring-2"
                       )}
-                      title={isVirtual ? "Inserted: possible missing terminal" : title}
+                      title={
+                        vt
+                          ? "Proposed terminal (Figure 4). Click: yellow→red (reject) → green (accept) → yellow."
+                          : isVirtual ? "Inserted: possible missing terminal" : title
+                      }
                       onClick={() => {
-                        if (!isWordTok) return;
-                        setOverrides((o) => ({ ...o, [tok.idx]: { ...(o[tok.idx] as WordOverride), csw: !(effectiveOk) } }));
+                        if (vt) {
+                          cycleGroup(vt);
+                        } else if (isWordTok) {
+                          setOverrides((o) => ({ ...o, [tok.idx]: { ...(o[tok.idx] as WordOverride), csw: !(effectiveOk) } }));
+                        }
                       }}
+                      onKeyDown={vt ? (e) => (e.key === "Enter" || e.key === " ") && cycleGroup(vt) : undefined}
+                      tabIndex={vt ? 0 : -1}
+                      role={vt ? "button" : undefined}
                     >
                       {(tok as DisplayToken).display ?? tok.raw}
                     </button>
