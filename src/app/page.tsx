@@ -102,6 +102,30 @@ function buildLexicon(selected: string[], userLex: string): Set<string> {
 
 const TOKEN_RE = /[A-Za-z]+(?:[-''][A-Za-z]+)*|[\.!\?;:\u2014\u2013\-]|,|\d+(?:[\.,]\d+)*/g;
 
+/**
+ * Tokenize text with proper character offsets to fix WSC
+ * This preserves spans in the original, unmodified text (no trim, no normalization)
+ */
+function tokenizeWithOffsets(text: string): Token[] {
+  const out: Token[] = [];
+  let idx = 0;
+  // words vs single non-space punctuation; preserves newlines & spaces in offsets
+  const re = /\w+|[^\s\w]/g;
+  for (const m of text.matchAll(re)) {
+    const start = m.index!;
+    const end = start + m[0].length;
+    out.push({
+      idx,
+      raw: m[0],
+      type: /\w/.test(m[0][0]) ? "WORD" : "PUNCT",
+      start,
+      end
+    });
+    idx++;
+  }
+  return out;
+}
+
 function tokenize(text: string): Token[] {
   const toks: Token[] = [];
   let i = 0;
@@ -170,9 +194,26 @@ function clsForWord(target: string, attempt: string): { cls: number; max: number
   return { cls, max, correctWhole };
 }
 
+function summarizeLT(issues: GrammarIssue[]) {
+  const byCat = new Map<string, number>();
+  const byRule = new Map<string, number>();
+  for (const m of issues) {
+    byCat.set(m.categoryId ?? "?", (byCat.get(m.categoryId ?? "?") || 0) + 1);
+    byRule.set(m.ruleId ?? "?", (byRule.get(m.ruleId ?? "?") || 0) + 1);
+  }
+  console.table([...byCat.entries()].map(([k,v])=>({category:k,count:v})));
+  console.table([...byRule.entries()].map(([k,v])=>({rule:k,count:v})));
+}
+
 function filterLtIssues(text: string, issues: GrammarIssue[]) {
   const out: GrammarIssue[] = [];
   const seen = new Set<string>();
+
+  // Log LT summary for dev parity checks
+  if (process.env.NODE_ENV === 'development') {
+    console.log('LT Issues Summary:');
+    summarizeLT(issues);
+  }
 
   for (const m of issues) {
     const catId = (m.categoryId || "").toUpperCase();
@@ -186,7 +227,9 @@ function filterLtIssues(text: string, issues: GrammarIssue[]) {
       continue;
     }
 
-    if (catName.includes("CAPITALIZATION") || catName.includes("PUNCTUATION") || catName.includes("TYPOGRAPHY")) {
+    // Allow all standard LT categories: TYPOS, CAPITALIZATION, PUNCTUATION, TYPOGRAPHY, GRAMMAR, STYLE, SEMANTICS
+    const allowedCategories = new Set(["TYPOS", "CAPITALIZATION", "PUNCTUATION", "TYPOGRAPHY", "GRAMMAR", "STYLE", "SEMANTICS"]);
+    if (allowedCategories.has(catId) || allowedCategories.has(catName)) {
       const k = `${m.category}-${m.offset}-${m.length}-${m.message}`;
       if (!seen.has(k)) { out.push(m); seen.add(k); }
     }
@@ -431,8 +474,8 @@ function WritingScorer() {
       const cat = (m.categoryId || "").toUpperCase();
       const rule = (m.ruleId || "").toUpperCase();
       // Spelling/typo matches in LT (e.g., MORFOLOGIK_RULE_EN_US, category TYPOS)
-      const isTypo = cat === "TYPOS" || rule.startsWith("MORFOLOGIK_RULE");
-      if (!isTypo) continue;
+      const isSpelling = cat === "TYPOS" || rule.startsWith("MORFOLOGIK_RULE");
+      if (!isSpelling) continue;
       const mStart = m.offset;
       const mEnd = m.offset + m.length;
       for (const t of tokens) {
@@ -472,7 +515,7 @@ function WritingScorer() {
     let count = 0;
     tokens.forEach((t) => {
       if (t.type !== "WORD") return;
-      const ok = isWordLikelyCorrectByLT(t.idx);
+      const ok = !misspelledIdx.has(t.idx);
 
       const ov = overrides[t.idx]?.csw;
       const effectiveOk = ov === true ? true : ov === false ? false : ok;
@@ -550,7 +593,7 @@ function WritingScorer() {
 
   const lexicon = useMemo(() => buildLexicon(selectedPacks, ""), [selectedPacks]);
   
-  const tokens = useMemo(() => tokenize(text), [text]);
+  const tokens = useMemo(() => tokenizeWithOffsets(text), [text]);
 
   const misspelledIdx = useMemo(
     () => buildMisspelledIndex(tokens, ltIssues),
