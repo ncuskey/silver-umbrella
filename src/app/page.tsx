@@ -273,7 +273,7 @@ function WritingScorer() {
   const terminalInsertions = useMemo<VirtualTerminalInsertion[]>(() => {
     const edits = gb?.edits ?? [];
     const ins = gbEditsToInsertions(text, tokens, edits);
-    if ((window as any).__CBM_DEBUG__) console.info("[VT] counts", { gb: ins.length, insertions: ins.length });
+    if (typeof window !== "undefined" && (window as any).__CBM_DEBUG__) console.info("[VT] counts", { gb: ins.length, insertions: ins.length });
     return ins;
   }, [text, tokens, gb]);
 
