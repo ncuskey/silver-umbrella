@@ -1,10 +1,9 @@
 {
   "name": "cbm-writing-spelling-tool",
-  "version": "0.1.0",
+  "version": "3.0.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "prebuild": "node scripts/check-licenses.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
@@ -18,7 +17,6 @@
     "clsx": "^2.0.0",
     "framer-motion": "^10.16.16",
     "html2canvas": "^1.4.1",
-    "hunspell-asm": "^4.0.2",
     "jspdf": "^3.0.2",
     "lucide-react": "^0.294.0",
     "next": "^15.5.2",
