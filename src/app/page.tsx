@@ -361,8 +361,8 @@ function WritingScorer() {
   
   // LanguageTool settings state
   const [showSettings, setShowSettings] = useState(false);
-  const [ltBaseUrl, setLtBaseUrl] = useState(getLtBase());
-  const [ltPrivacy, setLtPrivacy] = useState(getLtPrivacy());
+  const [ltBaseUrl, setLtBaseUrl] = useState("");
+  const [ltPrivacy, setLtPrivacy] = useState("local");
   const lastCheckedText = useRef<string>("");    // to avoid duplicate checks
   const grammarRunId = useRef<number>(0);        // cancellation token for in-flight checks
 
@@ -388,6 +388,12 @@ function WritingScorer() {
   }
   const durationSec = useMemo(() => parseMMSS(timeMMSS), [timeMMSS]);
   const durationMin = durationSec ? durationSec / 60 : 0;
+
+  // Load localStorage values after hydration to prevent hydration mismatch
+  useEffect(() => {
+    setLtBaseUrl(getLtBase());
+    setLtPrivacy(getLtPrivacy());
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -728,7 +734,9 @@ function WritingScorer() {
 
   // Export functions
   const exportCSV = () => {
-    download(`cbm-audit-${Date.now()}.csv`, toCSV(audit));
+    // Use a timestamp that's generated on the client side to avoid hydration mismatch
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+    download(`cbm-audit-${timestamp}.csv`, toCSV(audit));
   };
 
   const exportPDF = async () => {
