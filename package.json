@@ -4,9 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "node scripts/check-licenses.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test": "vitest --ui",
+    "test:run": "vitest run",
     "size:report": "du -sh node_modules/* | sort -h | tail -n 30",
     "analyze": "ANALYZE=1 next build"
   },
@@ -14,7 +17,9 @@
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.0.0",
     "framer-motion": "^10.16.16",
+    "html2canvas": "^1.4.1",
     "hunspell-asm": "^4.0.2",
+    "jspdf": "^3.0.2",
     "lucide-react": "^0.294.0",
     "next": "^15.5.2",
     "react": "^18",
@@ -23,14 +28,18 @@
   },
   "devDependencies": {
     "@next/bundle-analyzer": "^15.5.2",
+    "@types/jspdf": "^1.3.3",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "@vitest/ui": "^3.2.4",
     "autoprefixer": "^10.0.1",
     "eslint": "^8",
     "eslint-config-next": "^15.0.0",
+    "jsdom": "^26.1.0",
     "postcss": "^8",
     "tailwindcss": "^3.3.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.4"
   }
 }

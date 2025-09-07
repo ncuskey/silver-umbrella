@@ -46,16 +46,25 @@
 │   │   │   ├── hunspell-worker-client.ts # Web Worker client for Hunspell
 │   │   │   └── dev-probe.ts   # Development testing script for Hunspell validation
 │   │   ├── grammar/           # Grammar checking system
-│   │   │   └── languagetool-client.ts # LanguageTool API client
+│   │   │   └── languagetool-client.ts # LanguageTool API client with privacy controls
 │   │   ├── cws.ts             # CWS (Correct Writing Sequences) engine
+│   │   ├── cws-core.ts        # Pure CWS scoring functions for testing
 │   │   ├── cws-lt.ts          # CWS-LanguageTool integration for advisory hints
 │   │   ├── cws-heuristics.ts  # Virtual terminal insertion detection system
+│   │   ├── export.ts          # CSV and PDF export utilities
 │   │   └── utils.ts           # Utility functions (cn helper)
 │   └── workers/               # Web Workers
 │       └── hunspell.worker.ts # Hunspell Web Worker implementation
+├── tests/                     # Test files
+│   └── cws.spec.ts           # Golden tests for CWS rules
+├── scripts/                   # Build and utility scripts
+│   └── check-licenses.mjs    # License compliance check script
 ├── public/
 │   └── dicts/                 # Dictionary files directory
-│       └── README.md          # Instructions for dictionary files
+│       ├── en_US.aff         # US English affix file
+│       ├── en_US.dic         # US English dictionary file
+│       ├── LICENSES.md       # SCOWL/Hunspell license attributions
+│       └── README.md         # Instructions for dictionary files
 ├── Configuration Files
 │   ├── package.json           # Dependencies and scripts
 │   ├── next.config.js         # Next.js configuration
@@ -89,6 +98,12 @@
 - **Derived Metrics**: CIWS, %CWS, and CWS/min calculations with time control
 - **Missing Punctuation Detection**: Heuristic advisory for capitalized words not preceded by terminal punctuation
 - **Grammar Mode Badge**: Always-visible indicator showing current grammar configuration
+- **Export Functionality**: CSV audit export and PDF report generation
+- **Privacy Controls**: FERPA/COPPA compliant local-only mode with session data clearing
+- **Self-hosted LanguageTool**: Support for custom LanguageTool endpoints with privacy toggle
+- **Rate Limiting**: Exponential backoff for LanguageTool API rate limits
+- **Golden Tests**: Comprehensive test suite for CWS rule validation
+- **License Compliance**: Automatic license checking for SCOWL/Hunspell dictionaries
 
 **Main Components**:
 - `CBMApp`: Root component with tab navigation
@@ -285,6 +300,39 @@ interface CwsHint {
 - **IWS Categorization**: Detailed categorization by reason (capitalization, spelling, punctuation, pair)
 - **Time Control**: Configurable probe duration in mm:ss format for accurate fluency calculations
 
+### Export System (`src/lib/export.ts`)
+
+#### Export Utilities
+- `toCSV()`: Converts array of objects to CSV format with proper escaping
+- `download()`: Client-side file download using Blob API
+- **CSV Export**: Detailed audit data including boundary index, tokens, eligibility, validity, overrides
+- **PDF Export**: Screenshots metrics panel with high-quality rendering (2x scale)
+
+### Privacy & Compliance System
+
+#### Privacy Controls (`src/lib/grammar/languagetool-client.ts`)
+- `getLtBase()`: Retrieves LanguageTool base URL from localStorage
+- `getLtPrivacy()`: Gets privacy setting (local/cloud) with FERPA/COPPA default
+- `clearSessionData()`: Clears all session data and resets to defaults
+- **Default Local-Only**: Grammar checking disabled by default for student privacy
+- **Privacy Toggle**: Easy enable/disable of cloud grammar checking
+- **Session Management**: Complete reset of settings and student text
+
+#### License Compliance (`scripts/check-licenses.mjs`)
+- **Prebuild Validation**: License compliance check runs before every build
+- **SCOWL Attribution**: Proper attribution for dictionary word lists (LGPL/MPL)
+- **Hunspell Attribution**: Proper attribution for spell checking engine (GPL/LGPL/MPL)
+- **Automatic Enforcement**: Build fails if license file is missing or empty
+
+### Testing System (`tests/cws.spec.ts`)
+
+#### Golden Tests
+- **Vitest Integration**: Modern testing framework with UI and CLI modes
+- **CWS Rule Validation**: Tests for initial-word credit, terminal capitalization, comma handling
+- **Edge Cases**: Tests for quotes, parentheses, hyphens, apostrophes, and numerals
+- **Pure Functions**: `src/lib/cws-core.ts` provides testable scoring functions
+- **Continuous Integration**: Tests run automatically on build
+
 ### API Routes (`src/app/api/`)
 
 #### LanguageTool Proxy (`languagetool/route.ts`)
@@ -307,9 +355,11 @@ interface CwsHint {
 
 ### Development Scripts
 - `npm run dev`: Development server
-- `npm run build`: Production build
+- `npm run build`: Production build (includes license compliance check)
 - `npm run start`: Production server
 - `npm run lint`: ESLint checking
+- `npm run test`: Run tests with Vitest UI
+- `npm run test:run`: Run tests in command line mode
 - `npm run size:report`: Analyze dependency sizes
 - `npm run analyze`: Generate bundle analysis reports
 
@@ -367,7 +417,38 @@ The tool implements scoring methods aligned with educational research:
 
 ### Recent Updates
 
-#### Latest Improvements (v2.5)
+#### Latest Improvements (v2.8)
+- **Export Functionality**: Added CSV audit export and PDF report generation for comprehensive data analysis
+- **Privacy Controls**: Implemented FERPA/COPPA compliant local-only mode with session data clearing
+- **Self-hosted LanguageTool**: Support for custom LanguageTool endpoints with privacy toggle and settings UI
+- **Rate Limiting**: Added exponential backoff for LanguageTool API rate limits (429 handling)
+- **Golden Tests**: Comprehensive Vitest test suite for CWS rule validation and correctness
+- **License Compliance**: Automatic license checking for SCOWL/Hunspell dictionaries with prebuild validation
+- **Enhanced Privacy**: Default local-only mode ensures no student text leaves browser unless explicitly enabled
+- **Session Management**: Clear session data functionality for schools and privacy-conscious users
+- **Settings UI**: Intuitive settings popover with gear icon for LanguageTool configuration
+- **Privacy Footer**: Clear privacy status indicator with toggle links and session clearing options
+
+#### Previous Improvements (v2.7)
+- **Virtual Terminal Insertion**: Revolutionary feature that automatically detects and proposes missing sentence-ending punctuation
+- **Smart Heuristics**: Advanced detection algorithm that identifies WORD [space] CapitalWord patterns likely to be new sentences
+- **Interactive Teacher Control**: Two-caret system allows teachers to accept/reject virtual terminal suggestions
+- **Visual Distinction**: Dotted amber styling clearly distinguishes proposed insertions from actual student text
+- **CWS Integration**: Virtual terminals integrate seamlessly with CWS scoring when accepted by teachers
+- **Advisory by Default**: Virtual suggestions don't affect scores unless explicitly accepted, maintaining assessment integrity
+- **Enhanced User Experience**: Clear visual feedback and intuitive interaction model for efficient teacher workflow
+
+#### Previous Improvements (v2.6)
+- **UI Refactoring**: Complete redesign with cleaner, more professional interface
+- **Two-Column Layout**: Left column for text input and controls, right column for metrics and infractions
+- **Compact Metrics Grid**: 6 metrics displayed in a responsive 2×3 grid using consistent StatCard components
+- **Streamlined Controls**: Removed obsolete dictionary pack toggles, custom lexicon input, and show/hide checkboxes
+- **Always-Visible Infractions**: Infractions and suggestions are now always displayed for immediate review
+- **Simplified Workflow**: Hardcoded defaults for dictionary packs and custom lexicon eliminate configuration overhead
+- **Enhanced Visual Hierarchy**: Better organization with logical grouping of related elements
+- **Responsive Design**: Grid layout adapts to different screen sizes for optimal viewing
+
+#### Previous Improvements (v2.5)
 - **Derived Metrics**: Added CIWS, %CWS, and CWS/min calculations with comprehensive time control
 - **Time Control**: Configurable probe duration (mm:ss format) for accurate fluency rate calculations
 - **IWS Categorization**: Detailed categorization of Incorrect Writing Sequences by reason (capitalization, spelling, punctuation, pair)

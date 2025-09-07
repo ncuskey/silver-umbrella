@@ -40,6 +40,12 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 - **IWS Categorization**: Detailed categorization of Incorrect Writing Sequences by reason
 - **Virtual Terminal Insertion**: Smart detection and insertion of missing sentence-ending punctuation with interactive teacher controls
 - **Grammar Mode Badge**: Always-visible indicator showing current grammar checking configuration
+- **Export Functionality**: CSV audit export and PDF report generation
+- **Privacy Controls**: FERPA/COPPA compliant local-only mode with session data clearing
+- **Self-hosted LanguageTool**: Support for custom LanguageTool endpoints with privacy toggle
+- **Rate Limiting**: Exponential backoff for LanguageTool API rate limits
+- **Golden Tests**: Comprehensive test suite for CWS rule validation
+- **License Compliance**: Automatic license checking for SCOWL/Hunspell dictionaries
 
 ## Getting Started
 
@@ -58,9 +64,11 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 ## Development Scripts
 
 - `npm run dev` - Start development server
-- `npm run build` - Build for production
+- `npm run build` - Build for production (includes license compliance check)
 - `npm run start` - Start production server
 - `npm run lint` - Run ESLint
+- `npm run test` - Run tests with Vitest UI
+- `npm run test:run` - Run tests in command line mode
 - `npm run size:report` - Analyze dependency sizes (shows top 30 largest packages)
 - `npm run analyze` - Generate bundle analysis reports (requires ANALYZE=1)
 
@@ -216,6 +224,42 @@ The application is optimized for production deployment with minimal runtime requ
 - **Modern TypeScript**: ES2022 target for better performance and WASM compatibility
 - **Spell Result Caching**: In-memory caching eliminates repeated spell checks
 
+## Privacy & Compliance
+
+### FERPA/COPPA Compliance
+- **Default Local-Only Mode**: Grammar checking is disabled by default to protect student privacy
+- **No Data Collection**: Student text never leaves the browser unless explicitly enabled
+- **Session Data Clearing**: One-click session data clearing for privacy-conscious environments
+- **Transparent Privacy**: Clear indicators show when cloud services are enabled
+- **Educational Focus**: Designed specifically for school environments with privacy requirements
+
+### Privacy Controls
+- **Privacy Toggle**: Easy enable/disable of cloud grammar checking
+- **Settings UI**: Intuitive configuration with gear icon settings popover
+- **Self-hosted Support**: Use your own LanguageTool instance for complete control
+- **Rate Limiting**: Automatic handling of API rate limits with exponential backoff
+- **Clear Session Data**: Complete reset of all settings and student text
+
+### License Compliance
+- **SCOWL Attribution**: Proper attribution for dictionary word lists (LGPL/MPL)
+- **Hunspell Attribution**: Proper attribution for spell checking engine (GPL/LGPL/MPL)
+- **Automatic Validation**: License compliance check runs before every build
+- **Dictionary Files**: Includes proper license documentation in `public/dicts/LICENSES.md`
+
+## Testing
+
+### Test Suite
+- **Vitest Integration**: Modern testing framework with UI and CLI modes
+- **Golden Tests**: Comprehensive test coverage for CWS rule validation
+- **Rule Validation**: Tests for initial-word credit, terminal capitalization, comma handling
+- **Edge Cases**: Tests for quotes, parentheses, hyphens, apostrophes, and numerals
+- **Continuous Integration**: Tests run automatically on build
+
+### Test Commands
+- `npm run test` - Run tests with interactive Vitest UI
+- `npm run test:run` - Run tests in command line mode
+- Tests validate core CWS scoring rules and edge cases
+
 ## Extensibility
 
 The tool is designed for easy extension:
@@ -225,10 +269,24 @@ The tool is designed for easy extension:
 - **Advanced Grammar**: Add POS-based rules for enhanced grammar checking
 - **Dictionary Integration**: Easy integration with additional dictionary databases
 - **Web Worker Support**: Non-blocking spell checking for performance optimization
+- **Export Extensions**: Easy to add new export formats (JSON, XML, etc.)
+- **Privacy Extensions**: Framework for additional privacy controls and compliance features
 
 ## Recent Updates
 
-### Latest Improvements (v2.7)
+### Latest Improvements (v2.8)
+- **Export Functionality**: Added CSV audit export and PDF report generation for comprehensive data analysis
+- **Privacy Controls**: Implemented FERPA/COPPA compliant local-only mode with session data clearing
+- **Self-hosted LanguageTool**: Support for custom LanguageTool endpoints with privacy toggle and settings UI
+- **Rate Limiting**: Added exponential backoff for LanguageTool API rate limits (429 handling)
+- **Golden Tests**: Comprehensive Vitest test suite for CWS rule validation and correctness
+- **License Compliance**: Automatic license checking for SCOWL/Hunspell dictionaries with prebuild validation
+- **Enhanced Privacy**: Default local-only mode ensures no student text leaves browser unless explicitly enabled
+- **Session Management**: Clear session data functionality for schools and privacy-conscious users
+- **Settings UI**: Intuitive settings popover with gear icon for LanguageTool configuration
+- **Privacy Footer**: Clear privacy status indicator with toggle links and session clearing options
+
+### Previous Improvements (v2.7)
 - **Virtual Terminal Insertion**: Revolutionary feature that automatically detects and proposes missing sentence-ending punctuation
 - **Smart Heuristics**: Advanced detection algorithm that identifies WORD [space] CapitalWord patterns likely to be new sentences
 - **Interactive Teacher Control**: Two-caret system allows teachers to accept/reject virtual terminal suggestions
