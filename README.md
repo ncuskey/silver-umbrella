@@ -148,6 +148,9 @@ The CWS (Correct Writing Sequences) engine implements strictly mechanical, CBM-a
 
 ### LanguageTool Integration
 - **API-based Spell Checking**: Uses LanguageTool's public API for professional spell checking
+- **Enhanced Spelling Detection**: Properly configured to detect typos (MORFOLOGIK_RULE_* patterns) alongside grammar issues
+- **Language Variant Support**: Uses `en-US` variant and `preferredVariants` for auto-detection to ensure spelling rules remain active
+- **Website Parity**: Matches LanguageTool website defaults with `level=default` parameter
 - **Automatic Grammar Checking**: Grammar analysis runs automatically as you type with debounce
 - **Status Tracking**: Visual badge shows LanguageTool spell checking mode
 - **Spelling Suggestions**: Built-in LanguageTool suggestion engine for misspelled words
