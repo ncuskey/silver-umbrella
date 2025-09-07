@@ -16,6 +16,8 @@ import { buildCwsPairs, ESSENTIAL_PUNCT } from "@/lib/cws";
 import type { CwsPair } from "@/lib/cws";
 import { buildLtCwsHints } from "@/lib/cws-lt";
 import type { CwsHint } from "@/lib/cws-lt";
+import { buildTerminalHeuristics } from "@/lib/cws-heuristics";
+import type { HeurHint } from "@/lib/cws-heuristics";
 import { cn } from "@/lib/utils";
 
 /**
@@ -186,12 +188,12 @@ function isComma(tok: Token)    { return tok.type === "PUNCT" && tok.raw === ","
 function isHyphen(tok: Token)   { return tok.type === "PUNCT" && tok.raw === "-"; }
 
 // helper to decide caret visual for a boundary
-function caretStateForBoundary(bIndex: number, pairByBoundary: Map<number, CwsPair>, pairOverrides: PairOverrides, ltHintsMap: Map<number, CwsHint>) {
+function caretStateForBoundary(bIndex: number, pairByBoundary: Map<number, CwsPair>, pairOverrides: PairOverrides, advisoryHints: Map<number, { message: string }>) {
   const pair = pairByBoundary.get(bIndex);
   if (!pair) return { eligible: false as const, state: "muted" as const, reason: "none" };
 
   const ov = pairOverrides[bIndex]?.cws;
-  const advisory = ltHintsMap.get(bIndex); // CwsHint | undefined
+  const advisory = advisoryHints.get(bIndex);
 
   // default validity (mechanical CWS)
   const baseValid = pair.valid;
@@ -199,7 +201,7 @@ function caretStateForBoundary(bIndex: number, pairByBoundary: Map<number, CwsPa
   // final state machine
   if (!pair.eligible) return { eligible: false as const, state: "muted" as const, reason: "none" };
 
-  if (ov === false) return { eligible: true as const, state: "bad" as const, reason: pair.reason || "override-bad" };
+  if (ov === false) return { eligible: true as const, state: "bad" as const, reason: pair.reason || "rule" };
   if (ov === true)  return { eligible: true as const, state: "ok"  as const, reason: "override-ok" };
 
   // no override -> show advisory if base is ok but LT flagged the boundary
@@ -302,6 +304,28 @@ function WritingScorer() {
   const [ltIsPublic, setLtIsPublic] = useState<boolean | null>(null);
   const lastCheckedText = useRef<string>("");    // to avoid duplicate checks
   const grammarRunId = useRef<number>(0);        // cancellation token for in-flight checks
+
+  // Derive grammar mode label from LT client config
+  const grammarModeLabel = useMemo(() => {
+    if (grammarStatus === "checking") return "checking";
+    if (grammarStatus === "error") return "error";
+    if (grammarStatus === "idle") return "off";
+    if (grammarStatus === "ok") {
+      return ltIsPublic ? "public" : "auto (proxy)";
+    }
+    return "off";
+  }, [grammarStatus, ltIsPublic]);
+
+  // --- Time for probe (mm:ss) ---
+  const [timeMMSS, setTimeMMSS] = useState("03:00"); // default 3 min
+  function parseMMSS(s: string) {
+    const m = s.trim().match(/^(\d{1,2}):([0-5]\d)$/);
+    if (!m) return 0;
+    const mins = parseInt(m[1], 10), secs = parseInt(m[2], 10);
+    return mins * 60 + secs;
+  }
+  const durationSec = useMemo(() => parseMMSS(timeMMSS), [timeMMSS]);
+  const durationMin = durationSec ? durationSec / 60 : 0;
 
   useEffect(() => {
     let mounted = true;
@@ -495,6 +519,21 @@ function WritingScorer() {
     return n;
   }, [cwsPairs, pairOverrides]);
 
+  const eligibleBoundaries = useMemo(
+    () => cwsPairs.reduce((n, p) => n + (p.eligible ? 1 : 0), 0),
+    [cwsPairs]
+  );
+  const iws = useMemo(() => Math.max(eligibleBoundaries - cwsCount, 0), [eligibleBoundaries, cwsCount]);
+  const ciws = useMemo(() => cwsCount - iws, [cwsCount, iws]);
+  const percentCws = useMemo(
+    () => (eligibleBoundaries ? Math.round((100 * cwsCount) / eligibleBoundaries) : 0),
+    [eligibleBoundaries, cwsCount]
+  );
+  const cwsPerMin = useMemo(
+    () => (durationMin ? (cwsCount / durationMin) : null),
+    [cwsCount, durationMin]
+  );
+
   const tww = useMemo(() => computeTWW(tokens), [tokens]);
   
   // Build filtered LT issues once
@@ -504,10 +543,16 @@ function WritingScorer() {
   );
   
   // Compute advisory hints (memoized)
-  const ltHintsMap = useMemo(() => {
-    // use your filtered ltIssues (already stripped of typos/punct)
-    return buildLtCwsHints(text, tokens, ltIssues);
-  }, [text, tokens, ltIssues]);  // (engineTag not needed; hints are grammar-level)
+  const ltHintsMap = useMemo(() => buildLtCwsHints(text, tokens, ltIssues), [text, tokens, ltIssues]);
+  const heurHintsMap = useMemo(() => buildTerminalHeuristics(text, tokens), [text, tokens]);
+
+  // Merge: prefer LT if both exist for the same boundary
+  const advisoryHints = useMemo(() => {
+    const m = new Map<number, { message: string }>();
+    heurHintsMap.forEach((h) => { if (!m.has(h.bIndex)) m.set(h.bIndex, { message: h.message }); });
+    ltHintsMap.forEach((h) => { m.set(h.bIndex, { message: h.message }); });
+    return m;
+  }, [ltHintsMap, heurHintsMap]);
 
   // Fast lookup maps
   const pairByBoundary = useMemo(() => {
@@ -523,34 +568,34 @@ function WritingScorer() {
     
     // Add CWS-specific infractions based on caret reasons
     for (const p of cwsPairs) {
-      const ov = pairOverrides[p.bIndex]?.cws;
-      const ok = ov === true ? true : ov === false ? false : p.valid;
-      if (p.eligible && !ok) {
-        if (p.reason === "capitalization") {
-          infractions.push({ 
-            kind: "definite", 
-            tag: "CAPITALIZATION", 
-            msg: "Expected capital after sentence-ending punctuation", 
-            at: `${p.leftTok ?? "START"} ^ ${p.rightTok}` 
-          });
-        } else if (p.reason === "misspelling") {
-          // spelling already appears under WSC, so usually skip duplicating
+      if (p.eligible) {
+        const ov = pairOverrides[p.bIndex]?.cws;
+        const ok = ov === true ? true : ov === false ? false : p.valid;
+        if (!ok) {
+          const reason = p.reason || "rule";
+          const tag =
+            reason === "capitalization" ? "CAPITALIZATION" :
+            reason === "misspelling"    ? "SPELLING" :
+            reason === "nonessential-punct" ? "PUNCTUATION" :
+            reason === "not-units"      ? "PAIR" :
+            "PAIR";
+          const msg =
+            reason === "capitalization" ? "Expected capital after sentence-ending punctuation" :
+            reason === "misspelling"    ? "Spelling error breaks the sequence" :
+            reason === "nonessential-punct" ? "Non-essential punctuation breaks sequence" :
+            reason === "not-units"      ? "Invalid unit adjacency" :
+            "Invalid adjacency";
+          infractions.push({ kind: "definite", tag, msg, at: p.bIndex });
         }
       }
     }
     
-    // Add advisory entries from LanguageTool hints
-    for (const [bIndex, hint] of ltHintsMap) {
-      // show only when no explicit override and the mechanical pair is valid
+    // Add advisory entries from LanguageTool hints and heuristics
+    for (const [bIndex, hint] of advisoryHints) {
       const pair = pairByBoundary.get(bIndex);
       const ov = pairOverrides[bIndex]?.cws;
       if (pair && pair.eligible && ov === undefined && pair.valid) {
-        infractions.push({
-          kind: "possible",
-          tag: "CWS (advisory)",
-          msg: hint.message,
-          at: bIndex
-        });
+        infractions.push({ kind: "possible", tag: "TERMINAL (possible)", msg: hint.message, at: bIndex });
       }
     }
     
@@ -606,6 +651,16 @@ function WritingScorer() {
               <Button variant="secondary" onClick={() => { setOverrides({}); spellCache.current.clear(); }}>Reset overrides</Button>
               <Button variant="ghost" onClick={() => { setText(""); setLtIssues([]); lastCheckedText.current=""; }}>Clear text</Button>
 
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-muted-foreground">Time (mm:ss)</label>
+                <input
+                  value={timeMMSS}
+                  onChange={(e) => setTimeMMSS(e.target.value)}
+                  className="h-8 w-20 rounded border px-2 text-sm"
+                  placeholder="mm:ss"
+                />
+              </div>
+
               <div className="ml-auto flex items-center gap-2 text-xs">
                 <span>Spell:</span>
                 {spellStatus === "hunspell" && <Badge>Hunspell</Badge>}
@@ -613,11 +668,11 @@ function WritingScorer() {
                 {spellStatus === "demo" && <Badge variant="secondary">demo lexicon</Badge>}
                 {spellStatus === "error" && <Badge variant="destructive">error</Badge>}
 
-                <span className="ml-3">Grammar:</span>
-                {grammarStatus === "checking" && <Badge variant="secondary">checking…</Badge>}
-                {grammarStatus === "ok" && <Badge>auto{ltIsPublic ? " (public)" : " (proxy)"}</Badge>}
-                {grammarStatus === "idle" && <Badge variant="secondary">idle</Badge>}
-                {grammarStatus === "error" && <Badge variant="destructive">error</Badge>}
+                <div className="text-xs text-muted-foreground">
+                  Grammar: <span className="inline-block rounded bg-slate-100 px-2 py-0.5">
+                    {grammarModeLabel}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -641,6 +696,35 @@ function WritingScorer() {
               </div>
             </div>
 
+            {/* %CWS */}
+            <Card>
+              <CardHeader><CardTitle>% CWS</CardTitle></CardHeader>
+              <CardContent>
+                <div className="text-5xl font-semibold">{percentCws}<span className="text-2xl">%</span></div>
+                <div className="text-xs text-muted-foreground">{cwsCount}/{eligibleBoundaries} eligible boundaries</div>
+              </CardContent>
+            </Card>
+
+            {/* CIWS */}
+            <Card>
+              <CardHeader><CardTitle>CIWS</CardTitle></CardHeader>
+              <CardContent>
+                <div className="text-5xl font-semibold">{ciws}</div>
+                <div className="text-xs text-muted-foreground">CWS − IWS (IWS={iws})</div>
+              </CardContent>
+            </Card>
+
+            {/* CWS/min */}
+            <Card>
+              <CardHeader><CardTitle>CWS / min</CardTitle></CardHeader>
+              <CardContent>
+                <div className="text-5xl font-semibold">
+                  {cwsPerMin === null ? "—" : (Math.round(cwsPerMin * 10) / 10).toFixed(1)}
+                </div>
+                <div className="text-xs text-muted-foreground">{durationSec ? `${timeMMSS} timed` : "enter time"}</div>
+              </CardContent>
+            </Card>
+
             <div className="flex flex-wrap gap-2 text-xs mb-2">
               <span className="inline-flex items-center gap-1">
                 <span className="inline-block w-3 h-3 rounded bg-emerald-200 border border-emerald-300" /> correct
@@ -661,7 +745,7 @@ function WritingScorer() {
             <div className="mt-3 flex flex-wrap gap-1 p-3 rounded-2xl bg-muted/40">
               {/* initial caret uses bIndex = -1 */}
               {(() => {
-                const { eligible, state, reason } = caretStateForBoundary(-1, pairByBoundary, pairOverrides, ltHintsMap);
+                const { eligible, state, reason } = caretStateForBoundary(-1, pairByBoundary, pairOverrides, advisoryHints);
                 const cls =
                   state === "muted"    ? "text-slate-300"
                 : state === "ok"       ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
@@ -723,7 +807,7 @@ function WritingScorer() {
                     {/* CARET */}
                     {i < tokens.length - 1 && (
                       (() => {
-                        const { eligible, state, reason } = caretStateForBoundary(i, pairByBoundary, pairOverrides, ltHintsMap);
+                        const { eligible, state, reason } = caretStateForBoundary(i, pairByBoundary, pairOverrides, advisoryHints);
                         const cls =
                           state === "muted"    ? "text-slate-300"
                         : state === "ok"       ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
