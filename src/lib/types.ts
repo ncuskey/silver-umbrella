@@ -11,6 +11,7 @@ export type VirtualTerminalInsertion = {
   char: "." | "!" | "?";
   beforeBIndex: number; // boundary token index (your VT grouping uses this)
   reason: "LT";
+  message: string;      // description of the insertion
 };
 
 // the LT payload is inconsistent across servers; keep it loose

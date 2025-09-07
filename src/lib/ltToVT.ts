@@ -63,7 +63,7 @@ export function ltIssuesToInsertions(
       if (OPENERS.has(startTok.raw) || CLOSERS.has(prevRaw) || SENT_TERMS.has(prevRaw)) continue;
       if (seen.has(boundaryIdx)) continue;
 
-      out.push({ at: tokens[wordIdx].end, char: ".", beforeBIndex: boundaryIdx, reason: "LT" });
+      out.push({ at: tokens[wordIdx].end, char: ".", beforeBIndex: boundaryIdx, reason: "LT", message: "Possible missing sentence-ending punctuation (from LanguageTool)." });
       seen.add(boundaryIdx);
       continue;
     }
@@ -81,7 +81,7 @@ export function ltIssuesToInsertions(
       if (SENT_TERMS.has(tokens[wordIdx].raw)) continue;
       if (seen.has(beforeIdx)) continue;
 
-      out.push({ at: tokens[wordIdx].end, char: ".", beforeBIndex: beforeIdx, reason: "LT" });
+      out.push({ at: tokens[wordIdx].end, char: ".", beforeBIndex: beforeIdx, reason: "LT", message: "Possible missing sentence-ending punctuation (from LanguageTool)." });
       seen.add(beforeIdx);
       continue;
     }
