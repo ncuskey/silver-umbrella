@@ -337,57 +337,91 @@ export function buildTerminalGroups(
 }
 
 // ---- revised detector ----
+
+// --- NEW: accept all LT boundary suggestions and convert to virtual terminals --- //
+import type { VirtualTerminalInsertion } from "@/lib/cws-heuristics";
+
+function nearestBoundaryToRange(tokens: Token[], start: number, end: number): number {
+  // Find the token boundary closest to the range
+  const center = start + (end - start) / 2;
+  return tokenIndexAt(center, tokens);
+}
+
+
+function isWordTok(t?: Token) {
+  return !!t && t.type === "WORD";
+}
+
+function looksLikeTerminalSuggestion(issue: GrammarIssue): boolean {
+  const id = (issue.ruleId || "").toUpperCase();
+  const cat = (issue.categoryId || "").toUpperCase();
+  const msg = (issue.message || "").toLowerCase();
+  const hasTerminalReplacement = (issue.replacements || []).some(r => /^[.!?]/.test(r.trim()));
+
+  // Very permissive on purpose (accept first, filter later):
+  return (
+    hasTerminalReplacement ||
+    LT_TERMINAL_RULE_IDS.has(id) ||
+    id.includes("PUNCTUATION") ||
+    id.includes("SENTENCE") ||
+    /end of sentence|missing terminal|add (a )?(period|full stop)/i.test(msg) ||
+    (cat === "PUNCTUATION" && /sentence|terminal/i.test(msg))
+  );
+}
+
+// Commas are not counted in CWS unless genuinely part of a list
+function isListCommaContext(tokens: Token[], bIndex: number): boolean {
+  // A tiny heuristic: word , word (, word)* (and|or) word
+  // For CWS we only keep commas in list contexts; others are ignored outright.
+  const win = tokens.slice(Math.max(0, bIndex - 3), Math.min(tokens.length, bIndex + 5))
+                    .map(t => t.raw.toLowerCase());
+
+  // if we see 'and'/'or' nearby and both sides are words, treat as listy
+  const hasCoord = win.includes("and") || win.includes("or");
+  const leftWord  = isWordTok(tokens[bIndex]);
+  const rightWord = isWordTok(tokens[bIndex + 1]);
+  return hasCoord && leftWord && rightWord;
+}
+
 export function ltBoundaryInsertions(
-  tokens: any[],
-  issues: any[]
-): { beforeBIndex: number; char: "." | "!" | "?"; reason: "LT"; message: string }[] {
-  const out: { beforeBIndex: number; char: "." | "!" | "?"; reason: "LT"; message: string }[] = [];
+  text: string,
+  tokens: Token[],
+  issues: GrammarIssue[]
+): VirtualTerminalInsertion[] {
+  if (!issues?.length || !tokens?.length) return [];
 
-  for (const m of issues || []) {
-    const id   = (m.rule?.id || "").toUpperCase();
-    const cat  = (m.rule?.category?.id || "").toUpperCase();
-    const msg  = m.message || "";
+  const out: VirtualTerminalInsertion[] = [];
+  const seen = new Set<number>();
 
-    // gate by category (LT sometimes uses STYLE/TYPOGRAPHY for these)
-    if (!BOUNDARY_CATEGORIES.has(cat)) continue;
+  for (const m of issues) {
+    const id = (m.ruleId || "").toUpperCase();
+    const msg = m.message || "";
 
-    // signals
-    const repBoundary = suggestsTerminal(m);
-    const msgBoundary =
-      /(missing|add|insert)\s+(?:[.?!]|punctuation).*?(sentence|paragraph)/i.test(msg) ||
-      /make this a new sentence/i.test(msg) ||
-      id === "PUNCTUATION_PARAGRAPH_END";
+    // Filter commas up front (we accept all LT issues first, but we don't let
+    // commas through unless listy — and we don't add commas to CWS anyway)
+    const mentionsComma = /\bcomma\b/i.test(msg) || id.includes("COMMA");
+    if (mentionsComma) {
+      const b = nearestBoundaryToRange(tokens, m.offset, m.offset + m.length);
+      if (!isListCommaContext(tokens, b)) continue;   // ignore non-list commas
+      // Even for list commas, CWS does not insert a terminal — so skip.
+      continue;
+    }
 
-    // structural fallback tied to the highlighted span
-    const rightEdge = m.offset + m.length - 1;
-    const li = tokenIndexAt(Math.max(0, rightEdge), tokens);
-    const L = tokens[li], R = tokens[li + 1];
-    const near     = !!(L && R) && (R.start - L.end) <= 2;
-    const rightCap = !!R && R.type === "WORD" && /^[A-Z]/.test(String(R.raw));
-    const leftTerm = !!L && /[.?!…]$/.test(String(L.raw));
-    const leftStop = !!L && L.type === "WORD" && STOP_LEFT.has(String(L.raw).toLowerCase());
-    const structuralBoundary = near && rightCap && !leftTerm && !leftStop;
+    if (!looksLikeTerminalSuggestion(m)) continue;
 
-    if (!(repBoundary || msgBoundary || structuralBoundary)) continue;
-
-    const caret = (repBoundary || msgBoundary) ? caretAfterMatch(m, tokens) : li;
-    if (caret < 0) continue;
+    const bIndex = nearestBoundaryToRange(tokens, m.offset, m.offset + m.length);
+    if (bIndex < 0) continue;
+    if (seen.has(bIndex)) continue;
+    seen.add(bIndex);
 
     out.push({
-      beforeBIndex: caret,
-      char: ".",
+      beforeBIndex: bIndex,
+      char: ".", // default; LT rarely tells us "!" or "?"
       reason: "LT",
-      message: msg || "Possible missing sentence-ending punctuation (from LanguageTool).",
+      message: m.message || "Possible missing sentence-ending punctuation (LanguageTool).",
     });
-
-    // dev trace (visible when window.__CBM_DEBUG__ = true)
-    if (typeof window !== "undefined" && (window as any).__CBM_DEBUG__) {
-      console.log("[LT→boundary]", {
-        id, cat, msg: msg.slice(0, 80), L: L?.raw, R: R?.raw, caret,
-        repBoundary, msgBoundary, structuralBoundary
-      });
-    }
   }
+
   return out;
 }
 
@@ -444,6 +478,12 @@ export function buildLtCwsHints(text: string, tokens: Token[], issues: GrammarIs
     
     if (bestB === null) continue;
     if (bestD > 2) continue; // too far from any boundary
+
+    // In buildLtCwsHints(), just after you compute bIndex:
+    if (/\bcomma\b/i.test(iss.message) || iss.ruleId?.toUpperCase().includes("COMMA")) {
+      if (!isListCommaContext(tokens, bestB)) return; // skip non-list commas in hints
+      // you can also choose to skip list commas completely for CWS hints as well
+    }
 
     // only keep the first hint per boundary
     if (!hints.has(bestB)) {

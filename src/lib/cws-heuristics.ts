@@ -224,39 +224,45 @@ export function detectMissingTerminalInsertions(text: string, tokens: Token[]): 
   return result;
 }
 
-export function detectParagraphEndInsertions(
-  text: string,
-  tokens: any[]
-): { beforeBIndex: number; char: "."; reason: "Heuristic"; message: string }[] {
-  const out: { beforeBIndex: number; char: "."; reason: "Heuristic"; message: string }[] = [];
+// --- NEW: add periods at paragraph ends when missing --- //
+export function detectParagraphEndInsertions(text: string, tokens: Token[]): VirtualTerminalInsertion[] {
+  const out: VirtualTerminalInsertion[] = [];
+  if (!tokens.length) return out;
+
+  // Find paragraph breaks (blank line) and end of text
+  const breaks: number[] = [];
   const re = /\r?\n\s*\r?\n|$/g;
   let m: RegExpExecArray | null;
-  let lastIndex = -1;
+  let lastIndex = -1; // prevent global regex infinite-loop
 
   while ((m = re.exec(text))) {
     if (m.index === lastIndex) { re.lastIndex++; continue; }
     lastIndex = m.index;
-
-    const endPos = m.index;
-    let lastIdx = -1, hasTerm = false;
-
-    for (let i = tokens.length - 1; i >= 0; i--) {
-      const t = tokens[i];
-      if ((t.end ?? 0) <= endPos && t.type === "WORD") { lastIdx = i; break; }
-    }
-    if (lastIdx < 0) continue;
-
-    for (let j = lastIdx + 1; j < tokens.length; j++) {
-      const t = tokens[j];
-      if ((t.start ?? 0) >= endPos) break;
-      if (t.type === "PUNCT" && /[.!?…]/.test(t.raw)) { hasTerm = true; break; }
-    }
-    if (!hasTerm) out.push({
-      beforeBIndex: lastIdx,
-      char: ".",
-      reason: "Heuristic",
-      message: "Possible missing sentence-ending punctuation at paragraph end."
-    });
+    breaks.push(m.index);
+    if (m[0] === "") break; // safety
   }
+
+  for (const cut of breaks) {
+    // token boundary closest to paragraph end
+    const idx = tokens.findIndex(t => (t.start ?? 0) >= cut);
+    const endTokIdx = idx === -1 ? tokens.length - 1 : Math.max(0, idx - 1);
+    const endTok = tokens[endTokIdx];
+    if (!endTok) continue;
+
+    // last visible char before paragraph break
+    const lastChar = (text.slice(0, cut).match(/[^\s]$/) || [""])[0];
+    if (!lastChar) continue;
+
+    if (!/[.!?'"")']/.test(lastChar)) {
+      // Insert a terminal after the last token of the paragraph
+      out.push({
+        beforeBIndex: endTokIdx,
+        char: ".",
+        reason: "Heuristic",
+        message: "Possible missing sentence-ending punctuation at paragraph end.",
+      });
+    }
+  }
+
   return out;
 }
