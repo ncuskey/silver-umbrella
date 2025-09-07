@@ -768,7 +768,7 @@ function WritingScorer() {
       "UPPERCASE_SENTENCE_START",
     ]);
     const out = (ltIssues ?? []).filter(i => keep.has(ltRuleId(i)));
-    if ((window as any).__CBM_DEBUG__) console.info("[LT] filtered", out.map(ltRuleId));
+    if (typeof window !== "undefined" && (window as any).__CBM_DEBUG__) console.info("[LT] filtered", out.map(ltRuleId));
     return out;
   }, [ltIssues]);
 
@@ -782,7 +782,7 @@ function WritingScorer() {
   }, [text, tokens, filteredLt]);
 
   const terminalInsertions = useMemo(() => {
-    if ((window as any).__CBM_DEBUG__) {
+    if (typeof window !== "undefined" && (window as any).__CBM_DEBUG__) {
       console.info("[VT] counts", { lt: ltInsertions.length, eop: 0, insertions: ltInsertions.length });
     }
     return ltInsertions;
