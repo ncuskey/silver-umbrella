@@ -12,7 +12,7 @@ function prevWordIndex(tokens: Token[], j: number) {
 function nearestBoundaryLeftOf(tokens: Token[], j: number) {
   for (let k = j - 1; k >= 0; k--) {
     const tk = tokens[k];
-    if (tk.raw === "^" || tk.type === "BOUNDARY" || tk.kind === "boundary") return k;
+    if (tk.raw === "^" || tk.type === "BOUNDARY") return k;
   }
   return -1;
 }
