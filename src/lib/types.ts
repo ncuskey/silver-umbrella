@@ -10,7 +10,7 @@ export type VirtualTerminalInsertion = {
   at: number;           // where the dot renders (char index in full text)
   char: "." | "!" | "?";
   beforeBIndex: number; // boundary token index (your VT grouping uses this)
-  reason: "LT";
+  reason: "LT" | "GB";
   message: string;      // description of the insertion
 };
 

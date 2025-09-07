@@ -6,7 +6,7 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 
 ### Written Expression Scoring
 - **TWW (Total Words Written)**: Counts all words written, including misspellings, excluding numerals
-- **WSC (Words Spelled Correctly)**: Uses LanguageTool API for professional spell checking
+- **WSC (Words Spelled Correctly)**: Uses GrammarBot API for professional spell checking
 - **CWS (Correct Writing Sequences)**: Mechanical, CBM-aligned scoring of adjacent unit pairs with visual caret indicators
 
 ### Spelling Assessment
@@ -15,11 +15,11 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 - Aligned target and attempt word lists
 
 ### Advanced Features
-- **LanguageTool API**: Professional spell checking and grammar analysis via LanguageTool's public API
-- **LanguageTool Integration**: Professional spell checking via LanguageTool API
-- **Spell Engine Status**: Visual indicator showing LanguageTool spell checking mode
-- **Spelling Suggestions**: Tooltip suggestions for misspelled words via LanguageTool
-- **LanguageTool Grammar**: Automatic grammar checking with debounced text analysis
+- **GrammarBot API**: Professional spell checking and grammar analysis via GrammarBot's neural API
+- **GrammarBot Integration**: Professional spell checking via GrammarBot API
+- **Spell Engine Status**: Visual indicator showing GrammarBot spell checking mode
+- **Spelling Suggestions**: Tooltip suggestions for misspelled words via GrammarBot
+- **GrammarBot Grammar**: Automatic grammar checking with debounced text analysis
 - **Request Cancellation**: AbortSignal support for grammar checking requests
 - **Smart LT Boundary Detection**: Multi-signal boundary detection using replacement signals, message analysis, and structural patterns
 - **CWS Comma Policy**: Intelligent filtering that preserves Oxford/serial commas while filtering clause-structuring commas
@@ -59,12 +59,17 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
    npm install
    ```
 
-2. Start the development server:
+2. Set up GrammarBot API key:
+   - Get your API key from [https://neural.grammarbot.io/](https://neural.grammarbot.io/)
+   - Create a `.env.local` file in the project root
+   - Add your API key: `GRAMMARBOT_API_KEY=your_api_key_here`
+
+3. Start the development server:
    ```bash
    npm run dev
    ```
 
-3. Open [http://localhost:3000](http://localhost:3000) in your browser
+4. Open [http://localhost:3000](http://localhost:3000) in your browser
 
 ## Development Scripts
 
@@ -82,7 +87,7 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 ### Written Expression Tab
 1. Paste student writing in the text area
 2. Set the probe time duration (mm:ss format) for fluency calculations
-3. LanguageTool provides professional spell checking via API
+3. GrammarBot provides professional spell checking via API
 4. Grammar checking runs automatically as you type (debounced)
 5. Review the 6 key metrics in the right column grid
 6. Check infractions and suggestions (always visible)
@@ -108,7 +113,7 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 ## Scoring Guidelines
 
 - **TWW**: All words written; include misspellings; exclude numerals
-- **WSC**: Words spelled correctly in isolation (dictionary packs + custom lexicon)
+- **WSC**: Words spelled correctly in isolation (GrammarBot + custom lexicon)
 - **CWS**: Adjacent units (words & essential punctuation). Commas excluded. Initial valid word counts 1. Capitalize after terminals
 - **CLS**: Counts boundary + adjacent letter pairs per target word (partial knowledge credit)
 
@@ -152,7 +157,33 @@ The CWS (Correct Writing Sequences) engine implements strictly mechanical, CBM-a
 
 ## Spell Checking & Grammar
 
-### LanguageTool Integration
+### GrammarBot Integration
+- **API-based Spell Checking**: Uses GrammarBot's neural API for professional spell checking
+- **Enhanced Spelling Detection**: Neural network-based detection for typos and grammar issues
+- **Language Variant Support**: Uses `en-US` variant for optimal spelling and grammar detection
+- **Complete Category Support**: Processes all standard grammar categories (spelling, grammar, style, punctuation)
+- **Intelligent Rule Mapping**: Maps grammar issues to user-friendly messages
+- **Development Debugging**: Console logging for GrammarBot parity checks
+- **Automatic Grammar Checking**: Grammar analysis runs automatically as you type with debounce
+- **Status Tracking**: Visual badge shows GrammarBot spell checking mode
+- **Spelling Suggestions**: Built-in GrammarBot suggestion engine for misspelled words
+- **Tooltip Integration**: Suggestions appear in word tooltips when words are flagged
+- **Spell Result Caching**: Intelligent in-memory caching for GrammarBot API responses
+- **Rate Limiting**: Automatic exponential backoff for API rate limits
+- **Request Cancellation**: AbortSignal support for canceling stale requests
+
+### GrammarBot Grammar
+- **Automatic Grammar Checking**: Runs automatically as you type with 800ms debounce
+- **Request Cancellation**: AbortSignal support prevents stale grammar check results
+- **Server Proxy**: Uses Next.js API route to keep API key secure
+- **Advisory-only suggestions** (doesn't affect CBM scores)
+- **Status Indicators**: Visual feedback showing grammar check status (idle/checking/ok/error)
+- **CWS Boundary Mapping**: Grammar issues mapped to nearest CWS boundaries
+- **Advisory Hints**: Grammar suggestions shown as yellow carets and advisory infractions
+- **Smart Filtering**: Only grammar issues (not spelling/punctuation) mapped to boundaries
+- **Grammar Mode Badge**: Always-visible indicator showing current grammar configuration
+
+### LanguageTool Integration (Legacy)
 - **API-based Spell Checking**: Uses LanguageTool's public API for professional spell checking
 - **Enhanced Spelling Detection**: Properly configured to detect typos (MORFOLOGIK_RULE_* patterns) alongside grammar issues
 - **Language Variant Support**: Uses `en-US` variant and `preferredVariants` for auto-detection to ensure spelling rules remain active
@@ -212,8 +243,8 @@ The CWS (Correct Writing Sequences) engine implements strictly mechanical, CBM-a
 The application is configured for optimal Netlify deployment:
 
 1. **Automatic Build**: Netlify will run `npm run build` automatically
-2. **API Functions**: LanguageTool proxy routes are deployed as Netlify Functions
-3. **Smart Fallback**: Grammar checking automatically falls back to public API if functions aren't available
+2. **API Functions**: GrammarBot proxy routes are deployed as Netlify Functions
+3. **Environment Variables**: Set `GRAMMARBOT_API_KEY` in Netlify environment variables
 4. **Configuration**: Uses `netlify.toml` with Next.js plugin for proper function deployment
 
 ### Production Build
@@ -248,23 +279,22 @@ The application is optimized for production deployment with minimal runtime requ
 ## Privacy & Compliance
 
 ### FERPA/COPPA Compliance
-- **Default Local-Only Mode**: Grammar checking is disabled by default to protect student privacy
-- **No Data Collection**: Student text never leaves the browser unless explicitly enabled
+- **API Key Required**: GrammarBot requires an API key for cloud-based grammar checking
+- **Secure Proxy**: API key is kept secure on the server side, never exposed to the browser
+- **No Data Collection**: Student text is only sent to GrammarBot for grammar checking
 - **Session Data Clearing**: One-click session data clearing for privacy-conscious environments
 - **Transparent Privacy**: Clear indicators show when cloud services are enabled
 - **Educational Focus**: Designed specifically for school environments with privacy requirements
 
 ### Privacy Controls
-- **Privacy Toggle**: Easy enable/disable of cloud grammar checking
-- **Settings UI**: Intuitive configuration with gear icon settings popover
-- **Self-hosted Support**: Use your own LanguageTool instance for complete control
+- **Secure API Key**: API key is stored securely on the server side
 - **Rate Limiting**: Automatic handling of API rate limits with exponential backoff
 - **Clear Session Data**: Complete reset of all settings and student text
 
 ### License Compliance
-- **LanguageTool Attribution**: Proper attribution for LanguageTool API usage
-- **API Usage**: Compliant with LanguageTool's terms of service
-- **Privacy Controls**: FERPA/COPPA compliant with local-only mode by default
+- **GrammarBot Attribution**: Proper attribution for GrammarBot API usage
+- **API Usage**: Compliant with GrammarBot's terms of service
+- **Privacy Controls**: FERPA/COPPA compliant with secure API key handling
 
 ## Debugging
 
@@ -364,9 +394,9 @@ If virtual terminal groups are not appearing or functioning correctly:
 ## Extensibility
 
 The tool is designed for easy extension:
-- **LanguageTool API**: Professional spell checking and grammar analysis with comprehensive support
-- **Multi-language Ready**: LanguageTool supports 40+ languages out of the box
-- **Advanced Grammar**: Add POS-based rules for enhanced grammar checking
+- **GrammarBot API**: Professional spell checking and grammar analysis with neural network support
+- **Multi-language Ready**: GrammarBot supports multiple languages with neural processing
+- **Advanced Grammar**: Neural network-based grammar checking with high accuracy
 - **API Extensions**: Easy integration with additional language services
 - **Performance Optimization**: Intelligent caching and request management
 - **Export Extensions**: Easy to add new export formats (JSON, XML, etc.)
@@ -374,7 +404,17 @@ The tool is designed for easy extension:
 
 ## Recent Updates
 
-### Latest Improvements (v5.2) - API Proxy Rule Filtering Fix
+### Latest Improvements (v6.0) - GrammarBot Integration
+- **Complete Migration**: Migrated from LanguageTool to GrammarBot for all grammar and spell checking
+- **Neural Network Processing**: Now uses GrammarBot's neural API for enhanced accuracy
+- **Secure API Proxy**: Server-side API key handling keeps credentials secure
+- **Simplified Architecture**: Removed complex LanguageTool configuration and settings
+- **Enhanced Performance**: Streamlined grammar checking with neural network processing
+- **Updated UI**: All labels and indicators now reflect GrammarBot integration
+- **API Key Setup**: Simple environment variable configuration for GrammarBot API key
+- **Maintained Compatibility**: All existing features work seamlessly with GrammarBot
+
+### Previous Improvements (v5.2) - API Proxy Rule Filtering Fix
 - **Fixed Rule Filtering**: Updated API proxy to properly handle form data and prevent artificial rule restrictions
 - **Full Grammar Checking**: Client now explicitly requests comprehensive checks with `level=default` and `enabledOnly=false`
 - **Enhanced Debug Logging**: Added detailed request parameter logging and match count tracking
