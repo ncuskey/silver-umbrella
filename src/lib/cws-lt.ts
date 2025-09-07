@@ -2,6 +2,7 @@
 import type { Token } from "@/lib/spell/types";
 import type { GrammarIssue } from "@/lib/spell/types";
 import { ESSENTIAL_PUNCT } from "@/lib/cws";
+import { DEBUG, dgroup, dtable, dlog } from "@/lib/utils";
 
 const isWord = (t: Token) => t.type === "WORD";
 const isEssentialPunct = (t: Token) => t.type === "PUNCT" && ESSENTIAL_PUNCT.has(t.raw);
@@ -259,6 +260,14 @@ export function buildTerminalGroups(
 }
 
 export function buildLtCwsHints(text: string, tokens: Token[], issues: GrammarIssue[]) {
+  if (DEBUG) {
+    dgroup("[CWS/LT] tokens", () => dtable("tokens", tokens.map(t => ({
+      idx: t.idx, raw: t.raw, type: t.type, start: t.start, end: t.end
+    }))));
+    dgroup("[CWS/LT] raw issues", () => dtable("issues", issues.map(m => ({
+      off: m.offset, len: m.length, rule: m.ruleId, cat: m.categoryId, msg: m.message
+    }))));
+  }
   const hints = new Map<number, CwsHint>();
   const units = unitIndices(tokens);
 

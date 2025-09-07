@@ -13,7 +13,7 @@ import type { CwsPair } from "@/lib/cws";
 import { buildLtCwsHints, convertLTTerminalsToInsertions, buildTerminalGroups, type TerminalGroup } from "@/lib/cws-lt";
 import type { CwsHint } from "@/lib/cws-lt";
 import { detectMissingTerminalInsertions, VirtualTerminalInsertion, createVirtualTerminals, VirtualTerminal } from "@/lib/cws-heuristics";
-import { cn } from "@/lib/utils";
+import { cn, DEBUG, dgroup, dtable, dlog } from "@/lib/utils";
 import { toCSV, download } from "@/lib/export";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
@@ -149,19 +149,24 @@ function tokenize(text: string): Token[] {
 
 function insertVirtualTerminals(base: Token[], inserts: VirtualTerminalInsertion[]): DisplayToken[] {
   const out: DisplayToken[] = base.map(t => ({ ...t }));
-  // Sort DESC by boundary so indexes stay valid as we splice
   const sorted = [...inserts].sort((a, b) => b.beforeBIndex - a.beforeBIndex);
   for (const ins of sorted) {
-    const at = ins.beforeBIndex + 1; // between base[at-1] and base[at]
+    const at = ins.beforeBIndex + 1;
+    dlog("[VT] insert", { at, char: ins.char, beforeBIndex: ins.beforeBIndex });
     out.splice(at, 0, {
       raw: ins.char,
-      type: "PUNCT",          // treat as punctuation
-      essential: true,        // essential terminal punctuation for CWS
-      virtual: true,          // UI styling + scoring guard
+      type: "PUNCT",
+      essential: true,
+      virtual: true,
       display: ins.char,
-      idx: -1,                // not from the original text
+      idx: -1,
     } as DisplayToken);
   }
+  DEBUG && dgroup("[VT] displayTokens after insert", () => {
+    dtable("displayTokens", out.map((t, i) => ({
+      i, raw: t.raw, type: t.type, idx: (t as any).idx, virtual: (t as any).virtual
+    })));
+  });
   return out;
 }
 
@@ -429,7 +434,10 @@ function InfractionList({
             : undefined;
 
         const RowTag = maybeGroup ? "button" : "div";
-        const onClick = maybeGroup ? () => cycleGroup?.(maybeGroup) : undefined;
+        const onClick = maybeGroup ? () => {
+          dlog("[VT] suggestion click", { boundary: f.at, group: vtByBoundary.get(f.at as number) });
+          cycleGroup?.(maybeGroup);
+        } : undefined;
 
         return (
           <RowTag
@@ -759,6 +767,7 @@ function WritingScorer() {
     () => createVirtualTerminals(terminalInsertions, tokens, displayTokens),
     [terminalInsertions, tokens, displayTokens]
   );
+  DEBUG && dgroup("[VT] virtualTerminals (groups)", () => dlog(virtualTerminals));
 
   // Find a virtual terminal by dot index (you already pass them down with scoring)
   const vtByDotIndex = useMemo(() => {
@@ -766,6 +775,9 @@ function WritingScorer() {
     for (const v of virtualTerminals) m.set(v.dotTokenIndex, v);
     return m;
   }, [virtualTerminals]);
+  DEBUG && dgroup("[VT] vtByDotIndex", () =>
+    dtable("map", [...vtByDotIndex.entries()].map(([k, v]) => ({ dotIndex: k, left: v.leftBoundaryBIndex, right: v.rightBoundaryBIndex })))
+  );
 
   const vtByBoundary = useMemo(() => {
     const m = new Map<number, VirtualTerminal>();
@@ -775,6 +787,9 @@ function WritingScorer() {
     }
     return m;
   }, [virtualTerminals]);
+  DEBUG && vtByBoundary && dgroup("[VT] vtByBoundary", () =>
+    dtable("map", [...vtByBoundary.entries()].map(([k, v]) => ({ boundary: k, dot: v.dotTokenIndex })))
+  );
 
   // 3) create a quick map of advisory carets around each virtual terminal
   const virtualBoundaryHints = useMemo(() => {
@@ -1242,6 +1257,7 @@ function WritingScorer() {
                       }
                       onClick={() => {
                         if (vt) {
+                          dlog("[VT] dot click", { dotIndex: i, hasGroup: !!vt, vt });
                           cycleGroup(vt);
                         } else if (isWordTok) {
                           setOverrides((o) => ({ ...o, [tok.idx]: { ...(o[tok.idx] as WordOverride), csw: !(effectiveOk) } }));
