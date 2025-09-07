@@ -46,7 +46,7 @@
 │   │   │   └── languagetool-client.ts # LanguageTool API client with privacy controls
 │   │   ├── cws.ts             # CWS (Correct Writing Sequences) engine
 │   │   ├── cws-core.ts        # Pure CWS scoring functions for testing
-│   │   ├── cws-lt.ts          # CWS-LanguageTool integration for advisory hints
+│   │   ├── cws-lt.ts          # CWS-LanguageTool integration for advisory hints and terminal groups
 │   │   ├── cws-heuristics.ts  # Virtual terminal insertion detection system
 │   │   ├── export.ts          # CSV and PDF export utilities
 │   │   └── utils.ts           # Utility functions (cn helper)
@@ -101,6 +101,7 @@
 - `SpellingScorer`: Spelling assessment tool
 - `SentenceList`: Displays parsed sentences
 - `InfractionList`: Shows flagged issues
+- `TerminalSuggestions`: Displays terminal groups as clickable suggestions with bulk toggle functionality
 
 ### Scoring Algorithms
 
@@ -255,6 +256,18 @@ interface CwsHint {
 - **Enhanced Category Filtering**: Properly excludes spelling issues (TYPOS, MORFOLOGIK_RULE_*) from CWS boundary mapping
 - **Advisory Hints**: Grammar suggestions shown as yellow carets and advisory infractions
 - **Override Awareness**: Advisory hints disappear when users explicitly override boundary states
+
+#### Terminal Group System
+- `buildTerminalGroups()`: Groups LT punctuation/grammar issues with three related carets
+- `deriveTerminalFromLT()`: Analyzes LT issues to find terminal punctuation problems
+- `convertLTTerminalsToInsertions()`: Converts LT-derived terminals to VirtualTerminalInsertion format
+- **Three-Caret Structure**: Each group contains groupLeftCaret, primaryCaret, and groupRightCaret
+- **Smart Boundary Detection**: Uses LT match offset/length to find primary caret, then expands to sentence boundaries
+- **LT Rule Detection**: Specifically handles PUNCTUATION_PARAGRAPH_END and UPPERCASE_SENTENCE_START rules
+- **Defensive Text Matching**: Uses regex patterns to catch other sentence/punctuation issues LT might report
+- **Bulk Toggle Operations**: One-click cycling of all three carets simultaneously
+- **Independent Groups**: Each terminal group operates independently without cross-coupling
+- **Edge Case Handling**: Properly handles start-of-text and end-of-text boundaries
 
 ### Missing Punctuation Detection (`src/lib/cws-heuristics.ts`)
 

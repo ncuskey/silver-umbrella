@@ -10,7 +10,7 @@ import { Info, AlertTriangle, ListChecks, Settings } from "lucide-react";
 import type { GrammarIssue, Token } from "@/lib/spell/types";
 import { buildCwsPairs, ESSENTIAL_PUNCT } from "@/lib/cws";
 import type { CwsPair } from "@/lib/cws";
-import { buildLtCwsHints } from "@/lib/cws-lt";
+import { buildLtCwsHints, convertLTTerminalsToInsertions, buildTerminalGroups, type TerminalGroup } from "@/lib/cws-lt";
 import type { CwsHint } from "@/lib/cws-lt";
 import { detectMissingTerminalInsertions, VirtualTerminalInsertion, createVirtualTerminals, VirtualTerminal } from "@/lib/cws-heuristics";
 import { cn } from "@/lib/utils";
@@ -259,34 +259,41 @@ function isComma(tok: Token)    { return tok.type === "PUNCT" && tok.raw === ","
 function isHyphen(tok: Token)   { return tok.type === "PUNCT" && tok.raw === "-"; }
 
 // helper to decide caret visual for a boundary
-function caretStateForBoundary(bIndex: number, pairByBoundary: Map<number, CwsPair>, pairOverrides: PairOverrides, advisoryHints: Map<number, { message: string }>) {
+function caretStateForBoundary(bIndex: number, pairByBoundary: Map<number, CwsPair>, pairOverrides: PairOverrides, advisoryHints: Map<number, { message: string }>, highlightedGroup?: TerminalGroup | null) {
   const pair = pairByBoundary.get(bIndex);
-  if (!pair) return { eligible: false as const, state: "muted" as const, reason: "none" };
+  if (!pair) return { eligible: false as const, state: "muted" as const, reason: "none", highlighted: false };
 
   const ov = pairOverrides[bIndex]?.cws;
   const advisory = advisoryHints.get(bIndex);
+
+  // Check if this caret is part of the highlighted group
+  const highlighted = highlightedGroup && (
+    bIndex === highlightedGroup.groupLeftCaret ||
+    bIndex === highlightedGroup.primaryCaret ||
+    bIndex === highlightedGroup.groupRightCaret
+  );
 
   // default validity (mechanical CWS)
   const baseValid = pair.valid;
 
   // final state machine
-  if (!pair.eligible) return { eligible: false as const, state: "muted" as const, reason: "none" };
+  if (!pair.eligible) return { eligible: false as const, state: "muted" as const, reason: "none", highlighted: !!highlighted };
 
-  if (ov === false) return { eligible: true as const, state: "bad" as const, reason: pair.reason || "rule" };
-  if (ov === true)  return { eligible: true as const, state: "ok"  as const, reason: "override-ok" };
+  if (ov === false) return { eligible: true as const, state: "bad" as const, reason: pair.reason || "rule", highlighted: !!highlighted };
+  if (ov === true)  return { eligible: true as const, state: "ok"  as const, reason: "override-ok", highlighted: !!highlighted };
 
   // If this boundary touches a virtual terminal and user hasn't overridden it, keep it advisory (yellow)
   if (pair.virtualBoundary) {
     if (ov === undefined) {
-      return { eligible: true as const, state: "advisory" as const, reason: advisory?.message || "Inserted virtual terminal" };
+      return { eligible: true as const, state: "advisory" as const, reason: advisory?.message || "Inserted virtual terminal", highlighted: !!highlighted };
     }
   }
 
   // no override -> show advisory if base is ok but LT flagged the boundary
-  if (baseValid && advisory) return { eligible: true as const, state: "advisory" as const, reason: advisory.message };
+  if (baseValid && advisory) return { eligible: true as const, state: "advisory" as const, reason: advisory.message, highlighted: !!highlighted };
 
   // otherwise show base state
-  return { eligible: true as const, state: baseValid ? "ok" : "bad", reason: pair.reason || "rule" };
+  return { eligible: true as const, state: baseValid ? "ok" : "bad", reason: pair.reason || "rule", highlighted: !!highlighted };
 }
 
 function cycleCaret(bIndex: number, pairOverrides: PairOverrides, setPairOverrides: React.Dispatch<React.SetStateAction<PairOverrides>>) {
@@ -297,6 +304,41 @@ function cycleCaret(bIndex: number, pairOverrides: PairOverrides, setPairOverrid
     if (next === undefined) delete clone[bIndex];
     else clone[bIndex] = { cws: next };
     return clone;
+  });
+}
+
+// Bulk toggle functionality for terminal groups
+function cycleState(s: "yellow" | "red" | "green") {
+  return s === "yellow" ? "red" : s === "red" ? "green" : "yellow";
+}
+
+function bulkToggleCarets(
+  indexes: number[], 
+  mode: "cycle" | "setRed" | "setGreen" = "cycle",
+  pairOverrides: PairOverrides,
+  setPairOverrides: React.Dispatch<React.SetStateAction<PairOverrides>>
+) {
+  setPairOverrides(prev => {
+    const next = { ...prev };
+    for (const i of indexes) {
+      const cur = next[i]?.cws;
+      let newState: boolean | undefined;
+      
+      if (mode === "cycle") {
+        newState = cur === undefined ? false : cur === false ? true : undefined;
+      } else if (mode === "setRed") {
+        newState = false;
+      } else if (mode === "setGreen") {
+        newState = true;
+      }
+      
+      if (newState === undefined) {
+        delete next[i];
+      } else {
+        next[i] = { cws: newState };
+      }
+    }
+    return next;
   });
 }
 
@@ -387,6 +429,45 @@ function InfractionList({ items }: { items: Infraction[] }) {
   );
 }
 
+function TerminalSuggestions({ 
+  groups, 
+  onGroupClick,
+  onGroupHover,
+  onGroupLeave
+}: { 
+  groups: TerminalGroup[]; 
+  onGroupClick: (group: TerminalGroup) => void;
+  onGroupHover?: (group: TerminalGroup) => void;
+  onGroupLeave?: () => void;
+}) {
+  if (!groups.length) return null;
+  
+  return (
+    <div className="space-y-2">
+      <div className="text-sm font-medium text-blue-700">Terminal Punctuation Suggestions</div>
+      {groups.map((group, i) => (
+        <div
+          key={i}
+          className="text-sm p-2 rounded-xl border border-blue-300 bg-blue-50 cursor-pointer hover:bg-blue-100 hover:border-blue-400 transition-all duration-200 hover:shadow-sm"
+          onClick={() => onGroupClick(group)}
+          onMouseEnter={() => onGroupHover?.(group)}
+          onMouseLeave={() => onGroupLeave?.()}
+          title="Click to toggle all related carets (left, primary, right)"
+        >
+          <div className="flex items-center gap-2">
+            <ListChecks className="h-4 w-4 text-blue-600" />
+            <Badge variant="outline" className="text-blue-700 border-blue-400">TERMINAL</Badge>
+            <span className="text-blue-800">{group.message}</span>
+            <span className="text-xs text-blue-600 ml-auto">
+              Carets: {group.groupLeftCaret}, {group.primaryCaret}, {group.groupRightCaret}
+            </span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function WritingScorer() {
   const [text, setText] = useState<string>(
     "It was dark. nobody could see the trees of the forest The Terrible Day\n\nI woud drink water from the ocean and I woud eat the fruit off of the trees Then I woud bilit a house out of trees and I woud gather firewood to stay warm I woud try and fix my boat in my spare time"
@@ -395,6 +476,9 @@ function WritingScorer() {
   const [pairOverrides, setPairOverrides] = useState<PairOverrides>({});
   // Always-on flags (since the toggle is gone)
   const showInfractions = true;
+  
+  // State for highlighting terminal groups on hover
+  const [highlightedGroup, setHighlightedGroup] = useState<TerminalGroup | null>(null);
 
   // If code referenced custom lexicon, freeze it empty:
   const customLexicon = useMemo(() => new Set<string>(), []);
@@ -633,10 +717,15 @@ function WritingScorer() {
   );
   
   // 1) base tokens exist already as `tokens` from your tokenizer
-  const terminalInsertions = useMemo(
-    () => detectMissingTerminalInsertions(text, tokens),
-    [text, tokens]
-  );
+  // Use LT-derived terminals when LT is available, otherwise fall back to heuristics
+  const terminalInsertions = useMemo(() => {
+    // If we have LT issues, use LT-derived terminals instead of heuristics
+    if (ltIssues && ltIssues.length > 0) {
+      return convertLTTerminalsToInsertions(tokens, ltIssues);
+    }
+    // Fall back to heuristics when LT is not available
+    return detectMissingTerminalInsertions(text, tokens);
+  }, [text, tokens, ltIssues]);
 
   // 2) insert virtual terminals for display + scoring
   const displayTokens = useMemo(
@@ -744,6 +833,26 @@ function WritingScorer() {
     ltHintsMap.forEach((h, k) => m.set(k, h));
     return m;
   }, [virtualBoundaryHints, ltHintsMap]);
+
+  // Build terminal groups from LT issues
+  const terminalGroups = useMemo(() => {
+    // Create a map of caret states for the terminal groups function
+    const caretStateMap = new Map<number, "yellow" | "red" | "green">();
+    
+    // Populate caret states based on pair overrides
+    for (const [bIndex, override] of Object.entries(pairOverrides)) {
+      const index = parseInt(bIndex);
+      if (override.cws === true) {
+        caretStateMap.set(index, "green");
+      } else if (override.cws === false) {
+        caretStateMap.set(index, "red");
+      } else {
+        caretStateMap.set(index, "yellow");
+      }
+    }
+    
+    return buildTerminalGroups(tokens, caretStateMap, ltIssues);
+  }, [tokens, pairOverrides, ltIssues]);
 
   // Fast lookup maps
   const pairByBoundary = useMemo(() => {
@@ -1017,12 +1126,15 @@ function WritingScorer() {
             <div className="mt-3 flex flex-wrap gap-1 p-3 rounded-2xl bg-muted/40">
               {/* initial caret uses bIndex = -1 */}
               {(() => {
-                const { eligible, state, reason } = caretStateForBoundary(-1, pairByBoundary, pairOverrides, advisoryHints);
-                const cls =
+                const { eligible, state, reason, highlighted } = caretStateForBoundary(-1, pairByBoundary, pairOverrides, advisoryHints, highlightedGroup);
+                const baseCls =
                   state === "muted"    ? "text-slate-300"
                 : state === "ok"       ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
                 : state === "advisory" ? "bg-amber-100 text-amber-800 border border-amber-300"
                 :                        "bg-red-100 text-red-700 border border-red-300";
+                
+                const highlightCls = highlighted ? "ring-2 ring-blue-400 ring-opacity-50 shadow-lg" : "";
+                const cls = `${baseCls} ${highlightCls}`;
 
                 const title =
                   !eligible ? "Not counted for CWS (comma/quote/etc.)"
@@ -1034,7 +1146,7 @@ function WritingScorer() {
                   <button
                     type="button"
                     onClick={() => eligible && cycleCaret(-1, pairOverrides, setPairOverrides)}
-                    className={`mx-1 px-1 rounded ${cls}`}
+                    className={`mx-1 px-1 rounded transition-all duration-200 ${cls}`}
                     title={title}
                   >
                     ^
@@ -1115,12 +1227,15 @@ function WritingScorer() {
                     {/* CARET */}
                     {i < displayTokens.length - 1 && (
                       (() => {
-                        const { eligible, state, reason } = caretStateForBoundary(i, pairByBoundary, pairOverrides, advisoryHints);
-                        const cls =
+                        const { eligible, state, reason, highlighted } = caretStateForBoundary(i, pairByBoundary, pairOverrides, advisoryHints, highlightedGroup);
+                        const baseCls =
                           state === "muted"    ? "text-slate-300"
                         : state === "ok"       ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
                         : state === "advisory" ? "bg-amber-100 text-amber-800 border border-amber-300"
                         :                        "bg-red-100 text-red-700 border border-red-300";
+                        
+                        const highlightCls = highlighted ? "ring-2 ring-blue-400 ring-opacity-50 shadow-lg" : "";
+                        const cls = `${baseCls} ${highlightCls}`;
 
                         const title =
                           !eligible ? "Not counted for CWS (comma/quote/etc.)"
@@ -1132,7 +1247,7 @@ function WritingScorer() {
                           <button
                             type="button"
                             onClick={() => eligible && cycleCaret(i, pairOverrides, setPairOverrides)}
-                            className={`mx-1 px-1 rounded ${cls}`}
+                            className={`mx-1 px-1 rounded transition-all duration-200 ${cls}`}
                             title={title}
                           >
                             ^
@@ -1202,6 +1317,19 @@ function WritingScorer() {
             <div>
               <div className="mb-2 text-sm font-medium">Infractions &amp; Suggestions</div>
               <InfractionList items={infractions} />
+              <TerminalSuggestions 
+                groups={terminalGroups}
+                onGroupClick={(group) => {
+                  bulkToggleCarets(
+                    [group.groupLeftCaret, group.primaryCaret, group.groupRightCaret],
+                    "cycle",
+                    pairOverrides,
+                    setPairOverrides
+                  );
+                }}
+                onGroupHover={(group) => setHighlightedGroup(group)}
+                onGroupLeave={() => setHighlightedGroup(null)}
+              />
             </div>
           </div>
         </div>

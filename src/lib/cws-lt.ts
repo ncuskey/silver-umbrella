@@ -70,6 +70,187 @@ function isCwsCategory(issue: GrammarIssue) {
 }
 
 /** Attach LT hints to the nearest eligible CWS boundary (within ±2 chars). */
+const isPunctOrGrammar = (m: any) => {
+  const cat = (m.category?.id || "").toUpperCase();
+  return cat === "PUNCTUATION" || cat === "GRAMMAR";
+};
+
+// Rules that indicate sentence-end problems straight from LT:
+const LT_TERMINAL_RULE_IDS = new Set<string>([
+  "PUNCTUATION_PARAGRAPH_END",   // "No punctuation mark at the end of paragraph"
+  "SENTENCE_WHITESPACE"          // "Missing space between sentences"
+]);
+
+// Defensive text-match for other sentence/punctuation wordings LT uses
+const looksLikeSentenceEndMsg = (msg: string) =>
+  /(?:missing|no)\s+(?:[.!?]|punctuation).*?(?:sentence|end|paragraph)/i.test(msg);
+
+export function deriveTerminalFromLT(tokens: Token[], issues: any[]) {
+  const carets = new Set<number>(); // caret index = position *between* tokens
+
+  // A) End-of-paragraph punctuation
+  for (const m of issues) {
+    const rId = (m.rule?.id || "").toUpperCase();
+    if (!LT_TERMINAL_RULE_IDS.has(rId)) continue;
+
+    // anchor at the boundary after the last token covered by the match
+    const endChar = m.offset + m.length;
+    const leftTok = tokens.findLast(t => (t.end ?? 0) <= endChar);
+    if (leftTok) {
+      carets.add(leftTok.idx);
+    }
+  }
+
+  // B) Missing boundary *inside* a paragraph (e.g., "forest The", "trees Then")
+  for (const m of issues) {
+    if (!isPunctOrGrammar(m)) continue;
+    const msg = m.message || "";
+    const rId = (m.rule?.id || "").toUpperCase();
+
+    // Check for UPPERCASE_SENTENCE_START rule specifically
+    if (rId === "UPPERCASE_SENTENCE_START") {
+      // Find the token that starts right after the issue offset
+      const tokenAfterIssue = tokens.find(t => (t.start ?? 0) >= m.offset + m.length);
+      if (tokenAfterIssue && tokenAfterIssue.type === "WORD" && /^[A-Z]/.test(tokenAfterIssue.raw)) {
+        // Find the previous word token
+        const prevWordIdx = tokenAfterIssue.idx - 1;
+        if (prevWordIdx >= 0) {
+          const prevToken = tokens[prevWordIdx];
+          if (prevToken && prevToken.type === "WORD") {
+            carets.add(prevWordIdx);
+          }
+        }
+      }
+    }
+
+    // Heuristic, but **driven by LT** (not our old detector):
+    if (!LT_TERMINAL_RULE_IDS.has(rId) && !looksLikeSentenceEndMsg(msg)) continue;
+
+    // find the token that starts *right after* the match
+    const after = m.offset + m.length;
+    const next = tokens.find(t => (t.start ?? 0) >= after);
+    const prevIdx = next ? next.idx - 1 : tokens.length - 1;
+
+    // require no punctuation in between and the next token to be capitalized (The, Then, I, ...)
+    const prev = tokens[prevIdx];
+    if (!prev || prev.type !== "WORD") continue;
+    const nextWord = next && next.type === "WORD" ? next : null;
+    if (!nextWord) continue;
+
+    const gap = (prev.end ?? 0) === (next.start ?? 0) || /^[ \t]+$/.test(
+      (prev.end ?? 0) < (next.start ?? 0) ? "" : "" // you already know they're adjacent; spaces-only gap is okay
+    );
+    const capitalized = /^[A-Z]/.test(nextWord.raw);
+
+    if (gap && capitalized) carets.add(prevIdx);
+  }
+
+  return carets;
+}
+
+// Convert LT-derived terminals to VirtualTerminalInsertion format
+export function convertLTTerminalsToInsertions(tokens: Token[], issues: any[]): Array<{
+  beforeBIndex: number;
+  message: string;
+  char: "." | "!" | "?";
+  reason: "LT";
+}> {
+  const carets = deriveTerminalFromLT(tokens, issues);
+  const insertions: Array<{
+    beforeBIndex: number;
+    message: string;
+    char: "." | "!" | "?";
+    reason: "LT";
+  }> = [];
+
+  for (const caretIdx of carets) {
+    // Find the token at this boundary
+    const tokenIdx = caretIdx;
+    if (tokenIdx >= 0 && tokenIdx < tokens.length) {
+      insertions.push({
+        beforeBIndex: tokenIdx,
+        message: "Possible missing sentence-ending punctuation (from LanguageTool).",
+        char: ".",
+        reason: "LT"
+      });
+    }
+  }
+
+  return insertions;
+}
+
+export type TerminalGroup = {
+  ruleId: string;
+  message: string;
+  tokenRange: [number, number];     // inclusive token indices of the chunk
+  groupLeftCaret: number;           // caret before tokenRange[0]
+  primaryCaret: number;             // caret at proposed punctuation location
+  groupRightCaret: number;          // caret after tokenRange[1]
+};
+
+const overlaps = (a0: number, a1: number, b0: number, b1: number) => a0 < b1 && a1 > b0;
+
+function caretBetweenToken(i: number) { return i; }  // 0..tokens.length-1
+function leftCaretOfToken(i: number) { return i - 1; }
+function rightCaretOfToken(i: number) { return i; }
+
+export function buildTerminalGroups(
+  tokens: Token[],
+  carets: Map<number, "yellow" | "red" | "green">,
+  ltIssues: any[]
+): TerminalGroup[] {
+  const groups: TerminalGroup[] = [];
+
+  const isPunctOrGrammar = (m: any) => {
+    const cat = (m.category?.id || "").toUpperCase();
+    return cat === "PUNCTUATION" || cat === "GRAMMAR";
+  };
+
+  for (const m of ltIssues) {
+    const rid = (m.rule?.id || "").toUpperCase();
+    const msg = m.message || "";
+
+    // only use punctuation/grammar LT issues as anchors
+    if (!isPunctOrGrammar(m)) continue;
+
+    // primary caret: boundary immediately after the match span
+    const end = m.offset + m.length;
+    const nextTokIdx = tokens.findIndex(t => (t.start ?? 0) >= end);
+    const boundary = Math.max(0, (nextTokIdx === -1 ? tokens.length : nextTokIdx) - 1);
+    const primaryCaret = caretBetweenToken(boundary);
+
+    // expand to group edges: walk to nearest non-yellow caret on each side
+    const lastCaret = tokens.length; // carets are 0..tokens.length
+    let left = primaryCaret - 1;
+    while (left > 0 && (carets.get(left) ?? "yellow") === "yellow") left--;
+    if (left < 0) left = 0;
+
+    let right = primaryCaret + 1;
+    while (right < lastCaret && (carets.get(right) ?? "yellow") === "yellow") right++;
+    if (right > lastCaret) right = lastCaret;
+
+    // compute token range spanned by [left,right]
+    const startTok = Math.max(0, right === 0 ? 0 : right - 1);
+    const endTok = Math.min(tokens.length - 1, left);
+
+    const tokenRange: [number, number] = [
+      Math.max(0, primaryCaret), // safe lower bound
+      Math.min(tokens.length - 1, primaryCaret) // safe upper bound
+    ];
+
+    groups.push({
+      ruleId: rid,
+      message: msg,
+      tokenRange,
+      groupLeftCaret: left,
+      primaryCaret,
+      groupRightCaret: right
+    });
+  }
+
+  return groups;
+}
+
 export function buildLtCwsHints(text: string, tokens: Token[], issues: GrammarIssue[]) {
   const hints = new Map<number, CwsHint>();
   const units = unitIndices(tokens);
