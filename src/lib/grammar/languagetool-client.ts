@@ -1,4 +1,5 @@
 import type { GrammarChecker, GrammarIssue } from "@/lib/spell/types";
+import { DEBUG, dgroup, dtable, dlog } from "@/lib/utils";
 
 // Configuration functions for LanguageTool settings
 const defaultBase = process.env.NEXT_PUBLIC_LT_BASE_URL || "https://api.languagetool.org";
@@ -119,6 +120,9 @@ async function doCheck(baseUrl: string, text: string, lang: string, signal?: Abo
     body.set("language", "en-US");
   }
   
+  DEBUG && dgroup("[LT] request", () => {
+    dlog({ url: endpoint, body: body.toString() });
+  });
   const response = await fetch(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -157,14 +161,48 @@ export function createLanguageToolChecker(
       try {
         if (active !== "public") {
           const r1 = await tryCheck(proxyBase, text, lang, signal, level);
-          if (r1.ok) { active = "proxy"; return mapIssues(await r1.json()); }
+          if (r1.ok) { 
+            const json = await r1.json();
+            DEBUG && dgroup("[LT] response", () => {
+              dlog({ matches: json?.matches?.length ?? 0 });
+              if (json?.matches) {
+                const byCat: Record<string, number> = {};
+                const byRule: Record<string, number> = {};
+                for (const m of json.matches) {
+                  byCat[m?.rule?.category?.id || "?"] = (byCat[m?.rule?.category?.id || "?"] || 0) + 1;
+                  byRule[m?.rule?.id || "?"] = (byRule[m?.rule?.id || "?"] || 0) + 1;
+                }
+                dtable("by category", Object.entries(byCat).map(([category,count])=>({category,count})));
+                dtable("by rule", Object.entries(byRule).map(([ruleId,count])=>({ruleId,count})));
+              }
+            });
+            active = "proxy"; 
+            return mapIssues(json); 
+          }
           if ([404,405,500].includes(r1.status)) active = "public";
         }
       } catch { active = "public"; }
 
       // fallback or sticky public
       const r2 = await tryCheck(publicBase, text, lang, signal, level);
-      if (r2.ok) { active = "public"; return mapIssues(await r2.json()); }
+      if (r2.ok) { 
+        const json = await r2.json();
+        DEBUG && dgroup("[LT] response", () => {
+          dlog({ matches: json?.matches?.length ?? 0 });
+          if (json?.matches) {
+            const byCat: Record<string, number> = {};
+            const byRule: Record<string, number> = {};
+            for (const m of json.matches) {
+              byCat[m?.rule?.category?.id || "?"] = (byCat[m?.rule?.category?.id || "?"] || 0) + 1;
+              byRule[m?.rule?.id || "?"] = (byRule[m?.rule?.id || "?"] || 0) + 1;
+            }
+            dtable("by category", Object.entries(byCat).map(([category,count])=>({category,count})));
+            dtable("by rule", Object.entries(byRule).map(([ruleId,count])=>({ruleId,count})));
+          }
+        });
+        active = "public"; 
+        return mapIssues(json); 
+      }
       throw new Error(`LanguageTool failed: ${r2.status}`);
     },
     isPublic: () => active === "public",

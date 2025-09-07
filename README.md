@@ -267,6 +267,46 @@ The application is optimized for production deployment with minimal runtime requ
 - **API Usage**: Compliant with LanguageTool's terms of service
 - **Privacy Controls**: FERPA/COPPA compliant with local-only mode by default
 
+## Debugging
+
+### Debug Logging System
+
+The application includes a comprehensive debug logging system to help troubleshoot issues with the terminal group pipeline:
+
+#### Enabling Debug Logs
+
+1. Open the browser console (F12)
+2. Run: `window.__CBM_DEBUG__ = true`
+3. Reload the page
+
+#### Debug Information Available
+
+- **LT Request/Response**: LanguageTool API calls with request details and response breakdowns
+- **Tokenization**: Token details, LT boundary hints, and issue mapping
+- **Heuristic Insertions**: Proposed virtual terminal insertions with reasoning
+- **Group Building**: Virtual terminal group creation and mapping process
+- **Display Stream**: Virtual terminal insertion into the display token stream
+- **Map Population**: vtByDotIndex and vtByBoundary map creation
+- **Click Paths**: Dot clicks and suggestion row clicks with group lookups
+
+#### Debug Output Format
+
+Debug logs use structured console output:
+- `console.groupCollapsed()` for organized sections
+- `console.table()` for tabular data
+- `dlog()` for structured logging
+- Clear prefixes like `[LT]`, `[VT]`, `[CWS/LT]` for easy filtering
+
+#### Troubleshooting Terminal Groups
+
+If virtual terminal groups are not appearing or functioning correctly:
+
+1. Enable debug logging
+2. Look for `[VT] ✖ could not locate dot for insertion` messages
+3. Check if `vtByDotIndex` and `vtByBoundary` maps are populated
+4. Verify LT response contains punctuation/grammar matches
+5. Check if heuristic insertions are being proposed correctly
+
 ## Testing
 
 ### Test Suite
@@ -296,7 +336,20 @@ The tool is designed for easy extension:
 
 ## Recent Updates
 
-### Latest Improvements (v3.4) - Virtual Terminal Boundary Mapping Fixes
+### Latest Improvements (v3.5) - Comprehensive Debug Logging System
+- **Debug Logging Infrastructure**: Added comprehensive debug logging system to track terminal group pipeline
+- **LT Request/Response Logging**: Detailed logging of LanguageTool API requests and responses with match breakdowns
+- **Tokenization Debugging**: Logs token details, LT boundary hints, and issue mapping for troubleshooting
+- **Heuristic Insertion Tracking**: Logs proposed virtual terminal insertions with boundary indices and reasoning
+- **Group Building Debugging**: Detailed logging of virtual terminal group creation and mapping failures
+- **Display Stream Verification**: Logs virtual terminal insertion into display token stream
+- **Map Population Tracking**: Logs vtByDotIndex and vtByBoundary map creation and population
+- **Click Path Debugging**: Logs dot clicks and suggestion row clicks with group lookup results
+- **Runtime Debug Control**: Enable/disable debug logs via `window.__CBM_DEBUG__ = true` in browser console
+- **Structured Logging**: Uses console.groupCollapsed, console.table, and structured data for easy debugging
+- **Pipeline Visibility**: Complete end-to-end visibility into where terminal groups may be disappearing
+
+### Previous Improvements (v3.4) - Virtual Terminal Boundary Mapping Fixes
 - **Fixed Virtual Terminal Mapping**: Corrected `createVirtualTerminals` function to properly map virtual terminal groups to display token indices
 - **Boundary Index Alignment**: Fixed boundary index calculation to ensure virtual terminal groups correctly correspond to their caret positions
 - **Clickable Infraction Items**: TERMINAL (possible) items in the infractions panel are now clickable and toggle the entire virtual terminal group

@@ -1,5 +1,6 @@
 // src/lib/cws-heuristics.ts
 import type { Token } from "@/lib/spell/types";
+import { DEBUG, dgroup, dtable, dlog } from "@/lib/utils";
 
 export interface VirtualTerminalInsertion {
   /** boundary index BEFORE which we insert the terminal (between tokens[bIndex] and tokens[bIndex+1]) */
@@ -25,40 +26,53 @@ export function createVirtualTerminals(
   originalTokens: Token[],
   displayTokens: Token[]
 ): VirtualTerminal[] {
-  // Fast lookup to grab reason/message if we have a matching beforeBIndex
-  const insByBefore = new Map(insertions.map(i => [i.beforeBIndex, i]));
+  const result: VirtualTerminal[] = [];
+  const sorted = [...insertions].sort((a, b) => a.beforeBIndex - b.beforeBIndex);
+  dgroup("[VT] createVirtualTerminals input", () => {
+    dlog("insertions", sorted);
+    dtable("displayTokens", displayTokens.map((t,i)=>({i,raw:t.raw,type:t.type,idx:(t as any).idx,virtual:(t as any).virtual})));
+  });
 
-  const out: VirtualTerminal[] = [];
+  for (let i = 0; i < sorted.length; i++) {
+    const insertion = sorted[i];
+    const originalIdx = insertion.beforeBIndex;
+    dlog("[VT] map insertion", { i, originalIdx, insertion });
 
-  for (let i = 0; i < displayTokens.length; i++) {
-    const t = displayTokens[i] as any;
-
-    // we only care about the synthetic sentence terminals we inserted
-    if (!t?.virtual) continue;
-    if (t.type !== "PUNCT") continue;
-    if (!(/[.?!]/.test(t.raw))) continue;
-
-    // find the nearest ORIGINAL token to the left in the display stream
-    // (anything with idx >= 0 came from the original text)
-    let insertAfterIdx = -1;
-    for (let j = i - 1; j >= 0; j--) {
-      const dj = displayTokens[j] as any;
-      if (Number.isInteger(dj?.idx) && dj.idx >= 0) { insertAfterIdx = dj.idx; break; }
+    let dotTokenIndex = -1;
+    let originalCount = 0;
+    for (let j = 0; j < displayTokens.length; j++) {
+      const dj: any = displayTokens[j];
+      if (Number.isInteger(dj?.idx) && dj.idx >= 0) {
+        if (originalCount === originalIdx) {
+          dotTokenIndex = j + 1;
+          break;
+        }
+        originalCount++;
+      }
     }
-    if (insertAfterIdx < 0) continue; // nothing to anchor to (shouldn't happen often)
+    if (dotTokenIndex === -1) {
+      dlog("[VT] ✖ could not locate dot for insertion", { originalIdx });
+      continue;
+    }
 
-    // build the group purely from display positions
-    // find the corresponding insertion to get the reason
-    const correspondingInsertion = insertions.find(ins => ins.beforeBIndex === insertAfterIdx);
-    out.push({
-      insertAfterIdx,        // original-token index (left word)
-      reason: correspondingInsertion?.reason || "Heuristic", // get reason from insertion or default
-      dotTokenIndex: i,      // <— index IN displayTokens (what you use in vtByDotIndex)
-      leftBoundaryBIndex: i - 1,  // caret between [leftWord ^ "."]
-      rightBoundaryBIndex: i      // caret between ["." ^ rightWord]
+    const leftBoundaryBIndex = originalIdx;
+    const rightBoundaryBIndex = originalIdx + 1;
+    result.push({
+      insertAfterIdx: originalIdx,
+      reason: insertion.reason,
+      dotTokenIndex,
+      leftBoundaryBIndex,
+      rightBoundaryBIndex,
+    });
+    dlog("[VT] ✓ group", {
+      dotTokenIndex, leftBoundaryBIndex, rightBoundaryBIndex,
+      leftRaw: (displayTokens[dotTokenIndex - 1] as any)?.raw,
+      dotRaw: (displayTokens[dotTokenIndex] as any)?.raw,
+      rightRaw: (displayTokens[dotTokenIndex + 1] as any)?.raw,
     });
   }
-  return out;
+  dlog("[VT] groups built", result.length, result);
+  return result;
 }
 
 
@@ -73,6 +87,9 @@ export function createVirtualTerminals(
 export function detectMissingTerminalInsertions(text: string, tokens: Token[]): VirtualTerminalInsertion[] {
   const result: VirtualTerminalInsertion[] = [];
   if (!tokens.length) return result;
+  dgroup("[VT] detectMissingTerminalInsertions", () => {
+    dtable("tokens", tokens.map(t => ({ i:t.idx, raw:t.raw, type:t.type, s:t.start, e:t.end })));
+  });
 
   const TERM = new Set([".", "!", "?"]);
   const NON_ESSENTIAL = new Set([",", ";", ":", "—", "–", "-", "…"]);
@@ -145,6 +162,12 @@ export function detectMissingTerminalInsertions(text: string, tokens: Token[]): 
         message: "Possible missing sentence-ending punctuation before a capitalized word.",
         char: ".",
         reason: "CapitalAfterSpace",
+      });
+      dlog("[VT] propose", {
+        beforeBIndex: i,
+        left: left.raw,
+        right: right.raw,
+        reason: "CapitalAfterSpace"
       });
     }
   }
