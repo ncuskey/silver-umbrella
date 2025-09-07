@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Info, AlertTriangle, ListChecks, Settings } from "lucide-react";
 import type { Token, VirtualTerminalInsertion } from "@/lib/types";
 import { checkWithLT } from "@/lib/ltClient";
-import { filterTerminalIssues, ltRuleId, ltCategory } from "@/lib/ltFilter";
+import { filterTerminalIssues, ltRuleId, ltCategory, logAllLtIssues } from "@/lib/ltFilter";
 import { ltIssuesToInsertions } from "@/lib/ltToVT";
 import { tokenize } from "@/lib/tokenize";
 import { cn, DEBUG, dgroup, dtable, dlog } from "@/lib/utils";
@@ -267,7 +267,13 @@ function WritingScorer() {
     let alive = true;
     (async () => {
       const json = await checkWithLT(text);
-      if (alive) setLtIssues(json.matches ?? json.issues ?? json ?? []);
+      const issues = (json.matches ?? json.issues ?? []) as any[];
+
+      if ((window as any).__CBM_DEBUG__) {
+        logAllLtIssues(issues, text);
+      }
+
+      if (alive) setLtIssues(issues);
     })();
     return () => { alive = false; };
   }, [text]);
