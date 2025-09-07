@@ -256,6 +256,22 @@ interface CwsHint {
 
 ### CWS-LanguageTool Integration (`src/lib/cws-lt.ts`)
 
+#### Robust LT Field Shims
+- **Field-Agnostic Accessors**: `ltRuleId()`, `ltCategoryId()`, `ltMsg()`, `ltOffset()`, `ltLength()`, `ltMarkedText()` handle multiple LanguageTool server payload shapes
+- **Cross-Server Compatibility**: Works seamlessly with different LT server configurations and response formats
+- **Enhanced Field Handling**: `ltMarkedText()` handles unusual cases where flagged text is provided in non-standard fields like `"len": "Nobody"`
+- **Backward Compatibility**: Legacy aliases (`getRuleId`, `getCategoryId`, etc.) maintained for seamless integration
+- **Robust Error Handling**: Proper undefined checks and fallback values throughout
+
+#### Resilient Token Locator System
+- **Multi-Strategy Locator**: `locateStartToken()` with three fallback strategies:
+  1. **Exact Offset**: Find token at exact character offset
+  2. **First Word After**: If exact match fails, find first word token after offset
+  3. **By Matched Text**: If both fail, search by actual flagged text content
+- **Helper Functions**: `tokenAtOffset()`, `firstWordAfter()`, `findByRaw()`, `prevNonSpaceIndex()`
+- **Enhanced Error Handling**: Proper undefined checks for token start/end positions
+- **Diagnostic Support**: `debugLtToVt()` provides helpful diagnostics when no insertions are generated
+
 #### Intelligent Comma Filtering System
 - `isCommaOnlyForCWS()`: Smart CWS comma policy with Oxford/serial comma preservation
 - **Oxford Comma Detection**: Preserves Oxford/serial commas in patterns like "apples, oranges, and bananas"
@@ -472,7 +488,17 @@ The tool implements scoring methods aligned with educational research:
 
 ### Recent Updates
 
-#### Latest Improvements (v3.9) - Smarter LT Boundary Extraction
+#### Latest Improvements (v4.4) - Robust Shims & Resilient Token Locator
+- **Robust LT Field Shims**: Added comprehensive shim functions (`ltRuleId`, `ltCategoryId`, `ltMsg`, `ltOffset`, `ltLength`, `ltMarkedText`) that handle multiple LanguageTool server payload shapes
+- **Resilient Token Locator**: Implemented `locateStartToken()` with three fallback strategies: (1) exact offset, (2) first word after offset, (3) by matched text
+- **Enhanced Field Handling**: New `ltMarkedText()` function handles unusual cases where flagged text is provided in non-standard fields like `"len": "Nobody"`
+- **Backward Compatibility**: Maintained legacy function aliases (`getRuleId`, `getCategoryId`, etc.) for seamless integration
+- **Improved Converter**: Updated `convertLTTerminalsToInsertions()` to accept text parameter and use the new resilient locator
+- **Diagnostic Support**: Added `debugLtToVt()` function that provides helpful diagnostics when no insertions are generated
+- **Enhanced Error Handling**: Proper undefined checks for token start/end positions throughout the locator system
+- **Cross-Server Robustness**: Works reliably with different LanguageTool server configurations and response formats
+
+#### Previous Improvements (v3.9) - Smarter LT Boundary Extraction
 - **Enhanced Multi-Signal Detection**: Completely rewritten `ltBoundaryInsertions()` with sophisticated boundary detection:
   - **Replacement Signals**: Detects when LT suggests adding terminal punctuation (`.`, `!`, `?`)
   - **Message Signals**: Analyzes LT messages for explicit boundary mentions using regex patterns

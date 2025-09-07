@@ -361,7 +361,17 @@ The tool is designed for easy extension:
 
 ## Recent Updates
 
-### Latest Improvements (v4.3) - Robust LT Issue Parsing & Field-Agnostic Processing
+### Latest Improvements (v4.4) - Robust Shims & Resilient Token Locator
+- **Robust LT Field Shims**: Added comprehensive shim functions (`ltRuleId`, `ltCategoryId`, `ltMsg`, `ltOffset`, `ltLength`, `ltMarkedText`) that handle multiple LanguageTool server payload shapes
+- **Resilient Token Locator**: Implemented `locateStartToken()` with three fallback strategies: (1) exact offset, (2) first word after offset, (3) by matched text
+- **Enhanced Field Handling**: New `ltMarkedText()` function handles unusual cases where flagged text is provided in non-standard fields like `"len": "Nobody"`
+- **Backward Compatibility**: Maintained legacy function aliases (`getRuleId`, `getCategoryId`, etc.) for seamless integration
+- **Improved Converter**: Updated `convertLTTerminalsToInsertions()` to accept text parameter and use the new resilient locator
+- **Diagnostic Support**: Added `debugLtToVt()` function that provides helpful diagnostics when no insertions are generated
+- **Enhanced Error Handling**: Proper undefined checks for token start/end positions throughout the locator system
+- **Cross-Server Robustness**: Works reliably with different LanguageTool server configurations and response formats
+
+### Previous Improvements (v4.3) - Robust LT Issue Parsing & Field-Agnostic Processing
 - **Field-Agnostic LT Parsing**: Added robust accessor functions (`getRuleId`, `getCategoryId`, `getMsg`, `getOffset`, `getLength`) that handle different LanguageTool server payload shapes
 - **UPPERCASE_SENTENCE_START Enhancement**: Improved boundary detection that places terminals BEFORE capitalized words with offset-robust processing
 - **Cross-Server Compatibility**: Works seamlessly with different LanguageTool server configurations and response formats

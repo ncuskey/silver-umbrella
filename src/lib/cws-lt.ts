@@ -4,27 +4,82 @@ import type { GrammarIssue } from "@/lib/spell/types";
 import { ESSENTIAL_PUNCT } from "@/lib/cws";
 import { DEBUG, dgroup, dtable, dlog } from "@/lib/utils";
 
-// ---- LT field shims (handles different server payload shapes)
-export function getRuleId(i: any): string {
+// ---------- LT field shims (support multiple payload shapes)
+export function ltRuleId(i: any): string {
   return (i.ruleId ?? i.rule?.id ?? i.id ?? "").toString();
 }
-export function getCategoryId(i: any): string {
+export function ltCategoryId(i: any): string {
   return (i.categoryId ?? i.rule?.category?.id ?? i.category ?? "").toString();
 }
-export function getMsg(i: any): string {
+export function ltMsg(i: any): string {
   return (i.msg ?? i.message ?? "").toString();
 }
-export function getOffset(i: any): number {
+export function ltOffset(i: any): number {
+  // common: offset; alt: fromPos; context.offset
   return typeof i.offset === "number" ? i.offset
        : typeof i.fromPos === "number" ? i.fromPos
        : typeof i.context?.offset === "number" ? i.context.offset
        : -1;
 }
-export function getLength(i: any): number {
+export function ltLength(i: any): number {
+  // common: length; some servers use len
   return typeof i.length === "number" ? i.length
        : typeof i.len === "number" ? i.len
        : typeof i.context?.length === "number" ? i.context.length
        : 0;
+}
+// if server provides the flagged text somewhere weird (e.g., your "len": "Nobody")
+export function ltMarkedText(i: any, full: string | undefined): string | undefined {
+  if (typeof i.text === "string") return i.text;
+  if (typeof i.len === "string") return i.len;              // <-- your case
+  const off = ltOffset(i), len = ltLength(i);
+  if (full && off >= 0 && len > 0) return full.slice(off, off + len);
+  if (i.context?.text && typeof i.context.offset === "number" && typeof i.context.length === "number") {
+    return i.context.text.substr(i.context.offset, i.context.length);
+  }
+  return undefined;
+}
+
+// Legacy aliases for backward compatibility
+export const getRuleId = ltRuleId;
+export const getCategoryId = ltCategoryId;
+export const getMsg = ltMsg;
+export const getOffset = ltOffset;
+export const getLength = ltLength;
+
+// ---------- Resilient token locator
+function isWordToken(t: Token) { return /\w/.test(t.raw?.[0] ?? ""); }
+
+function tokenAtOffset(tokens: Token[], offset: number) {
+  // binary-friendly scan (kept linear for brevity)
+  for (const t of tokens) {
+    if (t.start !== undefined && t.end !== undefined && offset >= t.start && offset < t.end) {
+      return t;
+    }
+  }
+  return undefined;
+}
+function firstWordAfter(tokens: Token[], offset: number) {
+  const j = tokens.findIndex(t => (t.start ?? 0) >= offset && isWordToken(t));
+  return j >= 0 ? tokens[j] : undefined;
+}
+function findByRaw(tokens: Token[], raw?: string) {
+  if (!raw) return undefined;
+  const j = tokens.findIndex(t => t.raw === raw);
+  return j >= 0 ? tokens[j] : undefined;
+}
+
+export function locateStartToken(tokens: Token[], issue: any, fullText?: string) {
+  const off = ltOffset(issue);
+  let t = off >= 0 ? tokenAtOffset(tokens, off) : undefined;
+  if (!t && off >= 0) t = firstWordAfter(tokens, off);
+  if (!t) t = findByRaw(tokens, ltMarkedText(issue, fullText));
+  return t;
+}
+
+export function prevNonSpaceIndex(tokens: Token[], j: number) {
+  for (let k = j - 1; k >= 0; k--) if (tokens[k].raw.trim()) return k;
+  return -1;
 }
 
 export function caretAfterMatch(m: any, tokens: any[]) {
@@ -98,7 +153,7 @@ export function isCommaOnlyForCWS(m: any, tokens: any[]) {
 const STOP_LEFT = new Set(["and", "or", "but", "so", "then", "yet"]);
 const BOUNDARY_CATEGORIES = new Set(["PUNCTUATION", "GRAMMAR", "STYLE", "TYPOGRAPHY"]);
 
-const isWord = (t: Token) => t.type === "WORD";
+const isWordType = (t: Token) => t.type === "WORD";
 const isEssentialPunct = (t: Token) => t.type === "PUNCT" && ESSENTIAL_PUNCT.has(t.raw);
 
 // LanguageTool rule/category IDs related to punctuation and sentence structure
@@ -136,14 +191,14 @@ export interface CwsHint {
 /** Boundaries eligible for CWS: initial (-1) + between WORD/essential-punct units */
 function unitIndices(tokens: Token[]): number[] {
   const out: number[] = [];
-  tokens.forEach((t, i) => { if (isWord(t) || isEssentialPunct(t)) out.push(i); });
+  tokens.forEach((t, i) => { if (isWordType(t) || isEssentialPunct(t)) out.push(i); });
   return out;
 }
 
 function boundaryCharPos(tokens: Token[], bIndex: number): number {
   // -1 = before first unit
   if (bIndex === -1) {
-    const u0 = tokens.find((t) => isWord(t) || isEssentialPunct(t));
+    const u0 = tokens.find((t) => isWordType(t) || isEssentialPunct(t));
     return u0?.start ?? 0;
   }
   const t = tokens[bIndex];
@@ -262,18 +317,8 @@ const SENTINEL_TERMINALS = new Set([".", "!", "?"]);
 const OPENERS = new Set(['"', '"', "'", "(", "[", "{", "«"]); // don't place before these
 const CLOSERS = new Set(['"', '"', "'", ")", "]", "}", "»"]);
 
-function tokenAtOffset(tokens: Token[], offset: number) {
-  return tokens.find(t => offset >= (t.start ?? 0) && offset < (t.end ?? 0));
-}
-function prevNonSpaceIndex(tokens: Token[], j: number) {
-  for (let k = j - 1; k >= 0; k--) {
-    const raw = tokens[k].raw;
-    if (raw.trim().length) return k;
-  }
-  return -1;
-}
-
 export function convertLTTerminalsToInsertions(
+  text: string,
   tokens: Token[],
   ltIssues: any[]
 ): VirtualTerminalInsertion[] {
@@ -281,13 +326,13 @@ export function convertLTTerminalsToInsertions(
   const seen = new Set<number>();
 
   for (const issue of ltIssues) {
-    const id = getRuleId(issue);
+    const id = ltRuleId(issue);
 
     if (id === "PUNCTUATION_PARAGRAPH_END" || id === "MISSING_SENTENCE_TERMINATOR") {
-      const off = getOffset(issue);
-      const refTok = off >= 0 ? tokenAtOffset(tokens, off) : tokens.at(-1);
-      if (!refTok) continue;
-      const b = prevNonSpaceIndex(tokens, refTok.idx + 1);
+      // place at last non-space before the start token LT pointed us to
+      const startTok = locateStartToken(tokens, issue, text) ?? tokens.at(-1);
+      if (!startTok) continue;
+      const b = prevNonSpaceIndex(tokens, startTok.idx + 1);
       if (b >= 0 && !SENTINEL_TERMINALS.has(tokens[b].raw) && !seen.has(b)) {
         out.push({ 
           beforeBIndex: b, 
@@ -301,8 +346,7 @@ export function convertLTTerminalsToInsertions(
     }
 
     if (id === "UPPERCASE_SENTENCE_START") {
-      const off = getOffset(issue);
-      const startTok = off >= 0 ? tokenAtOffset(tokens, off) : undefined;
+      const startTok = locateStartToken(tokens, issue, text);
       if (!startTok) continue;
       const b = prevNonSpaceIndex(tokens, startTok.idx);
       if (b < 0) continue;
@@ -325,6 +369,20 @@ export function convertLTTerminalsToInsertions(
   }
 
   return out;
+}
+
+export function debugLtToVt(text: string, tokens: Token[], ltIssues: any[]) {
+  if (!ltIssues?.length) return;
+  const ids = ltIssues.map(ltRuleId);
+  // eslint-disable-next-line no-console
+  console.info("[LT→VT] rules", ids);
+  for (const i of ltIssues) {
+    const off = ltOffset(i);
+    const mark = ltMarkedText(i, text);
+    const t = locateStartToken(tokens, i, text);
+    // eslint-disable-next-line no-console
+    console.info("[LT→VT] locate", { id: ltRuleId(i), off, mark, token: t?.raw, idx: t?.idx });
+  }
 }
 
 export type TerminalGroup = {
