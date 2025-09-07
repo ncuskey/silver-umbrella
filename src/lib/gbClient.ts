@@ -24,7 +24,7 @@ export async function checkWithGrammarBot(text: string): Promise<GbResponse> {
   const json = await res.json();
   if ((window as any).__CBM_DEBUG__) {
     console.info("[GB] raw", json);
-    console.table((json.edits ?? []).map(e => ({
+    console.table((json.edits ?? []).map((e: GbEdit) => ({
       start: e.start, 
       end: e.end, 
       replace: e.replace,
