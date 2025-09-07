@@ -274,7 +274,14 @@ The tool is designed for easy extension:
 
 ## Recent Updates
 
-### Latest Improvements (v2.8)
+### Latest Improvements (v2.9)
+- **Hydration Fixes**: Resolved React hydration error #418 by fixing server-client mismatch issues
+- **Date.now() Fix**: Replaced Date.now() in exportCSV with hydration-safe timestamp generation
+- **localStorage Hydration**: Fixed localStorage access during component initialization to prevent hydration mismatches
+- **Client-Side State Loading**: Added useEffect hooks to load localStorage values after component hydration
+- **Improved Stability**: Enhanced application stability and eliminated console errors during initial load
+
+### Previous Improvements (v2.8)
 - **Export Functionality**: Added CSV audit export and PDF report generation for comprehensive data analysis
 - **Privacy Controls**: Implemented FERPA/COPPA compliant local-only mode with session data clearing
 - **Self-hosted LanguageTool**: Support for custom LanguageTool endpoints with privacy toggle and settings UI
