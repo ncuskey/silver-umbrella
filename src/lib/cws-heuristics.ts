@@ -86,26 +86,50 @@ export function createVirtualTerminals(
  */
 // NEW: robust group builder that only looks at the rendered stream
 export function createVirtualTerminalsFromDisplay(displayTokens: Token[]): VirtualTerminal[] {
-  const out: VirtualTerminal[] = [];
+  type VT = { insertAfterIdx:number; dotTokenIndex:number; leftBoundaryBIndex:number; rightBoundaryBIndex:number; };
+  const out: VT[] = [];
   for (let i = 0; i < displayTokens.length; i++) {
     const t: any = displayTokens[i];
     if (!t?.virtual || t.type !== "PUNCT" || !/[.?!]/.test(t.raw)) continue;
-
-    // find the nearest ORIGINAL token to the left (has idx >= 0)
     let leftOriginalIdx = -1;
     for (let j = i - 1; j >= 0; j--) {
       const dj: any = displayTokens[j];
       if (Number.isInteger(dj?.idx) && dj.idx >= 0) { leftOriginalIdx = dj.idx; break; }
     }
     if (leftOriginalIdx < 0) continue;
-
     out.push({
       insertAfterIdx: leftOriginalIdx,
-      reason: "LT", // Default to LT since this is used when LT is active
       dotTokenIndex: i,
-      leftBoundaryBIndex: leftOriginalIdx,       // caret index system = "between originals"
+      leftBoundaryBIndex: leftOriginalIdx,
       rightBoundaryBIndex: leftOriginalIdx + 1,
     });
+  }
+  return out;
+}
+
+const STOP_LEFT = new Set(["and","or","but","so","then","yet"]);
+export function detectMissingTerminalInsertionsSmart(text: string, tokens: Token[]): VirtualTerminalInsertion[] {
+  const out: VirtualTerminalInsertion[] = [];
+  for (let i = 0; i < tokens.length - 1; i++) {
+    const left = tokens[i], right = tokens[i+1];
+    if (left.type !== "WORD" || right.type !== "WORD") continue;
+
+    const leftRaw = String(left.raw);
+    const rightRaw = String(right.raw);
+
+    // left is lower-case word, right is Capitalized word
+    const leftOk = /^[a-z]/.test(leftRaw);
+    const rightCapital = /^[A-Z]/.test(rightRaw);
+
+    // avoid common false positives
+    if (!leftOk || !rightCapital) continue;
+    if (STOP_LEFT.has(leftRaw.toLowerCase())) continue;  // "and", "then", ...
+    if (rightRaw === "I") continue;                      // "and I", "Then I"
+    // ensure no punctuation already present
+    const hasPunct = /[.?!;:,]$/.test(leftRaw);
+    if (hasPunct) continue;
+
+    out.push({ beforeBIndex: i, char: ".", reason: "HeuristicCapitalBreak", message: "Possible missing sentence-ending punctuation before a capitalized word." });
   }
   return out;
 }

@@ -353,7 +353,17 @@ The tool is designed for easy extension:
 
 ## Recent Updates
 
-### Latest Improvements (v3.7) - LT Authority & Debug Visibility
+### Latest Improvements (v3.8) - LT-First Insertion Strategy & Smarter Heuristics
+- **LT-First Insertion Strategy**: LanguageTool now provides authoritative terminal punctuation suggestions with heuristics as intelligent fallback
+- **Smarter Heuristic Filtering**: Enhanced `detectMissingTerminalInsertionsSmart` function with improved false positive reduction
+- **STOP_LEFT Filtering**: Added filter to avoid "and I / Then I" false positives by skipping common conjunctions ("and", "or", "but", "so", "then", "yet")
+- **Capitalized "I" Protection**: Special handling to prevent insertions before "I" to avoid false positives like "and I" or "Then I"
+- **Enhanced Logging**: Comprehensive counts logging showing LT vs heuristic split for debugging and transparency
+- **Display Stream Groups**: Groups built from rendered display stream ensure stability across re-renders
+- **Consistent Dot Rendering**: Virtual terminal dots render consistently whether using LT or heuristic detection
+- **Improved Boundary Detection**: Better handling of "forest The" and "trees Then" patterns while avoiding false positives
+
+### Previous Improvements (v3.7) - LT Authority & Debug Visibility
 - **LT Authority Priority**: LanguageTool now provides authoritative terminal punctuation suggestions, with heuristics as fallback only
 - **Debug Counts Logging**: Added comprehensive counts logging showing insertions, displayDots, and groups for troubleshooting
 - **Display Stream Groups**: Groups are now built from the actual rendered display stream, guaranteeing `groups === displayDots`

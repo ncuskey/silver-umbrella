@@ -12,7 +12,7 @@ import { buildCwsPairs, ESSENTIAL_PUNCT } from "@/lib/cws";
 import type { CwsPair } from "@/lib/cws";
 import { buildLtCwsHints, convertLTTerminalsToInsertions, buildTerminalGroups, ltBoundaryInsertions, type TerminalGroup } from "@/lib/cws-lt";
 import type { CwsHint } from "@/lib/cws-lt";
-import { detectMissingTerminalInsertions, VirtualTerminalInsertion, createVirtualTerminals, createVirtualTerminalsFromDisplay, VirtualTerminal } from "@/lib/cws-heuristics";
+import { detectMissingTerminalInsertionsSmart, VirtualTerminalInsertion, createVirtualTerminals, createVirtualTerminalsFromDisplay, VirtualTerminal } from "@/lib/cws-heuristics";
 import { cn, DEBUG, dgroup, dtable, dlog } from "@/lib/utils";
 import { toCSV, download } from "@/lib/export";
 import jsPDF from "jspdf";
@@ -749,15 +749,16 @@ function WritingScorer() {
   // 1) base tokens exist already as `tokens` from your tokenizer
   // Use LT-derived terminals when LT is available, otherwise fall back to heuristics
   const terminalInsertions = useMemo(() => {
-    // Try LT-derived boundaries first (authoritative).
     const fromLT = ltBoundaryInsertions(tokens, ltIssues);
-    if (fromLT.length) return fromLT;
-
-    // Fallback (dev only): heuristic with a guard to avoid the "and I / Then I" false positives
-    const fallback = detectMissingTerminalInsertions(text, tokens)
-      .filter(x => tokens[x.beforeBIndex + 1]?.raw !== "I"); // skip before "I"
-    return fallback;
-  }, [tokens, ltIssues, text]);
+    const fromHeur = detectMissingTerminalInsertionsSmart(text, tokens);
+    const chosen = fromLT.length ? fromLT : fromHeur;
+    console.log("[VT] counts", {
+      insertions: chosen.length,
+      lt: fromLT.length,
+      heur: fromHeur.length
+    });
+    return chosen;
+  }, [text, tokens, ltIssues]);
 
   // 2) insert virtual terminals for display + scoring
   const displayTokens = useMemo(
