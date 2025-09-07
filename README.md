@@ -278,7 +278,20 @@ The tool is designed for easy extension:
 
 ## Recent Updates
 
-### Latest Improvements (v3.1) - LanguageTool Parity & WSC Fixes
+### Latest Improvements (v3.2) - LanguageTool Parity Verification & Hardening
+- **Request Profile Presets**: Added exact parity constants matching LT website (siteDefault, sitePicky, autoDetect)
+- **No Pre/Post Processing**: Raw textarea values sent as-is to preserve offsets and trailing spaces/newlines
+- **Token Offsets Smoke Test**: Dev-only hover badges showing [start,end] and overlapping rule IDs for debugging
+- **Exact Deduplication**: Implemented precise deduplication with no category filtering to prevent duplicate issues
+- **Robust Spelling Classification**: Enhanced spelling detection with both TYPOS category and MORFOLOGIK_RULE_* patterns
+- **Shared Overlap Helper**: Unified `overlaps()` function used everywhere for consistent boundary detection
+- **Expanded Rule Mapping**: Enhanced rule-to-UI mapping with common rules (PUNCTUATION_PARAGRAPH_END, UPPERCASE_SENTENCE_START, etc.)
+- **Parity Test Protocol**: Dev helper for comparing panel results vs LT website with console logging
+- **Jest Snapshot Tests**: Regression prevention tests for spelling errors, punctuation issues, and capitalization detection
+- **Level Parameter Support**: Added picky mode toggle support for enhanced grammar checking
+- **Development Tools**: Enhanced debugging capabilities with rule overlap detection and offset verification
+
+### Previous Improvements (v3.1) - LanguageTool Parity & WSC Fixes
 - **Fixed WSC Scoring**: Implemented proper character offset tokenization to fix Words Spelled Correctly detection
 - **Enhanced LanguageTool Integration**: Updated API requests to use `language=en-US` and `preferredVariants=en-US` for proper spelling detection
 - **Complete Category Support**: Now processes all standard LT categories (GRAMMAR, STYLE, SEMANTICS) instead of filtering them out

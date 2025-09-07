@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 import { toCSV, download } from "@/lib/export";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
-import { getLtBase, getLtPrivacy, clearSessionData } from "@/lib/grammar/languagetool-client";
+import { getLtBase, getLtPrivacy, clearSessionData, overlaps, summarizeLT as ltSummarizeLT } from "@/lib/grammar/languagetool-client";
 
 /**
  * CBM Writing & Spelling – TypeScript Web Tool (with dictionary packs + rule flags)
@@ -212,7 +212,23 @@ function filterLtIssues(text: string, issues: GrammarIssue[]) {
   // Log LT summary for dev parity checks
   if (process.env.NODE_ENV === 'development') {
     console.log('LT Issues Summary:');
-    summarizeLT(issues);
+    // Convert GrammarIssue[] to LTMatch[] format for summarizeLT
+    const ltMatches = issues.map(issue => ({
+      offset: issue.offset,
+      length: issue.length,
+      message: issue.message,
+      shortMessage: issue.message,
+      replacements: (issue.replacements || []).map(r => ({ value: r })),
+      rule: {
+        id: issue.ruleId || "",
+        description: issue.message,
+        category: { 
+          id: issue.categoryId || "",
+          name: issue.category || ""
+        }
+      }
+    }));
+    ltSummarizeLT(ltMatches);
   }
 
   for (const m of issues) {
@@ -432,14 +448,14 @@ function WritingScorer() {
   // place INSIDE WritingScorer(), after the autoload effect above
   useEffect(() => {
     const minChars = 24;  // don't run for very short snippets
-    const trimmed = text.trim();
-    if (trimmed.length < minChars) {
+    // Send raw text as-is (no trimming) to preserve offsets and trailing spaces/newlines
+    if (text.length < minChars) {
       setLtIssues([]);
       setGrammarStatus("idle");
       return;
     }
     // Skip if nothing changed
-    if (trimmed === lastCheckedText.current) return;
+    if (text === lastCheckedText.current) return;
 
     setGrammarStatus("checking");
     const myRun = ++grammarRunId.current;
@@ -448,12 +464,12 @@ function WritingScorer() {
       try {
         const { createLanguageToolChecker } = await import("@/lib/grammar/languagetool-client");
         const lt = createLanguageToolChecker("/api/languagetool"); // use your proxy
-        const issues = await lt.check(trimmed, "en-US");
+        const issues = await lt.check(text, "en-US"); // Send raw text, no trimming
         if (grammarRunId.current !== myRun) return;
         setLtIssues(issues);
         setLtIsPublic(lt.isPublic());
         setGrammarStatus("ok");
-        lastCheckedText.current = trimmed;
+        lastCheckedText.current = text; // Store raw text
       } catch (e) {
         if (grammarRunId.current !== myRun) return; // stale
         console.error("[Grammar] check failed", e);
@@ -482,8 +498,8 @@ function WritingScorer() {
         if (t.type !== "WORD") continue;
         const tStart = t.start ?? 0;
         const tEnd = t.end ?? tStart;
-        // any overlap between token span and issue span marks it misspelled
-        if (tStart < mEnd && tEnd > mStart) miss.add(t.idx);
+        // Use shared overlap helper
+        if (overlaps(tStart, tEnd, mStart, mEnd)) miss.add(t.idx);
       }
     }
     return miss;
@@ -502,9 +518,25 @@ function WritingScorer() {
       const cat = (m.categoryId || "").toUpperCase();
       const rule = (m.ruleId || "").toUpperCase();
       const isTypo = cat === "TYPOS" || rule.startsWith("MORFOLOGIK_RULE");
-      return isTypo && (start < mEnd && end > mStart);
+      return isTypo && overlaps(start, end, mStart, mEnd);
     });
     return match?.replacements || [];
+  }
+
+  // Dev helper: get overlapping rule IDs for a token (for smoke testing)
+  function getOverlappingRuleIds(tok: Token): string[] {
+    if (process.env.NODE_ENV !== 'development') return [];
+    const start = tok.start ?? 0;
+    const end = tok.end ?? start;
+    const ruleIds: string[] = [];
+    for (const m of ltIssues) {
+      const mStart = m.offset;
+      const mEnd = m.offset + m.length;
+      if (overlaps(start, end, mStart, mEnd)) {
+        ruleIds.push(m.ruleId || "?");
+      }
+    }
+    return ruleIds;
   }
 
   function computeWSC(
@@ -1021,10 +1053,18 @@ function WritingScorer() {
                 const bad = showInfractions && isWordTok && !effectiveOk;
                 
                 const sugg = (isWordTok && !effectiveOk) ? ltSuggestionsForToken(tok).slice(0, 3) : [];
+                const overlappingRules = getOverlappingRuleIds(tok);
                 const title = isWordTok
                   ? effectiveOk ? "WSC: counted (click to mark incorrect)"
                            : `WSC: NOT counted (click to mark correct)${sugg.length ? "\nSuggestions: " + sugg.join(", ") : ""}`
                   : tok.type;
+                
+                // Dev badge for token offsets smoke test
+                const devBadge = process.env.NODE_ENV === 'development' && overlappingRules.length > 0 
+                  ? `\n[${tok.start},${tok.end}] rules: ${overlappingRules.join(',')}`
+                  : process.env.NODE_ENV === 'development' 
+                    ? `\n[${tok.start},${tok.end}]`
+                    : '';
 
                 // token chip classes
                 const baseChip = "inline-flex items-center rounded px-2 py-1 text-sm border select-none";
@@ -1056,7 +1096,7 @@ function WritingScorer() {
                       title={
                         vt
                           ? "Proposed terminal (Figure 4). Click: yellow→red (reject) → green (accept) → yellow."
-                          : isVirtual ? "Inserted: possible missing terminal" : title
+                          : isVirtual ? "Inserted: possible missing terminal" : title + devBadge
                       }
                       onClick={() => {
                         if (vt) {

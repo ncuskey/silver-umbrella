@@ -11,14 +11,25 @@ const PUNCT_IDS = new Set([
   "PUNCTUATION", "UPPERCASE_SENTENCE_START", "EN_QUOTES", "MISSING_SENTENCE_TERMINATOR", "PUNCTUATION_PARAGRAPH_END"
 ]);
 
-// Map key rules to UI flags for better user experience
-const RULE_MAPPINGS = new Map([
-  ["UPPERCASE_SENTENCE_START", "Expected capital after sentence-ending punctuation"],
-  ["PUNCTUATION_PARAGRAPH_END", "Sentence may be missing terminal punctuation"],
-  ["TOO_LONG_SENTENCE", "Possible run-on sentence"],
-  ["MORFOLOGIK_RULE_EN_US", "Spelling error"],
-  ["MORFOLOGIK_RULE_EN_GB", "Spelling error"]
-]);
+// Rule → UI mapping (expanded for better parity with LT website)
+export const RULE_MAPPINGS: Record<string, {tag: string; label: string}> = {
+  // spelling
+  "MORFOLOGIK_RULE_EN_US": { tag: "SPELLING", label: "Spelling error" },
+  "MORFOLOGIK_RULE_EN_GB": { tag: "SPELLING", label: "Spelling error" },
+
+  // punctuation & capitalization
+  "PUNCTUATION_PARAGRAPH_END": { tag: "TERMINAL", label: "Sentence may be missing terminal punctuation" },
+  "UPPERCASE_SENTENCE_START": { tag: "CAPITALIZATION", label: "Expected capital after sentence-ending punctuation" },
+
+  // style/grammar (non-premium)
+  "TOO_LONG_SENTENCE": { tag: "RUN_ON", label: "Long sentence (possible run-on)" },
+  "COMMA_PARENTHESIS_WHITESPACE": { tag: "PUNCTUATION", label: "Spacing around punctuation" },
+  "WHITESPACE_RULE": { tag: "TYPOGRAPHY", label: "Unusual spacing" }
+};
+
+// Fallback gracefully
+export const mapRule = (id: string, cat: string) =>
+  RULE_MAPPINGS[id] ?? { tag: (cat || "OTHER").toUpperCase(), label: "" };
 
 export interface CwsHint {
   bIndex: number;          // -1 or token index
@@ -105,7 +116,8 @@ export function buildLtCwsHints(text: string, tokens: Token[], issues: GrammarIs
     // only keep the first hint per boundary
     if (!hints.has(bestB)) {
       // Use mapped message if available, otherwise use original message
-      const mappedMessage = RULE_MAPPINGS.get(iss.ruleId || "") || iss.message;
+      const mapped = mapRule(iss.ruleId || "", iss.categoryId || "");
+      const mappedMessage = mapped.label || iss.message;
       hints.set(bestB, {
         bIndex: bestB,
         message: mappedMessage,
