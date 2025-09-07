@@ -21,6 +21,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               (function(){
+                if (typeof window === 'undefined') return;
                 var params = new URLSearchParams(location.search);
                 if (params.get('debug') === '1') {
                   try { localStorage.setItem('cbm_debug','1'); } catch(e){}
