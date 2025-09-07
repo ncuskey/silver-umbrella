@@ -47,6 +47,8 @@
 │   │   │   └── dev-probe.ts   # Development testing script for Hunspell validation
 │   │   ├── grammar/           # Grammar checking system
 │   │   │   └── languagetool-client.ts # LanguageTool API client
+│   │   ├── cws.ts             # CWS (Correct Writing Sequences) engine
+│   │   ├── cws-lt.ts          # CWS-LanguageTool integration for advisory hints
 │   │   └── utils.ts           # Utility functions (cn helper)
 │   └── workers/               # Web Workers
 │       └── hunspell.worker.ts # Hunspell Web Worker implementation
@@ -126,6 +128,8 @@ interface Token {
   raw: string;
   type: UnitType;
   idx: number;
+  start?: number;  // 0-based char offset in raw text
+  end?: number;    // 0-based char offset in raw text (exclusive)
 }
 
 interface Infraction {
@@ -137,6 +141,13 @@ interface Infraction {
 
 interface WordOverride { csw?: boolean }
 interface PairOverride { cws?: boolean }
+
+interface CwsHint {
+  bIndex: number;          // -1 or token index
+  message: string;
+  ruleId?: string;
+  categoryId?: string;
+}
 ```
 
 #### Dictionary System
@@ -185,8 +196,9 @@ interface PairOverride { cws?: boolean }
 
 ### Interactive Scoring
 - **Word Overrides**: Click words to toggle WSC scoring
-- **Pair Overrides**: Click carets (^) to toggle CWS pairs
-- **Visual Feedback**: Color-coded indicators for correct/incorrect
+- **Pair Overrides**: Click carets (^) to cycle CWS states (yellow→red→green→yellow)
+- **Visual Feedback**: Color-coded indicators for correct/incorrect/advisory
+- **3-State Cycling**: Yellow (advisory), Red (incorrect), Green (correct), Yellow (default)
 
 ### Automated Validation
 - **Spelling Detection**: Dictionary-based spell checking
@@ -238,6 +250,15 @@ interface PairOverride { cws?: boolean }
 - **AbortSignal Support**: Request cancellation to prevent stale results
 - **Automatic Grammar Checking**: Debounced text analysis with 800ms delay
 - Advisory-only suggestions (doesn't affect CBM scores)
+
+### CWS-LanguageTool Integration (`src/lib/cws-lt.ts`)
+
+#### CWS Advisory Hints System
+- `buildLtCwsHints()`: Maps LanguageTool grammar issues to CWS boundaries
+- **Smart Boundary Mapping**: Grammar issues mapped to nearest CWS boundaries within ±2 characters
+- **Category Filtering**: Only grammar issues (not spelling/punctuation) mapped to boundaries
+- **Advisory Hints**: Grammar suggestions shown as yellow carets and advisory infractions
+- **Override Awareness**: Advisory hints disappear when users explicitly override boundary states
 
 ### API Routes (`src/app/api/`)
 
@@ -321,7 +342,18 @@ The tool implements scoring methods aligned with educational research:
 
 ### Recent Updates
 
-#### Latest Improvements (v2.2)
+#### Latest Improvements (v2.4)
+- **Token Character Offsets**: Added `start` and `end` properties to Token interface for precise character position tracking
+- **Enhanced Tokenizer**: Updated tokenization to use `matchAll()` for capturing character positions
+- **CWS-LanguageTool Integration**: Created `src/lib/cws-lt.ts` for mapping grammar issues to CWS boundaries
+- **3-State Caret Cycling**: Enhanced caret interaction with yellow (advisory) → red (incorrect) → green (correct) → yellow (default)
+- **Advisory Hints**: LanguageTool grammar suggestions now appear as yellow carets and advisory infractions
+- **Smart Boundary Mapping**: Grammar issues mapped to nearest CWS boundaries within ±2 character window
+- **Advisory Infractions**: Grammar suggestions shown as "CWS (advisory)" entries in infractions panel
+- **Color Legend**: Added visual guide above token stream explaining caret color meanings for teachers
+- **Enhanced User Experience**: Clear cycling instructions and improved tooltips for better teacher usability
+
+#### Previous Improvements (v2.2)
 - **Smart Engine Tagging**: Added `engineTag` dependency tracking that forces all scoring to recompute when Hunspell loads
 - **Enhanced Cache Management**: Engine-tagged spell caching with `hun:word` vs `demo:word` keys prevents demo results from being reused after Hunspell loads
 - **Automatic Cache Clearing**: Spell cache is automatically cleared when Hunspell loads via `spellCache.current.clear()` after `setExternalSpellChecker()`

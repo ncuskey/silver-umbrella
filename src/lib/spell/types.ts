@@ -23,4 +23,6 @@ export interface Token {
   raw: string;
   type: "WORD" | "PUNCT";
   idx: number; // global index in token stream
+  start?: number;  // NEW: 0-based char offset in the raw text
+  end?: number;    // NEW: 0-based char offset in the raw text (exclusive)
 }
