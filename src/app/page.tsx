@@ -435,8 +435,9 @@ function InfractionList({
 
         const RowTag = maybeGroup ? "button" : "div";
         const onClick = maybeGroup ? () => {
-          dlog("[VT] suggestion click", { boundary: f.at, group: vtByBoundary?.get(f.at as number) });
-          cycleGroup?.(maybeGroup);
+          const g = vtByBoundary?.get(f.at as number);
+          console.log("[VT] suggestion click", { boundary: f.at, groupFound: !!g, g });
+          if (g) cycleGroup?.(g); // toggles left caret + dot + right caret
         } : undefined;
 
         return (
@@ -748,11 +749,14 @@ function WritingScorer() {
   // 1) base tokens exist already as `tokens` from your tokenizer
   // Use LT-derived terminals when LT is available, otherwise fall back to heuristics
   const terminalInsertions = useMemo(() => {
-    // If LT is active, derive insertions from LT; otherwise use heuristic
-    if (ltIssues && ltIssues.length > 0) {
-      return ltBoundaryInsertions(tokens, ltIssues);
-    }
-    return detectMissingTerminalInsertions(text, tokens);
+    // Try LT-derived boundaries first (authoritative).
+    const fromLT = ltBoundaryInsertions(tokens, ltIssues);
+    if (fromLT.length) return fromLT;
+
+    // Fallback (dev only): heuristic with a guard to avoid the "and I / Then I" false positives
+    const fallback = detectMissingTerminalInsertions(text, tokens)
+      .filter(x => tokens[x.beforeBIndex + 1]?.raw !== "I"); // skip before "I"
+    return fallback;
   }, [tokens, ltIssues, text]);
 
   // 2) insert virtual terminals for display + scoring
@@ -767,6 +771,13 @@ function WritingScorer() {
     [displayTokens]
   );
   DEBUG && dgroup("[VT] virtualTerminals (groups)", () => dlog(virtualTerminals));
+
+  // Add counts logging to show the exact break
+  console.log("[VT] counts", {
+    insertions: terminalInsertions?.length ?? -1,
+    displayDots: displayTokens.filter((t:any)=>t?.virtual && t.type==="PUNCT" && /[.?!]/.test(t.raw)).length,
+    groups: virtualTerminals?.length ?? -1,
+  });
 
   // Find a virtual terminal by dot index (you already pass them down with scoring)
   const vtByDotIndex = useMemo(() => {

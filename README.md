@@ -353,7 +353,17 @@ The tool is designed for easy extension:
 
 ## Recent Updates
 
-### Latest Improvements (v3.6) - Stable Virtual Terminal Group System
+### Latest Improvements (v3.7) - LT Authority & Debug Visibility
+- **LT Authority Priority**: LanguageTool now provides authoritative terminal punctuation suggestions, with heuristics as fallback only
+- **Debug Counts Logging**: Added comprehensive counts logging showing insertions, displayDots, and groups for troubleshooting
+- **Display Stream Groups**: Groups are now built from the actual rendered display stream, guaranteeing `groups === displayDots`
+- **False Positive Filtering**: Added filter to avoid "and I / Then I" false positives by skipping insertions before "I"
+- **Enhanced Suggestion Clicks**: Improved suggestion row click handlers with proper boundary-to-group mapping
+- **Stable Group System**: Groups remain stable across re-renders and mode switches
+- **LT Boundary Detection**: LanguageTool issues are converted to terminal insertions with proper boundary mapping
+- **Consistent Dot Rendering**: Virtual terminal dots render consistently whether using LT or heuristic detection
+
+### Previous Improvements (v3.6) - Stable Virtual Terminal Group System
 - **Stable Group Building**: Implemented `createVirtualTerminalsFromDisplay()` function that builds groups from rendered display tokens instead of insertion arrays
 - **Re-render Stability**: Groups now remain stable across re-renders, even when insertion arrays become empty
 - **LT Authority Integration**: Added `ltBoundaryInsertions()` function to convert LanguageTool issues into terminal insertion format
