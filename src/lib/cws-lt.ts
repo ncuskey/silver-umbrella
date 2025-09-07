@@ -311,7 +311,7 @@ export function deriveTerminalFromLT(tokens: Token[], issues: any[]) {
   return carets;
 }
 
-import type { VirtualTerminalInsertion } from "@/lib/cws-heuristics";
+import type { VirtualTerminalInsertion } from "@/lib/types";
 
 const SENTINEL_TERMINALS = new Set([".", "!", "?"]);
 const OPENERS = new Set(['"', '"', "'", "(", "[", "{", "«"]); // don't place before these
@@ -351,6 +351,7 @@ export function convertLTTerminalsToInsertions(
       const boundaryIdx = nearestBoundaryLeftOf(tokens, startTok.idx + 1);
       if (wordIdx >= 0) {
         out.push({
+          at: tokens[wordIdx].end || 0,
           char: ".",
           beforeBIndex: boundaryIdx >= 0 ? boundaryIdx : wordIdx,
           reason: "LT",
@@ -383,6 +384,7 @@ export function convertLTTerminalsToInsertions(
 
       if (!alreadyTerminal && !isOpener) {
         out.push({
+          at: tokens[wordIdx].end || 0,
           char: ".",
           beforeBIndex: boundaryIdx,         // but ownership is the LEFT boundary caret
           reason: "LT",
@@ -566,6 +568,7 @@ export function ltBoundaryInsertions(
     seen.add(bIndex);
 
     out.push({
+      at: tokens[bIndex]?.end || 0,
       beforeBIndex: bIndex,
       char: ".", // default; LT rarely tells us "!" or "?"
       reason: "LT",

@@ -1,7 +1,6 @@
 // src/lib/cws-core.ts
 import type { Token } from "@/lib/spell/types";
 import { buildCwsPairs, type CwsPair } from "@/lib/cws";
-import { detectMissingTerminalInsertions, VirtualTerminal } from "@/lib/cws-heuristics";
 
 // Tokenization regex from the main app
 const TOKEN_RE = /[A-Za-z]+(?:[-''][A-Za-z]+)*|[\.!\?;:\u2014\u2013\-]|,|\d+(?:[\.,]\d+)*/g;
@@ -84,14 +83,13 @@ function createTestSpellChecker(): (word: string) => boolean {
 }
 
 /**
- * Score text and return TWW, WSC, CWS, eligible boundaries, and virtual terminals
+ * Score text and return TWW, WSC, CWS, and eligible boundaries
  */
-export function score(text: string, virtualTerminals?: VirtualTerminal[]): { 
+export function score(text: string): { 
   tww: number; 
   wsc: number; 
   cws: number; 
   eligibleBoundaries: number;
-  virtualTerminals?: VirtualTerminal[];
 } {
   const tokens = tokenize(text);
   const spellChecker = createTestSpellChecker();
@@ -109,14 +107,5 @@ export function score(text: string, virtualTerminals?: VirtualTerminal[]): {
   // Eligible boundaries: all boundaries that could potentially count for CWS
   const eligibleBoundaries = pairs.filter(p => p.eligible).length;
   
-  // Use provided virtual terminals or create basic ones from heuristics
-  const vt = virtualTerminals || detectMissingTerminalInsertions(text, tokens).map(vt => ({
-    insertAfterIdx: vt.beforeBIndex,
-    reason: vt.reason,
-    dotTokenIndex: -1, // Not available in basic mode
-    leftBoundaryBIndex: vt.beforeBIndex,
-    rightBoundaryBIndex: vt.beforeBIndex + 1,
-  }));
-  
-  return { tww, wsc, cws, eligibleBoundaries, virtualTerminals: vt };
+  return { tww, wsc, cws, eligibleBoundaries };
 }

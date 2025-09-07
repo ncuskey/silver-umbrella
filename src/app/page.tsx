@@ -282,13 +282,13 @@ function WritingScorer() {
 
   const filteredLt = useMemo(() => {
     const out = filterTerminalIssues(ltIssues);
-    if ((window as any).__CBM_DEBUG__) console.info("[LT] filtered", out.map(ltRuleId));
+    if (typeof window !== "undefined" && (window as any).__CBM_DEBUG__) console.info("[LT] filtered", out.map(ltRuleId));
     return out;
   }, [ltIssues]);
 
   const terminalInsertions = useMemo<VirtualTerminalInsertion[]>(() => {
     const ins = ltIssuesToInsertions(text, tokens, filteredLt);
-    if ((window as any).__CBM_DEBUG__) console.info("[VT] counts", { lt: ins.length, eop: 0, insertions: ins.length });
+    if (typeof window !== "undefined" && (window as any).__CBM_DEBUG__) console.info("[VT] counts", { lt: ins.length, eop: 0, insertions: ins.length });
     return ins;
   }, [text, tokens, filteredLt]);
 
