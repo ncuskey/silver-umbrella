@@ -13,8 +13,7 @@ import { buildCwsPairs, ESSENTIAL_PUNCT } from "@/lib/cws";
 import type { CwsPair } from "@/lib/cws";
 import { buildLtCwsHints } from "@/lib/cws-lt";
 import type { CwsHint } from "@/lib/cws-lt";
-import { buildTerminalHeuristics } from "@/lib/cws-heuristics";
-import type { HeurHint } from "@/lib/cws-heuristics";
+import { detectMissingTerminalInsertions, VirtualTerminalInsertion } from "@/lib/cws-heuristics";
 import { cn } from "@/lib/utils";
 
 /**
@@ -44,6 +43,8 @@ interface Token {
   start?: number;  // NEW: 0-based char offset in the raw text
   end?: number;    // NEW: 0-based char offset in the raw text (exclusive)
 }
+
+type DisplayToken = Token & { virtual?: boolean; essential?: boolean; display?: string };
 
 interface WordOverride { csw?: boolean }
 interface PairOverride { cws?: boolean }
@@ -111,6 +112,24 @@ function tokenize(text: string): Token[] {
     i = end;
   }
   return toks;
+}
+
+function insertVirtualTerminals(base: Token[], inserts: VirtualTerminalInsertion[]): DisplayToken[] {
+  const out: DisplayToken[] = base.map(t => ({ ...t }));
+  // Sort DESC by boundary so indexes stay valid as we splice
+  const sorted = [...inserts].sort((a, b) => b.beforeBIndex - a.beforeBIndex);
+  for (const ins of sorted) {
+    const at = ins.beforeBIndex + 1; // between base[at-1] and base[at]
+    out.splice(at, 0, {
+      raw: ins.char,
+      type: "PUNCT",          // treat as punctuation
+      essential: true,        // essential terminal punctuation for CWS
+      virtual: true,          // UI styling + scoring guard
+      display: ins.char,
+      idx: -1,                // not from the original text
+    } as DisplayToken);
+  }
+  return out;
 }
 
 function sentenceBoundaries(text: string): { startIdx: number; endIdx: number; raw: string }[] {
@@ -200,6 +219,13 @@ function caretStateForBoundary(bIndex: number, pairByBoundary: Map<number, CwsPa
 
   if (ov === false) return { eligible: true as const, state: "bad" as const, reason: pair.reason || "rule" };
   if (ov === true)  return { eligible: true as const, state: "ok"  as const, reason: "override-ok" };
+
+  // If this boundary touches a virtual terminal and user hasn't overridden it, keep it advisory (yellow)
+  if (pair.virtualBoundary) {
+    if (ov === undefined) {
+      return { eligible: true as const, state: "advisory" as const, reason: advisory?.message || "Inserted virtual terminal" };
+    }
+  }
 
   // no override -> show advisory if base is ok but LT flagged the boundary
   if (baseValid && advisory) return { eligible: true as const, state: "advisory" as const, reason: advisory.message };
@@ -525,25 +551,55 @@ function WritingScorer() {
   const engineTag = spellStatus === "hunspell" ? "hun" : "demo";
   
   const tokens = useMemo(() => tokenize(text), [text, engineTag]);
-  const stream = useMemo(() => tokens, [tokens, engineTag]);
+  
+  // 1) base tokens exist already as `tokens` from your tokenizer
+  const terminalInsertions = useMemo(
+    () => detectMissingTerminalInsertions(text, tokens),
+    [text, tokens]
+  );
+
+  // 2) insert virtual terminals for display + scoring
+  const displayTokens = useMemo(
+    () => insertVirtualTerminals(tokens, terminalInsertions),
+    [tokens, terminalInsertions]
+  );
+
+  // 3) create a quick map of advisory carets around each virtual terminal
+  const virtualBoundaryHints = useMemo(() => {
+    const m = new Map<number, { message: string }>();
+    for (const v of terminalInsertions) {
+      // Caret before the inserted punctuation
+      m.set(v.beforeBIndex, { message: v.message });
+      // Caret after the inserted punctuation (shifted by +1 due to insertion)
+      m.set(v.beforeBIndex + 1, { message: v.message });
+    }
+    return m;
+  }, [terminalInsertions]);
+
+  const stream = useMemo(() => displayTokens, [displayTokens, engineTag]);
 
   const cwsPairs = useMemo(() => {
     const sc = getExternalSpellChecker();
     const spell = (w: string) => sc ? sc.isCorrect(w) : isWordLikelyCorrect(w, lexicon);
-    return buildCwsPairs(tokens, spell);
+    return buildCwsPairs(displayTokens, spell);
     // include engineTag so it recomputes when Hunspell loads
-  }, [tokens, engineTag, lexicon]);
+  }, [displayTokens, engineTag, lexicon]);
 
-  const cwsCount = useMemo(() => {
-    let n = 0;
-    for (const p of cwsPairs) {
-      if (!p.eligible) continue;
-      const ov = pairOverrides[p.bIndex]?.cws;
-      const ok = ov === true ? true : ov === false ? false : p.valid;
-      if (ok) n++;
-    }
-    return n;
-  }, [cwsPairs, pairOverrides]);
+  // Make sure virtual carets don't count unless accepted
+  function isPairCounted(bIndex: number, pair: CwsPair): boolean {
+    const ov = pairOverrides[bIndex]?.cws;
+    if (ov === true) return true;
+    if (ov === false) return false;
+    // virtual terminals are advisory by default (not counted)
+    if (pair.virtualBoundary) return false;
+    // otherwise, rely on the mechanical validity
+    return !!pair.valid;
+  }
+
+  const cwsCount = useMemo(
+    () => cwsPairs.reduce((n, p) => n + (p.eligible && isPairCounted(p.bIndex, p) ? 1 : 0), 0),
+    [cwsPairs, pairOverrides]
+  );
 
   const eligibleBoundaries = useMemo(
     () => cwsPairs.reduce((n, p) => n + (p.eligible ? 1 : 0), 0),
@@ -570,15 +626,16 @@ function WritingScorer() {
   
   // Compute advisory hints (memoized)
   const ltHintsMap = useMemo(() => buildLtCwsHints(text, tokens, ltIssues), [text, tokens, ltIssues]);
-  const heurHintsMap = useMemo(() => buildTerminalHeuristics(text, tokens), [text, tokens]);
 
-  // Merge: prefer LT if both exist for the same boundary
+  // If you already build LT hints, merge them with priority to LanguageTool:
   const advisoryHints = useMemo(() => {
     const m = new Map<number, { message: string }>();
-    heurHintsMap.forEach((h) => { if (!m.has(h.bIndex)) m.set(h.bIndex, { message: h.message }); });
-    ltHintsMap.forEach((h) => { m.set(h.bIndex, { message: h.message }); });
+    // heuristics first
+    virtualBoundaryHints.forEach((h, k) => m.set(k, h));
+    // LT may override the message for the same boundary
+    ltHintsMap.forEach((h, k) => m.set(k, h));
     return m;
-  }, [ltHintsMap, heurHintsMap]);
+  }, [virtualBoundaryHints, ltHintsMap]);
 
   // Fast lookup maps
   const pairByBoundary = useMemo(() => {
@@ -612,6 +669,18 @@ function WritingScorer() {
             reason === "not-units"      ? "Invalid unit adjacency" :
             "Invalid adjacency";
           infractions.push({ kind: "definite", tag, msg, at: p.bIndex });
+        }
+        
+        // Red/green reasons in infractions panel (when pushing infractions): if a pair is virtualBoundary and not overridden, push a possible item with your message:
+        if (p.virtualBoundary) {
+          if (ov === undefined && p.eligible) {
+            infractions.push({
+              kind: "possible",
+              tag: "TERMINAL (possible)",
+              msg: advisoryHints.get(p.bIndex)?.message || "Possible missing terminal punctuation",
+              at: p.bIndex
+            });
+          }
         }
       }
     }
@@ -722,8 +791,9 @@ function WritingScorer() {
                   </button>
                 );
               })()}
-              {tokens.map((tok, i) => {
+              {displayTokens.map((tok, i) => {
                 const isWordTok = tok.type === "WORD";
+                const isVirtual = (tok as DisplayToken).virtual;
                 const ok = isWordLikelyCorrect(tok.raw, lexicon);
                 const ov = (overrides[tok.idx] as WordOverride)?.csw;
                 const effectiveOk = ov === true ? true : ov === false ? false : ok;
@@ -736,29 +806,37 @@ function WritingScorer() {
                            : `WSC: NOT counted (click to mark correct)${sugg.length ? "\nSuggestions: " + sugg.join(", ") : ""}`
                   : tok.type;
 
+                // token chip classes
+                const baseChip = "inline-flex items-center rounded px-2 py-1 text-sm border";
+                const virtualClasses = isVirtual
+                  ? "bg-amber-50 border-amber-300 text-amber-800 border-dashed"
+                  : "bg-slate-50 border-slate-200";
+
                 return (
                   <React.Fragment key={`tok-${i}`}>
                     {/* TOKEN */}
                     <button
                       className={cn(
-                        "px-2 py-1 rounded-xl border transition-colors",
-                        isWordTok
-                          ? bad
-                            ? "bg-red-100 text-red-700 border-red-300"
-                            : "bg-emerald-50 text-emerald-700 border-emerald-200"
-                          : "bg-slate-50 text-slate-700 border-slate-200"
+                        baseChip,
+                        isVirtual
+                          ? virtualClasses
+                          : isWordTok
+                            ? bad
+                              ? "bg-red-100 text-red-700 border-red-300"
+                              : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                            : "bg-slate-50 text-slate-700 border-slate-200"
                       )}
-                      title={title}
+                      title={isVirtual ? "Inserted: possible missing terminal" : title}
                       onClick={() => {
                         if (!isWordTok) return;
                         setOverrides((o) => ({ ...o, [tok.idx]: { ...(o[tok.idx] as WordOverride), csw: !(effectiveOk) } }));
                       }}
                     >
-                      {tok.raw}
+                      {(tok as DisplayToken).display ?? tok.raw}
                     </button>
 
                     {/* CARET */}
-                    {i < tokens.length - 1 && (
+                    {i < displayTokens.length - 1 && (
                       (() => {
                         const { eligible, state, reason } = caretStateForBoundary(i, pairByBoundary, pairOverrides, advisoryHints);
                         const cls =

@@ -22,6 +22,8 @@ export interface CwsPair {
   valid: boolean;
   /** machine-readable reason when invalid (for tooling) */
   reason?: "misspelling" | "capitalization" | "nonessential-punct" | "not-units";
+  /** whether this boundary involves a virtual terminal insertion */
+  virtualBoundary?: boolean;
 }
 
 /**
@@ -117,6 +119,7 @@ export function buildCwsPairs(
       eligible,
       valid,
       reason,
+      virtualBoundary: (tokens[li] as any).virtual || (tokens[ri] as any).virtual,
     });
   }
 
