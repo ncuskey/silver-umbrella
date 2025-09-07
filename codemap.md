@@ -201,6 +201,10 @@ interface CwsHint {
 
 #### Utility Functions (`src/lib/utils.ts`)
 - `cn()`: Combines clsx and tailwind-merge for conditional classes
+- `DEBUG`: Enhanced debug flag supporting multiple activation methods (URL parameter, localStorage, environment variable)
+- `dlog()`: Debug logging function that respects DEBUG flag
+- `dgroup()`: Debug grouping function for organized console output
+- `dtable()`: Debug table function for structured data display
 
 ## Key Features
 
@@ -328,6 +332,27 @@ interface CwsHint {
 - **Behavior Locking**: Golden test ensures virtual terminal cycling behavior remains consistent
 - **Pure Functions**: `src/lib/cws-core.ts` provides testable scoring functions
 - **Continuous Integration**: Tests run automatically on build
+
+### Debug System (`src/lib/utils.ts` & `src/app/layout.tsx`)
+
+#### Enhanced Debug Infrastructure
+- **Multi-Method Activation**: Debug mode can be enabled via URL parameter (`?debug=1`), localStorage, environment variable, or browser console
+- **Production-Safe**: Debug mode can be forced in production environments for troubleshooting
+- **Persistent Storage**: URL-based activation persists across sessions via localStorage
+- **Boot Script**: Early initialization script in layout.tsx runs before React to set up debug mode
+- **Environment Support**: `NEXT_PUBLIC_CBM_DEBUG=1` for preview deploys and production debugging
+
+#### Debug Functions
+- **`dlog()`**: Conditional console logging that respects DEBUG flag
+- **`dgroup()`**: Organized console grouping with try/finally cleanup
+- **`dtable()`**: Structured table display for debugging data
+- **Runtime Control**: Debug mode can be toggled at runtime via `window.__CBM_DEBUG__`
+
+#### Debug Activation Methods
+1. **URL Parameter**: `?debug=1` - Most user-friendly method
+2. **Browser Console**: `window.__CBM_DEBUG__ = true` - Developer method
+3. **Environment Variable**: `NEXT_PUBLIC_CBM_DEBUG=1` - Production/preview method
+4. **Persistent Storage**: Automatic re-enablement from localStorage
 
 ### API Routes (`src/app/api/`)
 

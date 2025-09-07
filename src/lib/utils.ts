@@ -6,9 +6,12 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export const DEBUG =
-  typeof window !== "undefined" &&
-  (window as any).__CBM_DEBUG__ === true &&
-  process.env.NODE_ENV !== "production";
+  // runtime flag (DevTools or early boot script)
+  (typeof window !== "undefined" && (window as any).__CBM_DEBUG__ === true)
+  // URL switch ?debug=1 (boot script below writes this)
+  || (typeof window !== "undefined" && localStorage.getItem("cbm_debug") === "1")
+  // env switch for Netlify previews, etc.
+  || process.env.NEXT_PUBLIC_CBM_DEBUG === "1";
 
 export function dlog(...args: any[]) {
   if (DEBUG) console.log(...args);

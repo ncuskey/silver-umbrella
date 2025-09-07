@@ -16,6 +16,24 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function(){
+                var params = new URLSearchParams(location.search);
+                if (params.get('debug') === '1') {
+                  try { localStorage.setItem('cbm_debug','1'); } catch(e){}
+                  window.__CBM_DEBUG__ = true;
+                  console.log('[CBM] debug enabled via ?debug=1');
+                } else if (localStorage.getItem('cbm_debug') === '1') {
+                  window.__CBM_DEBUG__ = true;
+                }
+              })();
+            `
+          }}
+        />
+      </head>
       <body className={inter.className}>{children}</body>
     </html>
   )

@@ -269,15 +269,29 @@ The application is optimized for production deployment with minimal runtime requ
 
 ## Debugging
 
-### Debug Logging System
+### Enhanced Debug System
 
-The application includes a comprehensive debug logging system to help troubleshoot issues with the terminal group pipeline:
+The application includes a comprehensive debug logging system with multiple ways to enable debug mode for troubleshooting issues with the terminal group pipeline:
 
 #### Enabling Debug Logs
 
+**Method 1: URL Parameter (Recommended)**
+1. Add `?debug=1` to your URL (e.g., `http://localhost:3000?debug=1`)
+2. Debug mode will be enabled and persisted in localStorage
+3. Console will show: `[CBM] debug enabled via ?debug=1`
+
+**Method 2: Browser Console**
 1. Open the browser console (F12)
 2. Run: `window.__CBM_DEBUG__ = true`
 3. Reload the page
+
+**Method 3: Environment Variable (Production/Preview)**
+1. Set `NEXT_PUBLIC_CBM_DEBUG=1` in your environment
+2. Useful for Netlify preview deploys and production debugging
+
+**Method 4: Persistent Storage**
+1. Once enabled via URL parameter, debug mode persists in localStorage
+2. Debug mode will automatically re-enable on subsequent visits
 
 #### Debug Information Available
 
