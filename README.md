@@ -6,7 +6,7 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 
 ### Written Expression Scoring
 - **TWW (Total Words Written)**: Counts all words written, including misspellings, excluding numerals
-- **WSC (Words Spelled Correctly)**: Uses dictionary packs and custom lexicon for spell-checking
+- **WSC (Words Spelled Correctly)**: Uses LanguageTool API for professional spell checking
 - **CWS (Correct Writing Sequences)**: Mechanical, CBM-aligned scoring of adjacent unit pairs with visual caret indicators
 
 ### Spelling Assessment
@@ -15,20 +15,17 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 - Aligned target and attempt word lists
 
 ### Advanced Features
-- **Dictionary Packs**: Demo bundles for different grade levels (K-2, K-5, general)
-- **Custom Lexicon**: Add custom words for specialized vocabulary
-- **Hunspell Integration**: Professional spell checking with WASM dictionaries
-- **Automatic Loading**: Hunspell loads automatically on app startup
-- **Spell Engine Status**: Visual indicator showing active spell engine (Demo/Hunspell)
-- **Auto-validation**: Automatic probe testing after Hunspell loading
-- **Spelling Suggestions**: Tooltip suggestions for misspelled words when Hunspell is active
+- **LanguageTool API**: Professional spell checking and grammar analysis via LanguageTool's public API
+- **LanguageTool Integration**: Professional spell checking via LanguageTool API
+- **Spell Engine Status**: Visual indicator showing LanguageTool spell checking mode
+- **Spelling Suggestions**: Tooltip suggestions for misspelled words via LanguageTool
 - **LanguageTool Grammar**: Automatic grammar checking with debounced text analysis
 - **Request Cancellation**: AbortSignal support for grammar checking requests
 - **Infraction Flagging**: Automated detection of definite vs. possible issues
 - **Interactive Overrides**: Click words to toggle WSC scoring, click carets to cycle CWS states
 - **CWS Engine**: Strictly mechanical, CBM-aligned engine with visual caret indicators and boundary validation
 - **Rule-based Checks**: Capitalization, terminal punctuation, and sentence structure validation
-- **Spell Result Caching**: Intelligent caching for repeated word lookups (big speedup on longer texts)
+- **Spell Result Caching**: Intelligent caching for LanguageTool API responses (big speedup on longer texts)
 - **Curly Apostrophe Support**: Proper handling of smart quotes and apostrophes
 - **Token Character Offsets**: Precise character position tracking for LanguageTool issue alignment
 - **CWS-LanguageTool Integration**: Grammar suggestions mapped to CWS boundaries with advisory hints
@@ -47,7 +44,7 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 - **Self-hosted LanguageTool**: Support for custom LanguageTool endpoints with privacy toggle
 - **Rate Limiting**: Exponential backoff for LanguageTool API rate limits
 - **Golden Tests**: Comprehensive test suite for CWS rule validation
-- **License Compliance**: Automatic license checking for SCOWL/Hunspell dictionaries
+- **License Compliance**: LanguageTool API usage compliance
 
 ## Getting Started
 
@@ -79,7 +76,7 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 ### Written Expression Tab
 1. Paste student writing in the text area
 2. Set the probe time duration (mm:ss format) for fluency calculations
-3. Hunspell loads automatically on startup for professional spell checking
+3. LanguageTool provides professional spell checking via API
 4. Grammar checking runs automatically as you type (debounced)
 5. Review the 6 key metrics in the right column grid
 6. Check infractions and suggestions (always visible)
@@ -149,19 +146,15 @@ The CWS (Correct Writing Sequences) engine implements strictly mechanical, CBM-a
 
 ## Spell Checking & Grammar
 
-### Hunspell Integration
-- **Real WASM Implementation**: Uses `hunspell-asm` library for professional spell checking
-- **Dictionary Files**: Uses `en_US.aff` and `en_US.dic` files from LibreOffice dictionaries
-- **Automatic Loading**: Hunspell loads automatically on app startup for seamless experience
-- **Status Tracking**: Visual badge shows active spell engine (Demo lexicon vs Hunspell WASM)
-- **Auto-validation**: Automatic probe testing with common words after loading
-- **Spelling Suggestions**: Built-in Hunspell suggestion engine for misspelled words
+### LanguageTool Integration
+- **API-based Spell Checking**: Uses LanguageTool's public API for professional spell checking
+- **Automatic Grammar Checking**: Grammar analysis runs automatically as you type with debounce
+- **Status Tracking**: Visual badge shows LanguageTool spell checking mode
+- **Spelling Suggestions**: Built-in LanguageTool suggestion engine for misspelled words
 - **Tooltip Integration**: Suggestions appear in word tooltips when words are flagged
-- **Seamless Fallback**: Uses custom lexicon with light stemming when Hunspell not loaded
-- **Performance Optimized**: Aggressive caching (1-year) for dictionary files
-- **Spell Result Caching**: Intelligent in-memory caching for repeated word lookups
-- **Web Worker Ready**: Architecture supports moving to Web Worker for large dictionaries
-- **Development Testing**: Automatic probe in dev mode for quick validation
+- **Spell Result Caching**: Intelligent in-memory caching for LanguageTool API responses
+- **Rate Limiting**: Automatic exponential backoff for API rate limits
+- **Request Cancellation**: AbortSignal support for canceling stale requests
 
 ### LanguageTool Grammar
 - **Automatic Grammar Checking**: Runs automatically as you type with 800ms debounce
@@ -246,10 +239,9 @@ The application is optimized for production deployment with minimal runtime requ
 - **Clear Session Data**: Complete reset of all settings and student text
 
 ### License Compliance
-- **SCOWL Attribution**: Proper attribution for dictionary word lists (LGPL/MPL)
-- **Hunspell Attribution**: Proper attribution for spell checking engine (GPL/LGPL/MPL)
-- **Automatic Validation**: License compliance check runs before every build
-- **Dictionary Files**: Includes proper license documentation in `public/dicts/LICENSES.md`
+- **LanguageTool Attribution**: Proper attribution for LanguageTool API usage
+- **API Usage**: Compliant with LanguageTool's terms of service
+- **Privacy Controls**: FERPA/COPPA compliant with local-only mode by default
 
 ## Testing
 
@@ -270,18 +262,25 @@ The application is optimized for production deployment with minimal runtime requ
 ## Extensibility
 
 The tool is designed for easy extension:
-- **Real Hunspell WASM**: Professional spell checking with 500K+ word support
-- **LanguageTool Grammar**: Grammar checking already integrated
-- **Multi-language Ready**: Add support for additional languages with new dictionary files
+- **LanguageTool API**: Professional spell checking and grammar analysis with comprehensive support
+- **Multi-language Ready**: LanguageTool supports 40+ languages out of the box
 - **Advanced Grammar**: Add POS-based rules for enhanced grammar checking
-- **Dictionary Integration**: Easy integration with additional dictionary databases
-- **Web Worker Support**: Non-blocking spell checking for performance optimization
+- **API Extensions**: Easy integration with additional language services
+- **Performance Optimization**: Intelligent caching and request management
 - **Export Extensions**: Easy to add new export formats (JSON, XML, etc.)
 - **Privacy Extensions**: Framework for additional privacy controls and compliance features
 
 ## Recent Updates
 
-### Latest Improvements (v2.10)
+### Latest Improvements (v3.0) - LanguageTool Only
+- **Simplified Architecture**: Removed Hunspell and local dictionaries, now uses LanguageTool API exclusively
+- **Enhanced Spell Checking**: Professional spell checking via LanguageTool's MORFOLOGIK_RULE_EN_US and TYPOS categories
+- **Improved Performance**: Eliminated local dictionary loading and WASM dependencies
+- **Better Suggestions**: Spelling suggestions now come directly from LanguageTool's comprehensive database
+- **Streamlined Codebase**: Removed 9 packages and simplified spell checking logic
+- **API-First Design**: All spell checking now goes through LanguageTool's public API with proper rate limiting
+
+### Previous Improvements (v2.10)
 - **Enhanced Virtual Terminal System**: Comprehensive boundary tracking with proper CWS integration when accepted
 - **One-Click Group Cycling**: Revolutionary feature allowing teachers to click virtual terminal dots to cycle both adjacent carets simultaneously
 - **Improved Accessibility**: Added keyboard navigation support with Enter/Space key activation for virtual terminal dots
@@ -303,7 +302,7 @@ The tool is designed for easy extension:
 - **Self-hosted LanguageTool**: Support for custom LanguageTool endpoints with privacy toggle and settings UI
 - **Rate Limiting**: Added exponential backoff for LanguageTool API rate limits (429 handling)
 - **Golden Tests**: Comprehensive Vitest test suite for CWS rule validation and correctness
-- **License Compliance**: Automatic license checking for SCOWL/Hunspell dictionaries with prebuild validation
+- **License Compliance**: LanguageTool API usage compliance with prebuild validation
 - **Enhanced Privacy**: Default local-only mode ensures no student text leaves browser unless explicitly enabled
 - **Session Management**: Clear session data functionality for schools and privacy-conscious users
 - **Settings UI**: Intuitive settings popover with gear icon for LanguageTool configuration
@@ -358,33 +357,33 @@ The tool is designed for easy extension:
 - **Enhanced Scoring**: CWS count now uses the new engine with proper override handling
 
 ### Previous Improvements (v2.2)
-- **Smart Engine Tagging**: Added engine-aware dependency tracking that forces all scoring to recompute when Hunspell loads
-- **Enhanced Cache Management**: Engine-tagged spell caching prevents demo results from being reused after Hunspell loads
-- **Automatic Cache Clearing**: Spell cache is automatically cleared when Hunspell loads to ensure fresh scoring
+- **Smart Engine Tagging**: Added engine-aware dependency tracking that forces all scoring to recompute when LanguageTool loads
+- **Enhanced Cache Management**: Engine-tagged spell caching prevents demo results from being reused after LanguageTool loads
+- **Automatic Cache Clearing**: Spell cache is automatically cleared when LanguageTool loads to ensure fresh scoring
 - **Improved Visual Feedback**: Red badges for misspelled words, green badges for correct words with enhanced styling
-- **Stricter Grammar Filtering**: LanguageTool now only shows spelling suggestions for genuine typos, filtered by Hunspell when available
+- **Stricter Grammar Filtering**: LanguageTool now only shows spelling suggestions for genuine typos
 - **Better Override Handling**: Manual overrides are properly respected in both scoring and visual display
 - **Enhanced Re-scoring**: All derived values (tokens, WSC, CWS, infractions) are automatically re-computed when spell engine changes
 - **Sticky Grammar Client**: LanguageTool client now "sticks" to proxy or public endpoint to avoid repeated failed requests
 - **Grammar Status Display**: Grammar badge now shows whether using proxy or public endpoint for better transparency
 
 ### Previous Updates
-- **Automatic Loading**: Hunspell now loads automatically on app startup for seamless experience
+- **Automatic Loading**: LanguageTool now provides spell checking automatically on app startup
 - **Automatic Grammar Checking**: Grammar analysis runs automatically as you type with 800ms debounce
 - **Request Cancellation**: Added AbortSignal support to prevent stale grammar check results
 - **Enhanced Status Display**: Real-time status indicators for both spell and grammar engines
-- **Improved UX**: Removed manual "Load Hunspell" and "Grammar check" buttons for streamlined workflow
-- **Spell Engine Status**: Added visual status indicator showing active spell engine (Demo/Hunspell)
-- **Auto-validation**: Automatic probe testing after Hunspell loading with sanity checks
+- **Improved UX**: Streamlined workflow with automatic LanguageTool integration
+- **Spell Engine Status**: Added visual status indicator showing LanguageTool spell checking mode
+- **Auto-validation**: Automatic LanguageTool integration with sanity checks
 - **Enhanced Tooltips**: Spelling suggestions now appear in word tooltips when flagged
-- **Development Testing**: Added dev probe script for quick Hunspell validation
+- **Development Testing**: Added dev probe script for quick LanguageTool validation
 - **Curly Apostrophe Support**: Enhanced normalization for smart quotes and apostrophes
 - **UI Improvements**: Streamlined interface with automatic background processing
 - **Enhanced Capitalization**: Added curly apostrophe handling for consistent CWS capitalization checks
 - **Repository Cleanup**: Removed stray files and updated .gitignore for better version control
-- **Real Hunspell WASM**: Implemented `hunspell-asm` library for professional spell checking
-- **Dictionary Integration**: Real `en_US.aff` and `en_US.dic` file support with UTF-8 encoding
-- **Performance Optimization**: Aggressive caching (1-year) for dictionary files
+- **LanguageTool Integration**: Implemented LanguageTool API for professional spell checking
+- **API Integration**: Real LanguageTool API support with proper error handling
+- **Performance Optimization**: Intelligent caching for spell check results
 - **Spell Result Caching**: Intelligent in-memory caching for repeated word lookups
 - **Modern TypeScript**: Upgraded to ES2022 target for better performance
 - **Bundle Analysis**: Added @next/bundle-analyzer for performance monitoring

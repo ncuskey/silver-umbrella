@@ -7,8 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Info, AlertTriangle, ListChecks, Settings } from "lucide-react";
-import { setExternalSpellChecker, getExternalSpellChecker } from "@/lib/spell/bridge";
-import type { GrammarIssue, SpellChecker } from "@/lib/spell/types";
+import type { GrammarIssue, Token } from "@/lib/spell/types";
 import { buildCwsPairs, ESSENTIAL_PUNCT } from "@/lib/cws";
 import type { CwsPair } from "@/lib/cws";
 import { buildLtCwsHints } from "@/lib/cws-lt";
@@ -40,13 +39,6 @@ import { getLtBase, getLtPrivacy, clearSessionData } from "@/lib/grammar/languag
 
 type UnitType = "word" | "numeral" | "comma" | "essentialPunct" | "other" | "PUNCT" | "WORD" | "HYPHEN";
 
-interface Token {
-  raw: string;
-  type: "WORD" | "PUNCT";
-  idx: number; // global index in token stream
-  start?: number;  // NEW: 0-based char offset in the raw text
-  end?: number;    // NEW: 0-based char offset in the raw text (exclusive)
-}
 
 type DisplayToken = Token & { virtual?: boolean; essential?: boolean; display?: string };
 
@@ -78,7 +70,7 @@ const WORD_RE = /^[A-Za-z]+(?:[-'’][A-Za-z]+)*$/;
 const NUMERAL_RE = /^\d+(?:[\.,]\d+)*/;
 
 // ———————————— Demo Dictionary Packs ————————————
-// Tiny placeholder packs; in production, load larger dictionaries or WASM spellcheckers (Hunspell, etc.)
+// Tiny placeholder packs; in production, use LanguageTool for spell checking
 const PACKS: Record<string, string[]> = {
   "us-k2": [
     "i","a","and","the","was","it","is","in","to","we","you","he","she","they","see","like","go","went","have","had",
@@ -178,35 +170,22 @@ function clsForWord(target: string, attempt: string): { cls: number; max: number
   return { cls, max, correctWhole };
 }
 
-function filterLtIssues(text: string, issues: GrammarIssue[], sc: SpellChecker | null, userLexicon: Set<string>) {
+function filterLtIssues(text: string, issues: GrammarIssue[]) {
   const out: GrammarIssue[] = [];
   const seen = new Set<string>();
-
-  const isWordOk = (w: string) => {
-    if (sc) return sc.isCorrect(w);
-    const base = w.replace(/[''']/g, "'").toLowerCase();
-    return userLexicon.has(base) ||
-           [base.replace(/(ing|ed|es|s)$/,''), base.replace(/(ly)$/,'')].some(s => s && userLexicon.has(s));
-  };
 
   for (const m of issues) {
     const catId = (m.categoryId || "").toUpperCase();
     const ruleId = (m.ruleId || "").toUpperCase();
     const catName = (m.category || "").toUpperCase();
-    const span = text.slice(m.offset, m.offset + m.length);
-    const token = span.trim();
 
-    // Only treat as spelling when LT says it's a true typo
     const isTypos = catId === "TYPOS" || ruleId.startsWith("MORFOLOGIK_RULE");
     if (isTypos) {
-      if (token && !isWordOk(token)) {
-        const k = `spell-${token}-${m.offset}`;
-        if (!seen.has(k)) { out.push({ ...m, category: "SPELLING" }); seen.add(k); }
-      }
+      const k = `spell-${m.offset}-${m.length}`;
+      if (!seen.has(k)) { out.push({ ...m, category: "SPELLING" }); seen.add(k); }
       continue;
     }
 
-    // Keep purely mechanical advice
     if (catName.includes("CAPITALIZATION") || catName.includes("PUNCTUATION") || catName.includes("TYPOGRAPHY")) {
       const k = `${m.category}-${m.offset}-${m.length}-${m.message}`;
       if (!seen.has(k)) { out.push(m); seen.add(k); }
@@ -364,9 +343,6 @@ function WritingScorer() {
   // If code referenced user-chosen dictionary packs, freeze to auto/default behavior.
   const selectedPacks: string[] = useMemo(() => ["us-k2","us-k5","general"], []);
   
-  const [spellStatus, setSpellStatus] = useState<"loading" | "hunspell" | "demo" | "error">("loading");
-  const [spellEpoch, setSpellEpoch] = useState(0);
-  const spellCache = useRef<Map<string, boolean>>(new Map()); // if not already present
 
   const [ltBusy, setLtBusy] = useState(false);
   const [ltIssues, setLtIssues] = useState<GrammarIssue[]>([]);
@@ -409,30 +385,6 @@ function WritingScorer() {
     setLtPrivacy(getLtPrivacy());
   }, []);
 
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        setSpellStatus("loading");
-        const { createHunspellSpellChecker } = await import("@/lib/spell/hunspell-adapter");
-        // Adjust these paths if your dicts live in a subfolder:
-        const sc = await createHunspellSpellChecker("/dicts/en_US.aff", "/dicts/en_US.dic");
-        if (!mounted) return;
-        setExternalSpellChecker(sc);
-        spellCache.current.clear();
-        setSpellStatus("hunspell");
-        setSpellEpoch((e) => e + 1);
-        // Warm up cache with a few common words:
-        ["the","and","because","friend","can't","we'll"].forEach(w => spellCache.current.set(w, sc.isCorrect(w)));
-        console.log("[Hunspell] loaded ✓");
-      } catch (e) {
-        console.error("[Hunspell] load failed → falling back to demo lexicon", e);
-        if (!mounted) return;
-        setSpellStatus("demo");
-      }
-    })();
-    return () => { mounted = false; };
-  }, []);
 
   // place INSIDE WritingScorer(), after the autoload effect above
   useEffect(() => {
@@ -473,36 +425,55 @@ function WritingScorer() {
     };
   }, [text]);
 
-  function isWordLikelyCorrect(word: string, userLexicon: Set<string>): boolean {
-    if (!WORD_RE.test(word)) return false;
-    const sc = getExternalSpellChecker();
-    const key = `${sc ? "hun" : "demo"}:${word.toLowerCase()}`;
-    const hit = spellCache.current.get(key);
-    if (hit !== undefined) return hit;
-
-    let ok: boolean;
-    if (sc) {
-      ok = sc.isCorrect(word);
-    } else {
-      const base = word.replace(/['']/g, "'").toLowerCase();
-      ok = userLexicon.has(base) ||
-           [base.replace(/(ing|ed|es|s)$/,''), base.replace(/(ly)$/,'')].some(s => s && userLexicon.has(s));
+  function buildMisspelledIndex(tokens: Token[], issues: GrammarIssue[]): Set<number> {
+    const miss = new Set<number>();
+    for (const m of issues) {
+      const cat = (m.categoryId || "").toUpperCase();
+      const rule = (m.ruleId || "").toUpperCase();
+      // Spelling/typo matches in LT (e.g., MORFOLOGIK_RULE_EN_US, category TYPOS)
+      const isTypo = cat === "TYPOS" || rule.startsWith("MORFOLOGIK_RULE");
+      if (!isTypo) continue;
+      const mStart = m.offset;
+      const mEnd = m.offset + m.length;
+      for (const t of tokens) {
+        if (t.type !== "WORD") continue;
+        const tStart = t.start ?? 0;
+        const tEnd = t.end ?? tStart;
+        // any overlap between token span and issue span marks it misspelled
+        if (tStart < mEnd && tEnd > mStart) miss.add(t.idx);
+      }
     }
-    spellCache.current.set(key, ok);
-    return ok;
+    return miss;
+  }
+
+  function isWordLikelyCorrectByLT(tokIdx: number): boolean {
+    return !misspelledIdx.has(tokIdx);
+  }
+
+  function ltSuggestionsForToken(tok: Token): string[] {
+    const start = tok.start ?? 0;
+    const end = tok.end ?? start;
+    const match = ltIssues.find(m => {
+      const mStart = m.offset;
+      const mEnd = m.offset + m.length;
+      const cat = (m.categoryId || "").toUpperCase();
+      const rule = (m.ruleId || "").toUpperCase();
+      const isTypo = cat === "TYPOS" || rule.startsWith("MORFOLOGIK_RULE");
+      return isTypo && (start < mEnd && end > mStart);
+    });
+    return match?.replacements || [];
   }
 
   function computeWSC(
     tokens: Token[],
     overrides: Record<number, WordOverride>,
-    lexicon: Set<string>,
     infractions: Infraction[]
   ): number {
     let count = 0;
     tokens.forEach((t) => {
       if (t.type !== "WORD") return;
-      const ok = isWordLikelyCorrect(t.raw, lexicon);
-      // respect manual overrides if you support them:
+      const ok = isWordLikelyCorrectByLT(t.idx);
+
       const ov = overrides[t.idx]?.csw;
       const effectiveOk = ov === true ? true : ov === false ? false : ok;
 
@@ -517,11 +488,10 @@ function WritingScorer() {
   function computeCWS(
     tokens: Token[],
     overrides: Record<string, PairOverride | WordOverride>,
-    lexicon: Set<string>,
     infractions: Infraction[]
   ): number {
     const stream = tokens;
-    const isValidWord = (t: Token) => t.type === "WORD" && ((overrides[t.idx as number] as WordOverride)?.csw ?? isWordLikelyCorrect(t.raw, lexicon));
+    const isValidWord = (t: Token) => t.type === "WORD" && ((overrides[t.idx as number] as WordOverride)?.csw ?? !misspelledIdx.has(t.idx));
 
     let cws = 0;
     if (stream[0]) {
@@ -540,7 +510,10 @@ function WritingScorer() {
         continue;
       }
 
-      const wscFn = (w: string) => isWordLikelyCorrect(w, lexicon);
+      const wscFn = (w: string) => {
+        const token = tokens.find(t => t.raw === w && t.type === "WORD");
+        return token ? !misspelledIdx.has(token.idx) : true;
+      };
       const { ok, reason } = cwsPairValid(a, b, wscFn);
       if (ok) { 
         cws++; 
@@ -577,10 +550,12 @@ function WritingScorer() {
 
   const lexicon = useMemo(() => buildLexicon(selectedPacks, ""), [selectedPacks]);
   
-  // Add engine tag that changes when Hunspell loads
-  const engineTag = spellStatus === "hunspell" ? "hun" : "demo";
-  
-  const tokens = useMemo(() => tokenize(text), [text, engineTag]);
+  const tokens = useMemo(() => tokenize(text), [text]);
+
+  const misspelledIdx = useMemo(
+    () => buildMisspelledIndex(tokens, ltIssues),
+    [tokens, ltIssues]
+  );
   
   // 1) base tokens exist already as `tokens` from your tokenizer
   const terminalInsertions = useMemo(
@@ -619,14 +594,15 @@ function WritingScorer() {
     return m;
   }, [terminalInsertions]);
 
-  const stream = useMemo(() => displayTokens, [displayTokens, engineTag]);
+  const stream = useMemo(() => displayTokens, [displayTokens]);
 
   const cwsPairs = useMemo(() => {
-    const sc = getExternalSpellChecker();
-    const spell = (w: string) => sc ? sc.isCorrect(w) : isWordLikelyCorrect(w, lexicon);
+    const spell = (w: string) => {
+      const token = displayTokens.find(t => t.raw === w && t.type === "WORD");
+      return token ? !misspelledIdx.has(token.idx) : true;
+    };
     return buildCwsPairs(displayTokens, spell, pairOverrides);
-    // include engineTag so it recomputes when Hunspell loads
-  }, [displayTokens, engineTag, lexicon, pairOverrides]);
+  }, [displayTokens, misspelledIdx, pairOverrides]);
 
   // Audit data for CSV export
   const audit = useMemo(() => {
@@ -677,8 +653,8 @@ function WritingScorer() {
   
   // Build filtered LT issues once
   const filteredLt = useMemo(
-    () => filterLtIssues(text, ltIssues, getExternalSpellChecker(), lexicon),
-    [text, ltIssues, engineTag] // include engineTag so Hunspell changes re-filter
+    () => filterLtIssues(text, ltIssues),
+    [text, ltIssues]
   );
   
   // Compute advisory hints (memoized)
@@ -703,8 +679,8 @@ function WritingScorer() {
   
   const { wsc, cws, infractions } = useMemo(() => {
     const infractions: Infraction[] = [];
-    const wsc = computeWSC(tokens, overrides as Record<number, WordOverride>, lexicon, infractions);
-    const cws = computeCWS(tokens, overrides as Record<string, PairOverride | WordOverride>, lexicon, infractions);
+    const wsc = computeWSC(tokens, overrides as Record<number, WordOverride>, infractions);
+    const cws = computeCWS(tokens, overrides as Record<string, PairOverride | WordOverride>, infractions);
     
     // Add CWS-specific infractions based on caret reasons
     for (const p of cwsPairs) {
@@ -768,7 +744,7 @@ function WritingScorer() {
     }
     
     return { wsc, cws, infractions };
-  }, [tokens, overrides, lexicon, filteredLt, engineTag, cwsPairs, pairOverrides, ltHintsMap, pairByBoundary, terminalInsertions]);
+  }, [tokens, overrides, filteredLt, cwsPairs, pairOverrides, ltHintsMap, pairByBoundary, terminalInsertions, misspelledIdx]);
 
   // Export functions
   const exportCSV = () => {
@@ -861,7 +837,7 @@ function WritingScorer() {
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground">Spell:</span>
                 <span className="inline-flex items-center rounded bg-slate-100 px-2 py-0.5 text-xs">
-                  Hunspell
+                  LanguageTool
                 </span>
               </div>
 
@@ -996,13 +972,12 @@ function WritingScorer() {
                 const isVirtualDot = isVirtual && tok.raw === ".";
                 const vt = isVirtualDot ? vtByDotIndex.get(i) : undefined;
                 const groupTri: Tri | undefined = vt ? triForGroup(vt, pairOverrides) : undefined;
-                const ok = isWordLikelyCorrect(tok.raw, lexicon);
+                const ok = !misspelledIdx.has(tok.idx);
                 const ov = (overrides[tok.idx] as WordOverride)?.csw;
                 const effectiveOk = ov === true ? true : ov === false ? false : ok;
                 const bad = showInfractions && isWordTok && !effectiveOk;
                 
-                const sc = getExternalSpellChecker();
-                const sugg = (isWordTok && sc && !effectiveOk) ? (sc.suggestions?.(tok.raw, 3) || []) : [];
+                const sugg = (isWordTok && !effectiveOk) ? ltSuggestionsForToken(tok).slice(0, 3) : [];
                 const title = isWordTok
                   ? effectiveOk ? "WSC: counted (click to mark incorrect)"
                            : `WSC: NOT counted (click to mark correct)${sugg.length ? "\nSuggestions: " + sugg.join(", ") : ""}`
@@ -1152,7 +1127,7 @@ function WritingScorer() {
           <p className="font-medium">Scoring guidance</p>
           <ul className="list-disc ml-5 space-y-1">
             <li><strong>TWW</strong>: all words written; include misspellings; exclude numerals.</li>
-            <li><strong>WSC</strong>: each correctly spelled word in isolation (override by clicking). Click 'Load Hunspell' to use a real dictionary/affix checker; otherwise, a custom-lexicon fallback is used.</li>
+            <li><strong>WSC</strong>: each correctly spelled word in isolation (override by clicking). Uses LanguageTool for spell checking; otherwise, a custom-lexicon fallback is used.</li>
             <li><strong>CWS</strong>: adjacent units (words & essential punctuation). Commas excluded. Initial valid word counts 1. Capitalize after terminals.</li>
           </ul>
         </div>
@@ -1316,7 +1291,7 @@ export default function CBMApp(): JSX.Element {
               <li><strong>Dictionary packs</strong>: demo packs included; swap in real dictionaries or WASM spellcheckers for production.</li>
               <li><strong>Capitalization & terminals</strong>: heuristic checks flag definite/possible issues for quick review.</li>
               <li><strong>Overrides</strong>: click words to toggle WSC; click carets to toggle CWS.</li>
-              <li><strong>Extensibility</strong>: replace <code>isWordSpelledCorrect</code> with Hunspell/LanguageTool adapters; add POS-based rules if desired.</li>
+              <li><strong>Extensibility</strong>: uses LanguageTool for spell checking; add POS-based rules if desired.</li>
             </ul>
           </CardContent>
         </Card>
