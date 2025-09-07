@@ -295,6 +295,9 @@ The application includes a comprehensive debug logging system with multiple ways
 #### Debug Information Available
 
 - **LT Request/Response**: LanguageTool API calls with request details and response breakdowns
+- **Raw LT Response Caching**: Complete LT responses cached in `window.__LT_LAST__` for DevTools inspection
+- **Pretty Console Tables**: Formatted tables showing all LT issues with details (rule ID, category, message, offset, length, text, replacements)
+- **Rule Grouping Summary**: Counts of issues grouped by rule type for quick overview
 - **Tokenization**: Token details, LT boundary hints, and issue mapping
 - **Heuristic Insertions**: Proposed virtual terminal insertions with reasoning
 - **Group Building**: Virtual terminal group creation and mapping process
@@ -306,9 +309,29 @@ The application includes a comprehensive debug logging system with multiple ways
 
 Debug logs use structured console output:
 - `console.groupCollapsed()` for organized sections
-- `console.table()` for tabular data
+- `console.table()` for tabular data with all LT issue details
 - `dlog()` for structured logging
 - Clear prefixes like `[LT]`, `[VT]`, `[CWS/LT]` for easy filtering
+
+#### LanguageTool Debugging Features
+
+**Raw Response Inspection**
+- Access the latest LT response anytime with `window.__LT_LAST__` in DevTools console
+- Complete raw JSON response cached for detailed inspection
+- Structured logging prevents circular reference issues
+
+**Comprehensive Issue Logging**
+- `[LT] request` - Shows request details (language, text length, sample)
+- `[LT] raw` - Full structured response (no circular refs)
+- `[LT] issues (count)` - Number of issues found
+- Formatted table with columns: id, category, msg, offset, length, text, reps
+- `[LT] by rule` - Summary grouped by rule type
+
+**Field-Agnostic Processing**
+- Robust field shims handle different LT server response formats
+- Supports various field names: `ruleId`/`rule.id`/`id`, `categoryId`/`rule.category.id`/`category`
+- Handles different offset/length field variations
+- Extracts replacement suggestions from various response structures
 
 #### Troubleshooting Terminal Groups
 
@@ -319,6 +342,8 @@ If virtual terminal groups are not appearing or functioning correctly:
 3. Check if `vtByDotIndex` and `vtByBoundary` maps are populated
 4. Verify LT response contains punctuation/grammar matches
 5. Check if heuristic insertions are being proposed correctly
+6. Inspect `window.__LT_LAST__` to see the raw LT response
+7. Review the formatted issue table for rule details and positioning
 
 ## Testing
 
@@ -349,7 +374,18 @@ The tool is designed for easy extension:
 
 ## Recent Updates
 
-### Latest Improvements (v5.0) - LT-Only Architecture Refactoring
+### Latest Improvements (v5.1) - Enhanced LanguageTool Debugging
+- **Raw LT Response Logging**: Added comprehensive logging of LanguageTool API requests and responses with debug mode
+- **Response Caching**: Latest LT response cached in `window.__LT_LAST__` for DevTools inspection
+- **Pretty Console Tables**: Formatted console.table output showing all LT issues with detailed breakdowns
+- **Field-Agnostic Processing**: Enhanced field shims (`ltMsg`, `ltReps`) to handle various LT server response formats
+- **Rule Grouping Summary**: Added rule-based grouping counts for quick issue overview
+- **Debug Integration**: Seamless integration with existing debug system using `__CBM_DEBUG__` flag
+- **DevTools Access**: Easy access to raw responses via `window.__LT_LAST__` for detailed inspection
+- **Structured Logging**: Prevents circular reference issues with proper JSON serialization
+- **Enhanced Troubleshooting**: Comprehensive debugging information for LT issue analysis and terminal group troubleshooting
+
+### Previous Improvements (v5.0) - LT-Only Architecture Refactoring
 - **Complete Architecture Overhaul**: Redesigned the entire codebase to use only LanguageTool for terminal punctuation suggestions
 - **Eliminated Heuristic Logic**: Removed all heuristic-based detection including paragraph-end rules, capitalization heuristics, and smart comma detection
 - **Minimal Rule Processing**: Now only processes three specific LT rules: `UPPERCASE_SENTENCE_START`, `MISSING_SENTENCE_TERMINATOR`, and `PUNCTUATION_PARAGRAPH_END`
