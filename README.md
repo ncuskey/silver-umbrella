@@ -361,7 +361,17 @@ The tool is designed for easy extension:
 
 ## Recent Updates
 
-### Latest Improvements (v4.4) - Robust Shims & Resilient Token Locator
+### Latest Improvements (v4.5) - UPPERCASE Boundary-Aware Insertion
+- **Boundary-Aware UPPERCASE Detection**: Enhanced UPPERCASE_SENTENCE_START processing that uses boundary caret ("^") ownership for proper VT integration
+- **Helper Functions**: Added `isWord()`, `prevWordIndex()`, and `nearestBoundaryLeftOf()` for sophisticated boundary detection
+- **VT Ownership System**: Virtual terminals now use `beforeBIndex: boundaryIdx` for boundary-based ownership instead of word-based positioning
+- **Visual Position Accuracy**: Dots still render after the previous word (correct visual placement) while using boundary carets for VT grouping
+- **Enhanced Debug Logging**: Added comprehensive console logging showing word indices, boundary indices, and insertion decisions
+- **Guardrail Protection**: Prevents duplicate insertions and avoids placing terminals before opening quotes or existing terminals
+- **Paragraph/Terminator Enhancement**: Applied same boundary-aware logic to paragraph-end and missing terminator rules
+- **CWS Integration**: Ensures virtual terminals participate correctly in the `vtByBoundary`/grouping pipeline for proper teacher controls
+
+### Previous Improvements (v4.4) - Robust Shims & Resilient Token Locator
 - **Robust LT Field Shims**: Added comprehensive shim functions (`ltRuleId`, `ltCategoryId`, `ltMsg`, `ltOffset`, `ltLength`, `ltMarkedText`) that handle multiple LanguageTool server payload shapes
 - **Resilient Token Locator**: Implemented `locateStartToken()` with three fallback strategies: (1) exact offset, (2) first word after offset, (3) by matched text
 - **Enhanced Field Handling**: New `ltMarkedText()` function handles unusual cases where flagged text is provided in non-standard fields like `"len": "Nobody"`

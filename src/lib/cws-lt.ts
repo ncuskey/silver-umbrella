@@ -317,6 +317,22 @@ const SENTINEL_TERMINALS = new Set([".", "!", "?"]);
 const OPENERS = new Set(['"', '"', "'", "(", "[", "{", "«"]); // don't place before these
 const CLOSERS = new Set(['"', '"', "'", ")", "]", "}", "»"]);
 
+// Helper functions for boundary-aware insertion
+function isWord(t: any) { return /\w/.test(t.raw?.[0] ?? ""); }
+
+function prevWordIndex(tokens: any[], j: number) {
+  for (let k = j - 1; k >= 0; k--) if (isWord(tokens[k])) return k;
+  return -1;
+}
+
+function nearestBoundaryLeftOf(tokens: any[], j: number) {
+  for (let k = j - 1; k >= 0; k--) {
+    const tk = tokens[k];
+    if (tk.raw === "^" || tk.type === "BOUNDARY" || tk.kind === "boundary") return k;
+  }
+  return -1;
+}
+
 export function convertLTTerminalsToInsertions(
   text: string,
   tokens: Token[],
@@ -329,18 +345,18 @@ export function convertLTTerminalsToInsertions(
     const id = ltRuleId(issue);
 
     if (id === "PUNCTUATION_PARAGRAPH_END" || id === "MISSING_SENTENCE_TERMINATOR") {
-      // place at last non-space before the start token LT pointed us to
       const startTok = locateStartToken(tokens, issue, text) ?? tokens.at(-1);
       if (!startTok) continue;
-      const b = prevNonSpaceIndex(tokens, startTok.idx + 1);
-      if (b >= 0 && !SENTINEL_TERMINALS.has(tokens[b].raw) && !seen.has(b)) {
-        out.push({ 
-          beforeBIndex: b, 
-          char: ".", 
+      const wordIdx = prevWordIndex(tokens, startTok.idx + 1);
+      const boundaryIdx = nearestBoundaryLeftOf(tokens, startTok.idx + 1);
+      if (wordIdx >= 0) {
+        out.push({
+          char: ".",
+          beforeBIndex: boundaryIdx >= 0 ? boundaryIdx : wordIdx,
           reason: "LT",
           message: "Possible missing sentence-ending punctuation (from LanguageTool)."
         });
-        seen.add(b);
+        console.info("[LT→VT] PUSH-para", { word: tokens[wordIdx].raw, boundaryIdx });
       }
       continue;
     }
@@ -348,22 +364,34 @@ export function convertLTTerminalsToInsertions(
     if (id === "UPPERCASE_SENTENCE_START") {
       const startTok = locateStartToken(tokens, issue, text);
       if (!startTok) continue;
-      const b = prevNonSpaceIndex(tokens, startTok.idx);
-      if (b < 0) continue;
 
-      const prevRaw = tokens[b].raw;
+      // the **word** we want the dot after (e.g., "dark")
+      const wordIdx = prevWordIndex(tokens, startTok.idx);
+      // the **boundary caret** the VT needs (e.g., the "^" between "dark" and "nobody")
+      const boundaryIdx = nearestBoundaryLeftOf(tokens, startTok.idx);
+
+      if (wordIdx < 0 || boundaryIdx < 0) {
+        // debug so we can see what failed
+        // eslint-disable-next-line no-console
+        console.info("[LT→VT] skip-uppercase", { wordIdx, boundaryIdx, startIdx: startTok.idx });
+        continue;
+      }
+
+      const prevRaw = tokens[wordIdx].raw;
       const alreadyTerminal = SENTINEL_TERMINALS.has(prevRaw);
       const isOpener = OPENERS.has(startTok.raw);
-      const isCloser = CLOSERS.has(prevRaw);
 
-      if (!alreadyTerminal && !isOpener && !isCloser && !seen.has(b)) {
-        out.push({ 
-          beforeBIndex: b, 
-          char: ".", 
+      if (!alreadyTerminal && !isOpener) {
+        out.push({
+          char: ".",
+          beforeBIndex: boundaryIdx,         // but ownership is the LEFT boundary caret
           reason: "LT",
           message: "Possible missing sentence-ending punctuation (from LanguageTool)."
         });
-        seen.add(b);
+        // eslint-disable-next-line no-console
+        console.info("[LT→VT] PUSH", {
+          id, start: startTok.raw, word: tokens[wordIdx].raw, boundaryIdx
+        });
       }
     }
   }
