@@ -4,6 +4,67 @@ import type { GrammarIssue } from "@/lib/spell/types";
 import { ESSENTIAL_PUNCT } from "@/lib/cws";
 import { DEBUG, dgroup, dtable, dlog } from "@/lib/utils";
 
+export function caretAfterMatch(m: any, tokens: any[]) {
+  const after = m.offset + m.length;
+  const next = tokens.find((t: any) => (t.start ?? 0) >= after);
+  return next ? next.idx - 1 : tokens.length - 1; // caret between idx and idx+1
+}
+
+function isLikelyListComma(tokens: any[], caretIdx: number) {
+  // caret between tokens[caretIdx] and tokens[caretIdx+1]
+  const L = tokens[caretIdx], R = tokens[caretIdx + 1];
+  if (!L || !R || L.type !== "WORD" || R.type !== "WORD") return false;
+
+  // Case A: Oxford/serial comma: comma before (and|or) + WORD
+  const r1 = tokens[caretIdx + 1];
+  const r2 = tokens[caretIdx + 2];
+  const conjRight = r1 && r1.type === "WORD" && /^(and|or)$/i.test(r1.raw);
+  if (conjRight && r2 && r2.type === "WORD") {
+    // look back for another comma within a few tokens -> list of 3+
+    for (let k = Math.max(0, caretIdx - 5); k <= caretIdx; k++) {
+      const t = tokens[k];
+      if (t && t.type === "PUNCT" && t.raw === ",") return true;
+    }
+  }
+
+  // Case B: mid-list comma between items when a later (and|or) exists
+  for (let j = caretIdx + 1, seenWord = false; j < Math.min(tokens.length, caretIdx + 7); j++) {
+    const t = tokens[j];
+    if (t.type === "PUNCT" && /[.?!;]/.test(t.raw)) break;
+    if (t.type === "WORD") {
+      if (/^(and|or)$/i.test(t.raw)) { /* keep scanning */ }
+      else { seenWord = true; }
+      // WORD , ... (and|or) WORD
+      if (seenWord && tokens.slice(j).some(u => u.type === "WORD" && /^(and|or)$/i.test(u.raw))) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+export function isCommaOnlyForCWS(m: any, tokens: any[]) {
+  const id = (m.rule?.id || "").toUpperCase();
+  const msg = m.message || "";
+  const reps = Array.isArray(m.replacements) ? m.replacements : [];
+  const commaOnly = reps.length > 0 && reps.every((r: any) => (r?.value || "").trim() === ",");
+  const mentionsComma = /(^|[^a-z])comma([^a-z]|$)/i.test(msg) || id.includes("COMMA");
+
+  if (!(commaOnly || mentionsComma)) return false; // not purely a comma change → keep
+
+  // Allow comma if it's part of a list sequence
+  const caretIdx = caretAfterMatch(m, tokens);
+  if (isLikelyListComma(tokens, caretIdx)) return false; // keep for CWS
+
+  // Otherwise, it's clause-structuring (e.g., "…, and I") → ignore for CWS
+  return true;
+}
+
+function suggestsTerminal(m: any) {
+  const reps = Array.isArray(m.replacements) ? m.replacements : [];
+  return reps.some((r: any) => /^[.?!]$/.test((r?.value || "").trim()));
+}
+
 const isWord = (t: Token) => t.type === "WORD";
 const isEssentialPunct = (t: Token) => t.type === "PUNCT" && ESSENTIAL_PUNCT.has(t.raw);
 
@@ -89,8 +150,11 @@ const looksLikeSentenceEndMsg = (msg: string) =>
 export function deriveTerminalFromLT(tokens: Token[], issues: any[]) {
   const carets = new Set<number>(); // caret index = position *between* tokens
 
+  // keep everything except comma-only
+  const ltIssuesForCWS = issues.filter((m) => !isCommaOnlyForCWS(m, tokens));
+
   // A) End-of-paragraph punctuation
-  for (const m of issues) {
+  for (const m of ltIssuesForCWS) {
     const rId = (m.rule?.id || "").toUpperCase();
     if (!LT_TERMINAL_RULE_IDS.has(rId)) continue;
 
@@ -110,7 +174,7 @@ export function deriveTerminalFromLT(tokens: Token[], issues: any[]) {
   }
 
   // B) Missing boundary *inside* a paragraph (e.g., "forest The", "trees Then")
-  for (const m of issues) {
+  for (const m of ltIssuesForCWS) {
     if (!isPunctOrGrammar(m)) continue;
     const msg = m.message || "";
     const rId = (m.rule?.id || "").toUpperCase();
@@ -214,7 +278,10 @@ export function buildTerminalGroups(
     return cat === "PUNCTUATION" || cat === "GRAMMAR";
   };
 
-  for (const m of ltIssues) {
+  // keep everything except comma-only
+  const ltIssuesForCWS = ltIssues.filter((m) => !isCommaOnlyForCWS(m, tokens));
+
+  for (const m of ltIssuesForCWS) {
     const rid = (m.rule?.id || "").toUpperCase();
     const msg = m.message || "";
 
@@ -260,36 +327,24 @@ export function buildTerminalGroups(
 }
 
 // src/lib/cws-lt.ts (or near other LT helpers)
-export function ltBoundaryInsertions(tokens: Token[], issues: any[]) {
-  // Choose only punctuation/grammar signals that imply a sentence boundary
-  const LT_TERMINAL_RULES = new Set([
-    "PUNCTUATION_PARAGRAPH_END",
-    // add others you want to anchor on; we also match by message below
-  ]);
-  const looksLikeBoundary = (m:any) => {
-    const rule = (m.rule?.id || "").toUpperCase();
-    const msg  = (m.message || "");
-    return LT_TERMINAL_RULES.has(rule)
-      || /missing.*punctuation.*sentence|paragraph/i.test(msg);
-  };
+export function ltBoundaryInsertions(tokens: any[], issues: any[]) {
+  const out: { beforeBIndex: number; char: "."; reason: string }[] = [];
+  
+  // keep everything except comma-only
+  const ltIssuesForCWS = issues.filter((m) => !isCommaOnlyForCWS(m, tokens));
+  
+  for (const m of ltIssuesForCWS || []) {
+    const cat = (m.rule?.category?.id || "").toUpperCase();
+    const goodCat = cat === "PUNCTUATION" || cat === "GRAMMAR";
+    const msg = m.message || "";
+    const looksLikeBoundary =
+      suggestsTerminal(m) ||
+      (goodCat && (/(missing|add|insert)\s+(?:[.?!]|punctuation).*?(sentence|paragraph)/i.test(msg) ||
+                   /make this a new sentence/i.test(msg)));
 
-  const out: { beforeBIndex: number; message: string; char: "."; reason: "LT" }[] = [];
-
-  for (const m of issues) {
-    if (!looksLikeBoundary(m)) continue;
-    const after = m.offset + m.length;
-
-    // find the token that starts right after the match
-    const next = tokens.find(t => (t.start ?? 0) >= after);
-    const left = next ? next.idx - 1 : tokens.length - 1;
-    if (left >= 0) {
-      out.push({ 
-        beforeBIndex: left, 
-        message: "Possible missing sentence-ending punctuation (from LanguageTool).",
-        char: ".", 
-        reason: "LT" 
-      });
-    }
+    if (!looksLikeBoundary) continue;
+    const left = caretAfterMatch(m, tokens);
+    if (left >= 0) out.push({ beforeBIndex: left, char: ".", reason: "LTBoundary" });
   }
   return out;
 }
@@ -309,7 +364,10 @@ export function buildLtCwsHints(text: string, tokens: Token[], issues: GrammarIs
   const boundaries: number[] = [-1, ...units.slice(0, -1)]; // -1 plus between-unit indices
   const bPos = boundaries.map((b) => boundaryCharPos(tokens, b));
 
-  for (const iss of issues) {
+  // keep everything except comma-only
+  const ltIssuesForCWS = issues.filter((m) => !isCommaOnlyForCWS(m, tokens));
+
+  for (const iss of ltIssuesForCWS) {
     if (!isCwsCategory(iss)) continue;
     const center = iss.offset + Math.floor(iss.length / 2);
 
