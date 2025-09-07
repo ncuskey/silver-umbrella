@@ -226,8 +226,18 @@ export function detectMissingTerminalInsertions(text: string, tokens: Token[]): 
 
 export function detectParagraphEndInsertions(text: string, tokens: any[]) {
   const out: { beforeBIndex:number; char:"." | "!" | "?"; reason:"CapitalAfterSpace" | "LT" | "Heuristic"; message:string }[] = [];
-  const re = /\r?\n\s*\r?\n|$/g; let m: RegExpExecArray|null;
+  const re = /\r?\n\s*\r?\n|$/g; 
+  let m: RegExpExecArray | null;
+  let lastIndex = -1;
+  
   while ((m = re.exec(text))) {
+    // Prevent infinite loop if regex matches same position
+    if (m.index === lastIndex) {
+      re.lastIndex++;
+      continue;
+    }
+    lastIndex = m.index;
+    
     const endPos = m.index;
     let lastIdx = -1, hasTerm = false;
     for (let i=tokens.length-1;i>=0;i--) {
