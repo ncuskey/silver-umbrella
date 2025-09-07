@@ -513,6 +513,9 @@ function WritingScorer() {
   // Always-on flags (since the toggle is gone)
   const showInfractions = true;
   
+  // LT-only mode for infractions panel
+  const [ltOnlyMode, setLtOnlyMode] = useState(false);
+  
   // State for highlighting terminal groups on hover
   const [highlightedGroup, setHighlightedGroup] = useState<TerminalGroup | null>(null);
 
@@ -758,10 +761,14 @@ function WritingScorer() {
   );
 
   // Build filtered LT issues once
-  const filteredLt = useMemo(
-    () => filterLtIssues(text, ltIssues),
-    [text, ltIssues]
-  );
+  const filteredLt = useMemo(() => {
+    const ids = new Set([
+      "PUNCTUATION_PARAGRAPH_END",     // LT: missing end-of-paragraph punctuation
+      "MISSING_SENTENCE_TERMINATOR",   // LT: classic "needs . ! ?"
+      "UPPERCASE_SENTENCE_START"       // LT: new sentence detected; implies terminal before it
+    ]);
+    return (ltIssues ?? []).filter(i => ids.has(i.ruleId as string));
+  }, [ltIssues]);
 
   // LT → insertions (caret placed at the boundary BEFORE the next token)
   const ltInsertions = useMemo<VirtualTerminalInsertion[]>(() => {
@@ -949,72 +956,88 @@ function WritingScorer() {
   
   const { wsc, cws, infractions } = useMemo(() => {
     const infractions: Infraction[] = [];
-    const wsc = computeWSC(tokens, overrides as Record<number, WordOverride>, infractions);
-    const cws = computeCWS(tokens, overrides as Record<string, PairOverride | WordOverride>, infractions);
+    let wsc = 0;
+    let cws = 0;
     
-    // Add CWS-specific infractions based on caret reasons
-    for (const p of cwsPairs) {
-      if (p.eligible) {
-        const ov = pairOverrides[p.bIndex]?.cws;
-        const ok = ov === true ? true : ov === false ? false : p.valid;
-        if (!ok) {
-          const reason = p.reason || "rule";
-          const tag =
-            reason === "capitalization" ? "CAPITALIZATION" :
-            reason === "misspelling"    ? "SPELLING" :
-            reason === "nonessential-punct" ? "PUNCTUATION" :
-            reason === "not-units"      ? "PAIR" :
-            "PAIR";
-          const msg =
-            reason === "capitalization" ? "Expected capital after sentence-ending punctuation" :
-            reason === "misspelling"    ? "Spelling error breaks the sequence" :
-            reason === "nonessential-punct" ? "Non-essential punctuation breaks sequence" :
-            reason === "not-units"      ? "Invalid unit adjacency" :
-            "Invalid adjacency";
-          infractions.push({ kind: "definite", tag, msg, at: p.bIndex });
-        }
-        
-        // Red/green reasons in infractions panel (when pushing infractions): if a pair is virtualBoundary and not overridden, push a possible item with your message:
-        if (p.virtualBoundary) {
-          if (ov === undefined && p.eligible) {
-            infractions.push({
-              kind: "possible",
-              tag: "TERMINAL (possible)",
-              msg: advisoryHints.get(p.bIndex)?.message || "Possible missing terminal punctuation",
-              at: p.bIndex
-            });
+    if (ltOnlyMode) {
+      // LT-only mode: only show LanguageTool issues
+      for (const m of filteredLt) {
+        infractions.push({ 
+          kind: "possible", 
+          tag: m.category.toUpperCase(), 
+          msg: m.message, 
+          at: `${m.offset}:${m.length}` 
+        });
+      }
+    } else {
+      // Full mode: include all heuristic and LT issues
+      wsc = computeWSC(tokens, overrides as Record<number, WordOverride>, infractions);
+      cws = computeCWS(tokens, overrides as Record<string, PairOverride | WordOverride>, infractions);
+      
+      // Add CWS-specific infractions based on caret reasons
+      for (const p of cwsPairs) {
+        if (p.eligible) {
+          const ov = pairOverrides[p.bIndex]?.cws;
+          const ok = ov === true ? true : ov === false ? false : p.valid;
+          if (!ok) {
+            const reason = p.reason || "rule";
+            const tag =
+              reason === "capitalization" ? "CAPITALIZATION" :
+              reason === "misspelling"    ? "SPELLING" :
+              reason === "nonessential-punct" ? "PUNCTUATION" :
+              reason === "not-units"      ? "PAIR" :
+              "PAIR";
+            const msg =
+              reason === "capitalization" ? "Expected capital after sentence-ending punctuation" :
+              reason === "misspelling"    ? "Spelling error breaks the sequence" :
+              reason === "nonessential-punct" ? "Non-essential punctuation breaks sequence" :
+              reason === "not-units"      ? "Invalid unit adjacency" :
+              "Invalid adjacency";
+            infractions.push({ kind: "definite", tag, msg, at: p.bIndex });
+          }
+          
+          // Red/green reasons in infractions panel (when pushing infractions): if a pair is virtualBoundary and not overridden, push a possible item with your message:
+          if (p.virtualBoundary) {
+            if (ov === undefined && p.eligible) {
+              infractions.push({
+                kind: "possible",
+                tag: "TERMINAL (possible)",
+                msg: advisoryHints.get(p.bIndex)?.message || "Possible missing terminal punctuation",
+                at: p.bIndex
+              });
+            }
           }
         }
       }
-    }
-    
-    // Add advisory entries from LanguageTool hints and heuristics
-    for (const [bIndex, hint] of advisoryHints) {
-      const pair = pairByBoundary.get(bIndex);
-      const ov = pairOverrides[bIndex]?.cws;
-      if (pair && pair.eligible && ov === undefined && pair.valid) {
-        infractions.push({ kind: "possible", tag: "TERMINAL (possible)", msg: hint.message, at: bIndex });
+      
+      // Add advisory entries from LanguageTool hints and heuristics
+      for (const [bIndex, hint] of advisoryHints) {
+        const pair = pairByBoundary.get(bIndex);
+        const ov = pairOverrides[bIndex]?.cws;
+        if (pair && pair.eligible && ov === undefined && pair.valid) {
+          infractions.push({ kind: "possible", tag: "TERMINAL (possible)", msg: hint.message, at: bIndex });
+        }
+      }
+      
+      // Merge ONLY filteredLt into infractions
+      for (const m of filteredLt) {
+        infractions.push({ kind: "possible", tag: m.category.toUpperCase(), msg: m.message, at: `${m.offset}:${m.length}` });
+      }
+      
+      // Add infractions for proposed virtual terminals
+      for (const v of terminalInsertions) {
+        infractions.push({
+          kind: "possible",
+          tag: "TERMINAL",
+          msg: "Possible missing sentence-ending punctuation before \"" +
+               tokens[v.beforeBIndex + 1]?.raw + "\" (Figure 4). Click caret to accept/reject.",
+          at: v.beforeBIndex
+        });
       }
     }
     
-    // Merge ONLY filteredLt into infractions
-    for (const m of filteredLt) {
-      infractions.push({ kind: "possible", tag: m.category.toUpperCase(), msg: m.message, at: `${m.offset}:${m.length}` });
-    }
-    
-    // Add infractions for proposed virtual terminals
-    for (const v of terminalInsertions) {
-      infractions.push({
-        kind: "possible",
-        tag: "TERMINAL",
-        msg: "Possible missing sentence-ending punctuation before \"" +
-             tokens[v.beforeBIndex + 1]?.raw + "\" (Figure 4). Click caret to accept/reject.",
-        at: v.beforeBIndex
-      });
-    }
-    
     return { wsc, cws, infractions };
-  }, [tokens, overrides, filteredLt, cwsPairs, pairOverrides, ltHintsMap, pairByBoundary, terminalInsertions, misspelledIdx]);
+  }, [tokens, overrides, filteredLt, cwsPairs, pairOverrides, ltHintsMap, pairByBoundary, terminalInsertions, misspelledIdx, ltOnlyMode]);
 
   // Export functions
   const exportCSV = () => {
@@ -1122,6 +1145,21 @@ function WritingScorer() {
                   title="LanguageTool Settings"
                 >
                   <Settings className="h-3 w-3" />
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Infractions:</span>
+                <button
+                  onClick={() => setLtOnlyMode(!ltOnlyMode)}
+                  className={`px-2 py-0.5 text-xs rounded transition-colors ${
+                    ltOnlyMode 
+                      ? "bg-blue-100 text-blue-700 border border-blue-300" 
+                      : "bg-slate-100 text-slate-700 border border-slate-300"
+                  }`}
+                  title={ltOnlyMode ? "Show only LanguageTool issues" : "Show all issues (heuristic + LT)"}
+                >
+                  {ltOnlyMode ? "LT Only" : "All Issues"}
                 </button>
               </div>
             </div>

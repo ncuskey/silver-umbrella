@@ -233,35 +233,77 @@ export function deriveTerminalFromLT(tokens: Token[], issues: any[]) {
   return carets;
 }
 
-// Convert LT-derived terminals to VirtualTerminalInsertion format
-export function convertLTTerminalsToInsertions(tokens: Token[], issues: any[]): Array<{
-  beforeBIndex: number;
-  message: string;
-  char: "." | "!" | "?";
-  reason: "LT";
-}> {
-  const carets = deriveTerminalFromLT(tokens, issues);
-  const insertions: Array<{
-    beforeBIndex: number;
-    message: string;
-    char: "." | "!" | "?";
-    reason: "LT";
-  }> = [];
+import type { VirtualTerminalInsertion } from "@/lib/cws-heuristics";
 
-  for (const caretIdx of carets) {
-    // Find the token at this boundary
-    const tokenIdx = caretIdx;
-    if (tokenIdx >= 0 && tokenIdx < tokens.length) {
-      insertions.push({
-        beforeBIndex: tokenIdx,
-        message: "Possible missing sentence-ending punctuation (from LanguageTool).",
-        char: ".",
-        reason: "LT"
-      });
+const SENTINEL_TERMINALS = new Set([".", "!", "?"]);
+const OPENERS = new Set(['"', '"', "'", "(", "[", "{", "«"]); // don't place before these
+const CLOSERS = new Set(['"', '"', "'", ")", "]", "}", "»"]);
+
+function tokenAtOffset(tokens: Token[], offset: number) {
+  return tokens.find(t => offset >= (t.start ?? 0) && offset < (t.end ?? 0));
+}
+function prevNonSpaceIndex(tokens: Token[], j: number) {
+  for (let k = j - 1; k >= 0; k--) {
+    const raw = tokens[k].raw;
+    if (raw.trim().length) return k;
+  }
+  return -1;
+}
+
+export function convertLTTerminalsToInsertions(
+  tokens: Token[],
+  ltIssues: GrammarIssue[]
+): VirtualTerminalInsertion[] {
+  const out: VirtualTerminalInsertion[] = [];
+  const seen = new Set<number>(); // beforeBIndex de-dupe
+
+  for (const issue of ltIssues) {
+    const id = issue.ruleId as string;
+
+    if (id === "PUNCTUATION_PARAGRAPH_END" || id === "MISSING_SENTENCE_TERMINATOR") {
+      // Place at last non-space token in the paragraph/text span LT flagged.
+      // Fallback: use the token immediately before the issue offset.
+      const tok = tokenAtOffset(tokens, issue.offset) ?? tokens.at(-1);
+      if (!tok) continue;
+      const b = prevNonSpaceIndex(tokens, tok.idx + 1);
+      if (b >= 0 && !SENTINEL_TERMINALS.has(tokens[b].raw) && !seen.has(b)) {
+        out.push({ 
+          beforeBIndex: b, 
+          char: ".", 
+          reason: "LT",
+          message: "Possible missing sentence-ending punctuation (from LanguageTool)."
+        });
+        seen.add(b);
+      }
+      continue;
+    }
+
+    if (id === "UPPERCASE_SENTENCE_START") {
+      // LT says "this is a sentence start"; we put a terminal BEFORE it.
+      const startTok = tokenAtOffset(tokens, issue.offset);
+      if (!startTok) continue;
+      const b = prevNonSpaceIndex(tokens, startTok.idx);
+      if (b < 0) continue;                 // beginning of text → no insert
+      const prev = tokens[b].raw;
+
+      // Guardrails: don't double-insert, don't put before openers,
+      // don't add if prev already ends with . ! ?
+      const isOpener = OPENERS.has(startTok.raw);
+      const isCloser = CLOSERS.has(prev);
+      const alreadyTerminal = SENTINEL_TERMINALS.has(prev);
+      if (!isOpener && !isCloser && !alreadyTerminal && !seen.has(b)) {
+        out.push({ 
+          beforeBIndex: b, 
+          char: ".", 
+          reason: "LT",
+          message: "Possible missing sentence-ending punctuation (from LanguageTool)."
+        });
+        seen.add(b);
+      }
     }
   }
 
-  return insertions;
+  return out;
 }
 
 export type TerminalGroup = {
@@ -342,7 +384,6 @@ export function buildTerminalGroups(
 // ---- revised detector ----
 
 // --- NEW: accept all LT boundary suggestions and convert to virtual terminals --- //
-import type { VirtualTerminalInsertion } from "@/lib/cws-heuristics";
 
 function nearestBoundaryToRange(tokens: Token[], start: number, end: number): number {
   // Find the token boundary closest to the range
