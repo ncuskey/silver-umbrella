@@ -1,9 +1,10 @@
 [build]
-  command = "NODE_OPTIONS='--max-old-space-size=8192' npm run build"
+  command = "npm ci && NODE_OPTIONS='--max-old-space-size=8192' npm run build"
   publish = ".next"
 
 [build.environment]
   NODE_OPTIONS = "--max-old-space-size=8192"
+  NODE_VERSION = "18"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
