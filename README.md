@@ -25,11 +25,16 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 - **LanguageTool Grammar**: Automatic grammar checking with debounced text analysis
 - **Request Cancellation**: AbortSignal support for grammar checking requests
 - **Infraction Flagging**: Automated detection of definite vs. possible issues
-- **Interactive Overrides**: Click words to toggle WSC scoring, click carets to toggle CWS pairs
+- **Interactive Overrides**: Click words to toggle WSC scoring, click carets to cycle CWS states
 - **CWS Engine**: Strictly mechanical, CBM-aligned engine with visual caret indicators and boundary validation
 - **Rule-based Checks**: Capitalization, terminal punctuation, and sentence structure validation
 - **Spell Result Caching**: Intelligent caching for repeated word lookups (big speedup on longer texts)
 - **Curly Apostrophe Support**: Proper handling of smart quotes and apostrophes
+- **Token Character Offsets**: Precise character position tracking for LanguageTool issue alignment
+- **CWS-LanguageTool Integration**: Grammar suggestions mapped to CWS boundaries with advisory hints
+- **3-State Caret Cycling**: Yellow (advisory) → Red (incorrect) → Green (correct) → Yellow (default)
+- **Advisory Infractions**: LanguageTool grammar suggestions shown as yellow advisory entries
+- **Color Legend**: Visual guide for teachers explaining caret color meanings
 
 ## Getting Started
 
@@ -103,8 +108,10 @@ The CWS (Correct Writing Sequences) engine implements strictly mechanical, CBM-a
 - **Visual Indicators**: Color-coded carets (^) show boundary status:
   - Green: Valid CWS boundary
   - Red: Invalid boundary (spelling/capitalization issue)
+  - Yellow: Advisory hint from LanguageTool grammar checking
   - Muted: Non-eligible boundary (comma/quote/etc.)
-- **Interactive Overrides**: Click carets to cycle through default→force-correct→force-incorrect→default
+- **Interactive Overrides**: Click carets to cycle through yellow (advisory)→red (incorrect)→green (correct)→yellow (default)
+- **Character Position Tracking**: Token offsets enable precise alignment of LanguageTool issues to CWS boundaries
 
 ## Spell Checking & Grammar
 
@@ -129,6 +136,9 @@ The CWS (Correct Writing Sequences) engine implements strictly mechanical, CBM-a
 - **Netlify Function Support**: API routes deployed as Netlify Functions for optimal performance
 - **Advisory-only suggestions** (doesn't affect CBM scores)
 - **Status Indicators**: Visual feedback showing grammar check status (idle/checking/ok/error)
+- **CWS Boundary Mapping**: Grammar issues mapped to nearest CWS boundaries within ±2 characters
+- **Advisory Hints**: Grammar suggestions shown as yellow carets and advisory infractions
+- **Smart Filtering**: Only grammar issues (not spelling/punctuation) mapped to boundaries
 
 ## Deployment
 
@@ -182,7 +192,17 @@ The tool is designed for easy extension:
 
 ## Recent Updates
 
-### Latest Improvements (v2.3)
+### Latest Improvements (v2.4)
+- **Token Character Offsets**: Added precise character position tracking to Token interface for LanguageTool alignment
+- **CWS-LanguageTool Integration**: Created `src/lib/cws-lt.ts` for mapping grammar issues to CWS boundaries
+- **3-State Caret Cycling**: Enhanced caret interaction with yellow (advisory) → red (incorrect) → green (correct) → yellow (default)
+- **Advisory Hints**: LanguageTool grammar suggestions now appear as yellow carets and advisory infractions
+- **Smart Boundary Mapping**: Grammar issues mapped to nearest CWS boundaries within ±2 character window
+- **Advisory Infractions**: Grammar suggestions shown as "CWS (advisory)" entries in infractions panel
+- **Color Legend**: Added visual guide above token stream explaining caret color meanings for teachers
+- **Enhanced User Experience**: Clear cycling instructions and improved tooltips for better teacher usability
+
+### Previous Improvements (v2.3)
 - **CWS Engine**: Implemented strictly mechanical, CBM-aligned CWS engine with visual caret indicators
 - **Boundary Validation**: Added comprehensive boundary validation with spelling and capitalization checks
 - **Visual Feedback**: Color-coded carets show CWS boundary status (green/red/muted)

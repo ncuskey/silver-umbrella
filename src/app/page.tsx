@@ -14,6 +14,8 @@ import { setExternalSpellChecker, getExternalSpellChecker } from "@/lib/spell/br
 import type { GrammarIssue, SpellChecker } from "@/lib/spell/types";
 import { buildCwsPairs, ESSENTIAL_PUNCT } from "@/lib/cws";
 import type { CwsPair } from "@/lib/cws";
+import { buildLtCwsHints } from "@/lib/cws-lt";
+import type { CwsHint } from "@/lib/cws-lt";
 import { cn } from "@/lib/utils";
 
 /**
@@ -40,6 +42,8 @@ interface Token {
   raw: string;
   type: "WORD" | "PUNCT";
   idx: number; // global index in token stream
+  start?: number;  // NEW: 0-based char offset in the raw text
+  end?: number;    // NEW: 0-based char offset in the raw text (exclusive)
 }
 
 interface WordOverride { csw?: boolean }
@@ -87,18 +91,27 @@ function buildLexicon(selected: string[], userLex: string): Set<string> {
 
 // ———————————— Tokenization ————————————
 
-function tokenize(text: string): Token[] {
-  const tokens: Token[] = [];
-  const regex = /[A-Za-z]+(?:[-'’][A-Za-z]+)*|[\.!\?;:\u2014\u2013\-\(\)"'\u201C\u201D\u2018\u2019]|,|\d+(?:[\.,]\d+)*/g
+const TOKEN_RE = /[A-Za-z]+(?:[-''][A-Za-z]+)*|[\.!\?;:\u2014\u2013\-]|,|\d+(?:[\.,]\d+)*/g;
 
-  let m: RegExpExecArray | null;
-  while ((m = regex.exec(text)) !== null) {
+function tokenize(text: string): Token[] {
+  const toks: Token[] = [];
+  let i = 0;
+  for (const m of text.matchAll(TOKEN_RE)) {
     const raw = m[0];
-    const type: "WORD" | "PUNCT" =
-      WORD_RE.test(raw) ? "WORD" : "PUNCT";
-    tokens.push({ raw, type, idx: tokens.length });
+    const start = m.index ?? i;
+    const end = start + raw.length;
+
+    let type: "WORD" | "PUNCT";
+    if (/^\d/.test(raw)) type = "PUNCT";        // numbers as punctuation for now
+    else if (/^[,]$/.test(raw)) type = "PUNCT";        // non-essential for CWS
+    else if (/^[\.!\?;:]$/.test(raw)) type = "PUNCT";  // essential for CWS
+    else if (/^-+$/.test(raw)) type = "PUNCT";         // hyphens
+    else type = "WORD";
+
+    toks.push({ raw, type, idx: toks.length, start, end });
+    i = end;
   }
-  return tokens;
+  return toks;
 }
 
 function sentenceBoundaries(text: string): { startIdx: number; endIdx: number; raw: string }[] {
@@ -173,19 +186,33 @@ function isComma(tok: Token)    { return tok.type === "PUNCT" && tok.raw === ","
 function isHyphen(tok: Token)   { return tok.type === "PUNCT" && tok.raw === "-"; }
 
 // helper to decide caret visual for a boundary
-function caretStateForBoundary(bIndex: number, cwsPairs: CwsPair[], pairOverrides: PairOverrides) {
-  const pair = cwsPairs.find(p => p.bIndex === bIndex);
-  if (!pair) return { eligible: false as const, ok: false as const, reason: "none" };
+function caretStateForBoundary(bIndex: number, pairByBoundary: Map<number, CwsPair>, pairOverrides: PairOverrides, ltHintsMap: Map<number, CwsHint>) {
+  const pair = pairByBoundary.get(bIndex);
+  if (!pair) return { eligible: false as const, state: "muted" as const, reason: "none" };
 
   const ov = pairOverrides[bIndex]?.cws;
-  const ok = ov === true ? true : ov === false ? false : pair.valid;
-  return { eligible: pair.eligible, ok, reason: pair.reason || "none" };
+  const advisory = ltHintsMap.get(bIndex); // CwsHint | undefined
+
+  // default validity (mechanical CWS)
+  const baseValid = pair.valid;
+
+  // final state machine
+  if (!pair.eligible) return { eligible: false as const, state: "muted" as const, reason: "none" };
+
+  if (ov === false) return { eligible: true as const, state: "bad" as const, reason: pair.reason || "override-bad" };
+  if (ov === true)  return { eligible: true as const, state: "ok"  as const, reason: "override-ok" };
+
+  // no override -> show advisory if base is ok but LT flagged the boundary
+  if (baseValid && advisory) return { eligible: true as const, state: "advisory" as const, reason: advisory.message };
+
+  // otherwise show base state
+  return { eligible: true as const, state: baseValid ? "ok" : "bad", reason: pair.reason || "rule" };
 }
 
-function toggleCaret(bIndex: number, pairOverrides: PairOverrides, setPairOverrides: React.Dispatch<React.SetStateAction<PairOverrides>>) {
+function cycleCaret(bIndex: number, pairOverrides: PairOverrides, setPairOverrides: React.Dispatch<React.SetStateAction<PairOverrides>>) {
   setPairOverrides(prev => {
-    const ov = prev[bIndex]?.cws;
-    const next = ov === true ? false : ov === false ? undefined : true; // cycle: default→true→false→default
+    const cur = prev[bIndex]?.cws;
+    const next = cur === undefined ? false : cur === false ? true : undefined;
     const clone = { ...prev };
     if (next === undefined) delete clone[bIndex];
     else clone[bIndex] = { cws: next };
@@ -476,6 +503,19 @@ function WritingScorer() {
     [text, ltIssues, engineTag] // include engineTag so Hunspell changes re-filter
   );
   
+  // Compute advisory hints (memoized)
+  const ltHintsMap = useMemo(() => {
+    // use your filtered ltIssues (already stripped of typos/punct)
+    return buildLtCwsHints(text, tokens, ltIssues);
+  }, [text, tokens, ltIssues]);  // (engineTag not needed; hints are grammar-level)
+
+  // Fast lookup maps
+  const pairByBoundary = useMemo(() => {
+    const m = new Map<number, ReturnType<typeof Object>>();
+    for (const p of cwsPairs) m.set(p.bIndex, p);
+    return m;
+  }, [cwsPairs]);
+  
   const { wsc, cws, infractions } = useMemo(() => {
     const infractions: Infraction[] = [];
     const wsc = computeWSC(tokens, overrides as Record<number, WordOverride>, lexicon, infractions);
@@ -499,13 +539,28 @@ function WritingScorer() {
       }
     }
     
+    // Add advisory entries from LanguageTool hints
+    for (const [bIndex, hint] of ltHintsMap) {
+      // show only when no explicit override and the mechanical pair is valid
+      const pair = pairByBoundary.get(bIndex);
+      const ov = pairOverrides[bIndex]?.cws;
+      if (pair && pair.eligible && ov === undefined && pair.valid) {
+        infractions.push({
+          kind: "possible",
+          tag: "CWS (advisory)",
+          msg: hint.message,
+          at: bIndex
+        });
+      }
+    }
+    
     // Merge ONLY filteredLt into infractions
     for (const m of filteredLt) {
       infractions.push({ kind: "possible", tag: m.category.toUpperCase(), msg: m.message, at: `${m.offset}:${m.length}` });
     }
     
     return { wsc, cws, infractions };
-  }, [tokens, overrides, lexicon, filteredLt, engineTag, cwsPairs, pairOverrides]);
+  }, [tokens, overrides, lexicon, filteredLt, engineTag, cwsPairs, pairOverrides, ltHintsMap, pairByBoundary]);
 
   return (
     <Card>
@@ -586,28 +641,45 @@ function WritingScorer() {
               </div>
             </div>
 
+            <div className="flex flex-wrap gap-2 text-xs mb-2">
+              <span className="inline-flex items-center gap-1">
+                <span className="inline-block w-3 h-3 rounded bg-emerald-200 border border-emerald-300" /> correct
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <span className="inline-block w-3 h-3 rounded bg-red-200 border border-red-300" /> incorrect
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <span className="inline-block w-3 h-3 rounded bg-amber-200 border border-amber-300" /> possible (LanguageTool)
+              </span>
+              <span className="ml-2 text-slate-500">Click a caret to cycle: yellow → red → green → yellow</span>
+            </div>
+
             <div className="mt-4 text-xs text-muted-foreground flex items-center gap-2">
-              <Info className="h-4 w-4" /> Click a <strong>word</strong> to toggle WSC; click the <strong>caret</strong> between tokens to toggle CWS.
+              <Info className="h-4 w-4" /> Click a <strong>word</strong> to toggle WSC; click the <strong>caret</strong> between tokens to cycle CWS (yellow=advisory, red=incorrect, green=correct).
             </div>
 
             <div className="mt-3 flex flex-wrap gap-1 p-3 rounded-2xl bg-muted/40">
               {/* initial caret uses bIndex = -1 */}
               {(() => {
-                const { eligible, ok, reason } = caretStateForBoundary(-1, cwsPairs, pairOverrides);
-                const muted = !eligible;
+                const { eligible, state, reason } = caretStateForBoundary(-1, pairByBoundary, pairOverrides, ltHintsMap);
+                const cls =
+                  state === "muted"    ? "text-slate-300"
+                : state === "ok"       ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                : state === "advisory" ? "bg-amber-100 text-amber-800 border border-amber-300"
+                :                        "bg-red-100 text-red-700 border border-red-300";
+
+                const title =
+                  !eligible ? "Not counted for CWS (comma/quote/etc.)"
+                : state === "ok"       ? "CWS: counted (click to cycle)"
+                : state === "advisory" ? `Possible CWS issue (LT): ${reason}\nClick = mark incorrect (red), click again = correct (green), click again = clear`
+                :                        (reason === "capitalization" ? "Needs capitalization" : "Blocked (spelling)");
+
                 return (
                   <button
                     type="button"
-                    onClick={() => eligible && toggleCaret(-1, pairOverrides, setPairOverrides)}
-                    title={
-                      !eligible ? "Initial word is not a WORD unit"
-                      : ok ? "CWS: counted (click to toggle)"
-                      : reason === "capitalization" ? "CWS: needs capitalization"
-                      : "CWS: blocked (spelling)"
-                    }
-                    className={
-                      `mx-1 px-1 rounded ${muted ? "text-slate-300" : ok ? "bg-emerald-50 text-emerald-700" : "bg-red-100 text-red-700"}`
-                    }
+                    onClick={() => eligible && cycleCaret(-1, pairOverrides, setPairOverrides)}
+                    className={`mx-1 px-1 rounded ${cls}`}
+                    title={title}
                   >
                     ^
                   </button>
@@ -650,31 +722,31 @@ function WritingScorer() {
 
                     {/* CARET */}
                     {i < tokens.length - 1 && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const { eligible } = caretStateForBoundary(i, cwsPairs, pairOverrides);
-                          if (eligible) toggleCaret(i, pairOverrides, setPairOverrides);
-                        }}
-                        title={
-                          (() => {
-                            const { eligible, ok, reason } = caretStateForBoundary(i, cwsPairs, pairOverrides);
-                            return !eligible ? "Not counted for CWS (comma/quote/etc.)"
-                            : ok ? "CWS: counted (click to toggle)"
-                            : reason === "capitalization" ? "CWS: needs capitalization"
-                            : "CWS: blocked (spelling)";
-                          })()
-                        }
-                        className={
-                          (() => {
-                            const { eligible, ok } = caretStateForBoundary(i, cwsPairs, pairOverrides);
-                            const muted = !eligible;
-                            return `mx-1 px-1 rounded ${muted ? "text-slate-300" : ok ? "bg-emerald-50 text-emerald-700" : "bg-red-100 text-red-700"}`;
-                          })()
-                        }
-                      >
-                        ^
-                      </button>
+                      (() => {
+                        const { eligible, state, reason } = caretStateForBoundary(i, pairByBoundary, pairOverrides, ltHintsMap);
+                        const cls =
+                          state === "muted"    ? "text-slate-300"
+                        : state === "ok"       ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                        : state === "advisory" ? "bg-amber-100 text-amber-800 border border-amber-300"
+                        :                        "bg-red-100 text-red-700 border border-red-300";
+
+                        const title =
+                          !eligible ? "Not counted for CWS (comma/quote/etc.)"
+                        : state === "ok"       ? "CWS: counted (click to cycle)"
+                        : state === "advisory" ? `Possible CWS issue (LT): ${reason}\nClick = mark incorrect (red), click again = correct (green), click again = clear`
+                        :                        (reason === "capitalization" ? "Needs capitalization" : "Blocked (spelling)");
+
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => eligible && cycleCaret(i, pairOverrides, setPairOverrides)}
+                            className={`mx-1 px-1 rounded ${cls}`}
+                            title={title}
+                          >
+                            ^
+                          </button>
+                        );
+                      })()
                     )}
                   </React.Fragment>
                 );
