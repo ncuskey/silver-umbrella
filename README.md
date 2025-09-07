@@ -38,7 +38,7 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 - **Derived Metrics**: CIWS, %CWS, and CWS/min calculations with time control
 - **Time Control**: Configurable probe duration (mm:ss format) for fluency rate calculations
 - **IWS Categorization**: Detailed categorization of Incorrect Writing Sequences by reason
-- **Missing Punctuation Detection**: Heuristic advisory for capitalized words not preceded by terminal punctuation
+- **Virtual Terminal Insertion**: Smart detection and insertion of missing sentence-ending punctuation with interactive teacher controls
 - **Grammar Mode Badge**: Always-visible indicator showing current grammar checking configuration
 
 ## Getting Started
@@ -165,13 +165,16 @@ The CWS (Correct Writing Sequences) engine implements strictly mechanical, CBM-a
 - **Smart Filtering**: Only grammar issues (not spelling/punctuation) mapped to boundaries
 - **Grammar Mode Badge**: Always-visible indicator showing current grammar configuration (public/proxy/off)
 
-### Missing Punctuation Detection
-- **Heuristic Advisory**: Detects capitalized words that should be preceded by terminal punctuation
-- **Smart Detection**: Uses contextual heuristics to reduce false positives for proper nouns
-- **Hard Break Detection**: Identifies newlines or multiple spaces that suggest sentence boundaries
-- **Sentence Starter Recognition**: Recognizes common sentence starters (Then, When, After, etc.)
-- **Non-scoring**: Advisory suggestions don't affect CWS scores (yellow by default)
-- **Interactive**: Teachers can click yellow carets to mark as incorrect (red) or correct (green)
+### Virtual Terminal Insertion
+- **Smart Detection**: Automatically detects WORD [space] CapitalWord patterns that look like new sentences
+- **Heuristic Filtering**: Uses contextual clues (newlines, 2+ spaces, sentence starters) to reduce false positives
+- **Title Case Avoidance**: Excludes TitleCase spans like "The Terrible Day" to prevent over-flagging
+- **Visual Insertion**: Inserts dotted "." tokens between words with distinct amber styling
+- **Two Caret System**: Creates two yellow advisory carets around each virtual terminal (word ^ . and . ^ NextWord)
+- **Interactive Control**: Teachers can click carets to cycle: yellow (advisory) → red (reject) → green (accept)
+- **CWS Integration**: When accepted (green), virtual terminals count as essential punctuation creating two CWS boundaries
+- **Advisory by Default**: Virtual terminals don't affect CWS scores unless explicitly accepted by teacher
+- **Clear Visual Feedback**: Dashed amber borders and tooltips clearly indicate proposed insertions
 
 ## Deployment
 
@@ -225,7 +228,16 @@ The tool is designed for easy extension:
 
 ## Recent Updates
 
-### Latest Improvements (v2.6)
+### Latest Improvements (v2.7)
+- **Virtual Terminal Insertion**: Revolutionary feature that automatically detects and proposes missing sentence-ending punctuation
+- **Smart Heuristics**: Advanced detection algorithm that identifies WORD [space] CapitalWord patterns likely to be new sentences
+- **Interactive Teacher Control**: Two-caret system allows teachers to accept/reject virtual terminal suggestions
+- **Visual Distinction**: Dotted amber styling clearly distinguishes proposed insertions from actual student text
+- **CWS Integration**: Virtual terminals integrate seamlessly with CWS scoring when accepted by teachers
+- **Advisory by Default**: Virtual suggestions don't affect scores unless explicitly accepted, maintaining assessment integrity
+- **Enhanced User Experience**: Clear visual feedback and intuitive interaction model for efficient teacher workflow
+
+### Previous Improvements (v2.6)
 - **UI Refactoring**: Complete redesign with cleaner, more professional interface
 - **Two-Column Layout**: Left column for text input and controls, right column for metrics and infractions
 - **Compact Metrics Grid**: 6 metrics displayed in a responsive 2×3 grid using consistent StatCard components

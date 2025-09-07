@@ -49,7 +49,7 @@
 │   │   │   └── languagetool-client.ts # LanguageTool API client
 │   │   ├── cws.ts             # CWS (Correct Writing Sequences) engine
 │   │   ├── cws-lt.ts          # CWS-LanguageTool integration for advisory hints
-│   │   ├── cws-heuristics.ts  # Missing punctuation detection heuristics
+│   │   ├── cws-heuristics.ts  # Virtual terminal insertion detection system
 │   │   └── utils.ts           # Utility functions (cn helper)
 │   └── workers/               # Web Workers
 │       └── hunspell.worker.ts # Hunspell Web Worker implementation
@@ -266,13 +266,17 @@ interface CwsHint {
 
 ### Missing Punctuation Detection (`src/lib/cws-heuristics.ts`)
 
-#### Heuristic Advisory System
-- `buildTerminalHeuristics()`: Detects capitalized words that should be preceded by terminal punctuation
-- **Smart Detection**: Uses contextual heuristics to reduce false positives for proper nouns
-- **Hard Break Detection**: Identifies newlines or multiple spaces that suggest sentence boundaries
-- **Sentence Starter Recognition**: Recognizes common sentence starters (Then, When, After, Before, So, But, And, I)
-- **Non-scoring**: Advisory suggestions don't affect CWS scores (yellow by default)
-- **Interactive**: Teachers can click yellow carets to mark as incorrect (red) or correct (green)
+#### Virtual Terminal Insertion System
+- `detectMissingTerminalInsertions()`: Advanced detection algorithm for missing sentence-ending punctuation
+- **Smart Pattern Recognition**: Detects WORD [space] CapitalWord sequences that look like new sentences
+- **Heuristic Filtering**: Uses contextual clues (newlines, 2+ spaces, sentence starters) to reduce false positives
+- **Title Case Avoidance**: Excludes TitleCase spans like "The Terrible Day" to prevent over-flagging
+- **Visual Insertion**: Creates dotted "." tokens with distinct amber styling and dashed borders
+- **Two-Caret System**: Generates two yellow advisory carets around each virtual terminal (word ^ . and . ^ NextWord)
+- **Interactive Control**: Teachers can click carets to cycle: yellow (advisory) → red (reject) → green (accept)
+- **CWS Integration**: When accepted (green), virtual terminals count as essential punctuation creating two CWS boundaries
+- **Advisory by Default**: Virtual terminals don't affect CWS scores unless explicitly accepted by teacher
+- **Clear Visual Feedback**: Distinct styling and tooltips clearly indicate proposed insertions vs. actual text
 
 #### Derived Metrics System
 - **CIWS (Correct Incorrect Writing Sequences)**: CWS minus IWS calculation

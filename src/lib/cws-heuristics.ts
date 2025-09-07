@@ -1,35 +1,60 @@
 // src/lib/cws-heuristics.ts
 import type { Token } from "@/lib/spell/types";
 
-export interface HeurHint { bIndex: number; message: string; kind: "terminal"; }
+export interface VirtualTerminalInsertion {
+  /** boundary index BEFORE which we insert the terminal (between tokens[bIndex] and tokens[bIndex+1]) */
+  beforeBIndex: number;
+  /** UI text */
+  message: string;
+  /** which char to show/score as the terminal */
+  char: "." | "!" | "?";
+}
 
-const isWord = (t: Token) => t.type === "WORD";
-const cap = (w: string) => /^[A-Z]/.test(w);
+const isWord = (t?: Token) => t?.type === "WORD";
+const startsCap = (t?: Token) => !!t?.raw && /^[A-Z]/.test(t.raw);
+const titleLike = (a?: Token, b?: Token) =>
+  isWord(a) && isWord(b) && /^[A-Z]/.test(a!.raw) && /^[A-Z]/.test(b!.raw);
 
-export function buildTerminalHeuristics(text: string, tokens: Token[]): Map<number, HeurHint> {
-  const map = new Map<number, HeurHint>();
+/** Words that commonly start a new sentence; helps reduce false positives */
+const SENTENCE_STARTERS = new Set([
+  "I", "Then", "When", "After", "Before", "So", "But", "And", "However", "Therefore",
+]);
+
+/**
+ * Detect boundaries where a sentence likely ended but the writer omitted . ! or ?
+ * Heuristics:
+ *  - boundary is WORD -> WORD
+ *  - right word starts with capital
+ *  - there is no terminal punctuation (. ! ?) in the separator
+ *  - either there is a hard break (newline or 2+ spaces) OR right word looks like a sentence starter
+ *  - avoid flag when the next two words look like a Title Case span (e.g., "The Terrible Day")
+ */
+export function detectMissingTerminalInsertions(text: string, tokens: Token[]): VirtualTerminalInsertion[] {
+  const ins: VirtualTerminalInsertion[] = [];
   for (let i = 0; i < tokens.length - 1; i++) {
     const L = tokens[i], R = tokens[i + 1];
     if (!isWord(L) || !isWord(R)) continue;
-    if (!cap(R.raw)) continue;
 
-    // separator text (between L and R)
-    const sep = text.slice(L.end ?? 0, R.start ?? 0);
+    const sep = text.slice((L as any).end ?? 0, (R as any).start ?? 0);
+    const hasTerminal = /[.!?]/.test(sep);
+    if (hasTerminal) continue;
 
-    // Heuristic gates to reduce false positives for proper nouns:
-    // - separator contains a newline OR 2+ spaces (common when writers "hard break" sentences)
-    // - OR R is one of common sentence starters (Then, When, After, So, But, And, I)
-    const isHardBreak = /\r|\n/.test(sep) || /\s{2,}/.test(sep);
-    const starters = /^(Then|When|After|Before|So|But|And|I)$/;
-    const looksLikeSentenceStart = starters.test(R.raw);
+    if (!startsCap(R)) continue;
 
-    if (isHardBreak || looksLikeSentenceStart) {
-      map.set(i, {
-        bIndex: i,
+    const hardBreak = /\r|\n/.test(sep) || /\s{2,}/.test(sep);
+    const isStarter = SENTENCE_STARTERS.has(R.raw);
+
+    // If it looks like a Title Case run (Two caps in a row), don't flag unless there's a hard break.
+    const next = tokens[i + 2];
+    const looksLikeTitle = titleLike(R, next);
+
+    if ((hardBreak || isStarter) && !looksLikeTitle) {
+      ins.push({
+        beforeBIndex: i,
         message: "Possible missing sentence-ending punctuation before a capitalized word.",
-        kind: "terminal"
+        char: ".",
       });
     }
   }
-  return map;
+  return ins;
 }
