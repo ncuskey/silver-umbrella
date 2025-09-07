@@ -49,6 +49,7 @@
 │   │   │   └── languagetool-client.ts # LanguageTool API client
 │   │   ├── cws.ts             # CWS (Correct Writing Sequences) engine
 │   │   ├── cws-lt.ts          # CWS-LanguageTool integration for advisory hints
+│   │   ├── cws-heuristics.ts  # Missing punctuation detection heuristics
 │   │   └── utils.ts           # Utility functions (cn helper)
 │   └── workers/               # Web Workers
 │       └── hunspell.worker.ts # Hunspell Web Worker implementation
@@ -72,7 +73,7 @@
 **Purpose**: Single-page application containing both writing and spelling assessment tools.
 
 **Key Features**:
-- **Written Expression Scoring**: TWW, WSC, CWS calculations
+- **Written Expression Scoring**: TWW, WSC, CWS calculations with derived metrics
 - **Spelling Assessment**: CLS (Correct Letter Sequences) scoring
 - **Hunspell Integration**: Professional spell checking with WASM dictionaries
 - **Automatic Loading**: Hunspell loads automatically on app startup
@@ -83,8 +84,11 @@
 - **Request Cancellation**: AbortSignal support for grammar checking requests
 - **Interactive Overrides**: Click-to-toggle word and pair scoring
 - **Dictionary Packs**: Grade-level appropriate word lists
-- **Infraction Flagging**: Automated issue detection
+- **Infraction Flagging**: Automated issue detection with IWS categorization
 - **Curly Apostrophe Support**: Proper handling of smart quotes and apostrophes
+- **Derived Metrics**: CIWS, %CWS, and CWS/min calculations with time control
+- **Missing Punctuation Detection**: Heuristic advisory for capitalized words not preceded by terminal punctuation
+- **Grammar Mode Badge**: Always-visible indicator showing current grammar configuration
 
 **Main Components**:
 - `CBMApp`: Root component with tab navigation
@@ -260,6 +264,23 @@ interface CwsHint {
 - **Advisory Hints**: Grammar suggestions shown as yellow carets and advisory infractions
 - **Override Awareness**: Advisory hints disappear when users explicitly override boundary states
 
+### Missing Punctuation Detection (`src/lib/cws-heuristics.ts`)
+
+#### Heuristic Advisory System
+- `buildTerminalHeuristics()`: Detects capitalized words that should be preceded by terminal punctuation
+- **Smart Detection**: Uses contextual heuristics to reduce false positives for proper nouns
+- **Hard Break Detection**: Identifies newlines or multiple spaces that suggest sentence boundaries
+- **Sentence Starter Recognition**: Recognizes common sentence starters (Then, When, After, Before, So, But, And, I)
+- **Non-scoring**: Advisory suggestions don't affect CWS scores (yellow by default)
+- **Interactive**: Teachers can click yellow carets to mark as incorrect (red) or correct (green)
+
+#### Derived Metrics System
+- **CIWS (Correct Incorrect Writing Sequences)**: CWS minus IWS calculation
+- **%CWS**: Percentage of CWS out of eligible boundaries
+- **CWS/min**: Writing fluency rate with configurable time control
+- **IWS Categorization**: Detailed categorization by reason (capitalization, spelling, punctuation, pair)
+- **Time Control**: Configurable probe duration in mm:ss format for accurate fluency calculations
+
 ### API Routes (`src/app/api/`)
 
 #### LanguageTool Proxy (`languagetool/route.ts`)
@@ -342,7 +363,18 @@ The tool implements scoring methods aligned with educational research:
 
 ### Recent Updates
 
-#### Latest Improvements (v2.4)
+#### Latest Improvements (v2.5)
+- **Derived Metrics**: Added CIWS, %CWS, and CWS/min calculations with comprehensive time control
+- **Time Control**: Configurable probe duration (mm:ss format) for accurate fluency rate calculations
+- **IWS Categorization**: Detailed categorization of Incorrect Writing Sequences by reason (capitalization, spelling, punctuation, pair)
+- **Missing Punctuation Detection**: Created `src/lib/cws-heuristics.ts` for heuristic advisory system
+- **Grammar Mode Badge**: Always-visible indicator showing current grammar checking configuration
+- **Enhanced Infractions Panel**: Improved categorization and display of writing sequence issues
+- **Smart Heuristics**: Context-aware detection that reduces false positives for proper nouns
+- **Interactive Time Input**: User-friendly time input control integrated with existing UI
+- **Unified Advisory System**: Combined LanguageTool and heuristic hints into single advisory system
+
+#### Previous Improvements (v2.4)
 - **Token Character Offsets**: Added `start` and `end` properties to Token interface for precise character position tracking
 - **Enhanced Tokenizer**: Updated tokenization to use `matchAll()` for capturing character positions
 - **CWS-LanguageTool Integration**: Created `src/lib/cws-lt.ts` for mapping grammar issues to CWS boundaries

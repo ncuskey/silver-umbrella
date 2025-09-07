@@ -35,6 +35,11 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 - **3-State Caret Cycling**: Yellow (advisory) → Red (incorrect) → Green (correct) → Yellow (default)
 - **Advisory Infractions**: LanguageTool grammar suggestions shown as yellow advisory entries
 - **Color Legend**: Visual guide for teachers explaining caret color meanings
+- **Derived Metrics**: CIWS, %CWS, and CWS/min calculations with time control
+- **Time Control**: Configurable probe duration (mm:ss format) for fluency rate calculations
+- **IWS Categorization**: Detailed categorization of Incorrect Writing Sequences by reason
+- **Missing Punctuation Detection**: Heuristic advisory for capitalized words not preceded by terminal punctuation
+- **Grammar Mode Badge**: Always-visible indicator showing current grammar checking configuration
 
 ## Getting Started
 
@@ -94,6 +99,25 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 - **CWS**: Adjacent units (words & essential punctuation). Commas excluded. Initial valid word counts 1. Capitalize after terminals
 - **CLS**: Counts boundary + adjacent letter pairs per target word (partial knowledge credit)
 
+### Derived Metrics
+
+The application now calculates additional metrics for comprehensive writing assessment:
+
+- **CIWS (Correct Incorrect Writing Sequences)**: CWS minus IWS, providing a measure of writing accuracy
+- **%CWS**: Percentage of CWS out of eligible boundaries, showing writing sequence accuracy
+- **CWS/min**: Writing fluency rate calculated as CWS per minute when time is specified
+- **IWS (Incorrect Writing Sequences)**: Eligible boundaries minus CWS count
+- **Time Control**: Configurable probe duration in mm:ss format for accurate fluency calculations
+
+### IWS Categorization
+
+Incorrect Writing Sequences are categorized by reason for targeted instruction:
+
+- **CAPITALIZATION**: Missing capital letters after sentence-ending punctuation
+- **SPELLING**: Spelling errors that break writing sequences
+- **PUNCTUATION**: Non-essential punctuation that breaks sequences
+- **PAIR**: Invalid unit adjacencies or other mechanical issues
+
 ### CWS Engine Details
 
 The CWS (Correct Writing Sequences) engine implements strictly mechanical, CBM-aligned scoring:
@@ -139,6 +163,15 @@ The CWS (Correct Writing Sequences) engine implements strictly mechanical, CBM-a
 - **CWS Boundary Mapping**: Grammar issues mapped to nearest CWS boundaries within ±2 characters
 - **Advisory Hints**: Grammar suggestions shown as yellow carets and advisory infractions
 - **Smart Filtering**: Only grammar issues (not spelling/punctuation) mapped to boundaries
+- **Grammar Mode Badge**: Always-visible indicator showing current grammar configuration (public/proxy/off)
+
+### Missing Punctuation Detection
+- **Heuristic Advisory**: Detects capitalized words that should be preceded by terminal punctuation
+- **Smart Detection**: Uses contextual heuristics to reduce false positives for proper nouns
+- **Hard Break Detection**: Identifies newlines or multiple spaces that suggest sentence boundaries
+- **Sentence Starter Recognition**: Recognizes common sentence starters (Then, When, After, etc.)
+- **Non-scoring**: Advisory suggestions don't affect CWS scores (yellow by default)
+- **Interactive**: Teachers can click yellow carets to mark as incorrect (red) or correct (green)
 
 ## Deployment
 
@@ -192,7 +225,17 @@ The tool is designed for easy extension:
 
 ## Recent Updates
 
-### Latest Improvements (v2.4)
+### Latest Improvements (v2.5)
+- **Derived Metrics**: Added CIWS, %CWS, and CWS/min calculations with comprehensive time control
+- **Time Control**: Configurable probe duration (mm:ss format) for accurate fluency rate calculations
+- **IWS Categorization**: Detailed categorization of Incorrect Writing Sequences by reason (capitalization, spelling, punctuation, pair)
+- **Missing Punctuation Detection**: Heuristic advisory system for capitalized words not preceded by terminal punctuation
+- **Grammar Mode Badge**: Always-visible indicator showing current grammar checking configuration
+- **Enhanced Infractions Panel**: Improved categorization and display of writing sequence issues
+- **Smart Heuristics**: Context-aware detection that reduces false positives for proper nouns
+- **Interactive Time Input**: User-friendly time input control integrated with existing UI
+
+### Previous Improvements (v2.4)
 - **Token Character Offsets**: Added precise character position tracking to Token interface for LanguageTool alignment
 - **CWS-LanguageTool Integration**: Created `src/lib/cws-lt.ts` for mapping grammar issues to CWS boundaries
 - **3-State Caret Cycling**: Enhanced caret interaction with yellow (advisory) → red (incorrect) → green (correct) → yellow (default)
