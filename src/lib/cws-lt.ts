@@ -44,15 +44,20 @@ function isLikelyListComma(tokens: any[], caretIdx: number) {
 }
 
 export function isCommaOnlyForCWS(m: any, tokens: any[]) {
-  // Simplified version to avoid memory issues during build
   const id = (m.rule?.id || "").toUpperCase();
   const msg = m.message || "";
   const reps = Array.isArray(m.replacements) ? m.replacements : [];
   const commaOnly = reps.length > 0 && reps.every((r: any) => (r?.value || "").trim() === ",");
   const mentionsComma = /(^|[^a-z])comma([^a-z]|$)/i.test(msg) || id.includes("COMMA");
 
-  // For now, just filter out obvious comma-only suggestions
-  return commaOnly || mentionsComma;
+  if (!(commaOnly || mentionsComma)) return false; // not purely a comma change → keep
+
+  // Allow comma if it's part of a list sequence
+  const caretIdx = caretAfterMatch(m, tokens);
+  if (isLikelyListComma(tokens, caretIdx)) return false; // keep for CWS
+
+  // Otherwise, it's clause-structuring (e.g., "…, and I") → ignore for CWS
+  return true;
 }
 
 function suggestsTerminal(m: any) {
@@ -145,8 +150,8 @@ const looksLikeSentenceEndMsg = (msg: string) =>
 export function deriveTerminalFromLT(tokens: Token[], issues: any[]) {
   const carets = new Set<number>(); // caret index = position *between* tokens
 
-  // Temporarily disable comma filtering to test build
-  const ltIssuesForCWS = issues;
+  // keep everything except comma-only
+  const ltIssuesForCWS = issues.filter((m) => !isCommaOnlyForCWS(m, tokens));
 
   // A) End-of-paragraph punctuation
   for (const m of ltIssuesForCWS) {
@@ -325,8 +330,8 @@ export function buildTerminalGroups(
 export function ltBoundaryInsertions(tokens: any[], issues: any[]) {
   const out: { beforeBIndex: number; char: "."; reason: string }[] = [];
   
-  // Temporarily disable comma filtering to test build
-  const ltIssuesForCWS = issues;
+  // keep everything except comma-only
+  const ltIssuesForCWS = issues.filter((m) => !isCommaOnlyForCWS(m, tokens));
   
   for (const m of ltIssuesForCWS || []) {
     const cat = (m.rule?.category?.id || "").toUpperCase();
@@ -359,8 +364,8 @@ export function buildLtCwsHints(text: string, tokens: Token[], issues: GrammarIs
   const boundaries: number[] = [-1, ...units.slice(0, -1)]; // -1 plus between-unit indices
   const bPos = boundaries.map((b) => boundaryCharPos(tokens, b));
 
-  // Temporarily disable comma filtering to test build
-  const ltIssuesForCWS = issues;
+  // keep everything except comma-only
+  const ltIssuesForCWS = issues.filter((m) => !isCommaOnlyForCWS(m, tokens));
 
   for (const iss of ltIssuesForCWS) {
     if (!isCwsCategory(iss)) continue;
