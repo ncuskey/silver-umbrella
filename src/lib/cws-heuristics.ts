@@ -48,12 +48,14 @@ export function createVirtualTerminals(
     if (insertAfterIdx < 0) continue; // nothing to anchor to (shouldn't happen often)
 
     // build the group purely from display positions
+    // find the corresponding insertion to get the reason
+    const correspondingInsertion = insertions.find(ins => ins.beforeBIndex === insertAfterIdx);
     out.push({
       insertAfterIdx,        // original-token index (left word)
+      reason: correspondingInsertion?.reason || "Heuristic", // get reason from insertion or default
       dotTokenIndex: i,      // <— index IN displayTokens (what you use in vtByDotIndex)
       leftBoundaryBIndex: i - 1,  // caret between [leftWord ^ "."]
       rightBoundaryBIndex: i      // caret between ["." ^ rightWord]
-      // reason stays on the insertion object; not needed for toggling
     });
   }
   return out;
