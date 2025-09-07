@@ -10,7 +10,7 @@ import { Info, AlertTriangle, ListChecks, Settings } from "lucide-react";
 import type { GrammarIssue, Token } from "@/lib/spell/types";
 import { buildCwsPairs, ESSENTIAL_PUNCT } from "@/lib/cws";
 import type { CwsPair } from "@/lib/cws";
-import { buildLtCwsHints, convertLTTerminalsToInsertions, buildTerminalGroups, ltBoundaryInsertions, isCommaOnlyForCWS, type TerminalGroup, getRuleId } from "@/lib/cws-lt";
+import { buildLtCwsHints, convertLTTerminalsToInsertions, buildTerminalGroups, ltBoundaryInsertions, isCommaOnlyForCWS, type TerminalGroup, ltRuleId, debugLtToVt } from "@/lib/cws-lt";
 import type { CwsHint } from "@/lib/cws-lt";
 import { detectMissingTerminalInsertionsSmart, detectParagraphEndInsertions, VirtualTerminalInsertion, createVirtualTerminals, createVirtualTerminalsFromDisplay, VirtualTerminal } from "@/lib/cws-heuristics";
 import { cn, DEBUG, dgroup, dtable, dlog } from "@/lib/utils";
@@ -760,36 +760,33 @@ function WritingScorer() {
     [ltIssues, tokens]
   );
 
-  // Build filtered LT issues once
+  // strict LT filter
   const filteredLt = useMemo(() => {
     const keep = new Set([
       "PUNCTUATION_PARAGRAPH_END",
       "MISSING_SENTENCE_TERMINATOR",
-      "UPPERCASE_SENTENCE_START"
+      "UPPERCASE_SENTENCE_START",
     ]);
-    const out = (ltIssues ?? []).filter(i => keep.has(getRuleId(i)));
-    if (typeof window !== "undefined" && (window as any).__CBM_DEBUG__) {
-      console.info("[LT] filtered", out.map(i => getRuleId(i)));
-    }
+    const out = (ltIssues ?? []).filter(i => keep.has(ltRuleId(i)));
+    if ((window as any).__CBM_DEBUG__) console.info("[LT] filtered", out.map(ltRuleId));
     return out;
   }, [ltIssues]);
 
-  // LT → insertions (caret placed at the boundary BEFORE the next token)
-  const ltInsertions = useMemo<VirtualTerminalInsertion[]>(
-    () => convertLTTerminalsToInsertions(tokens, filteredLt),
-    [tokens, filteredLt]
-  );
+  // LT → insertions (LT-only)
+  const ltInsertions = useMemo(() => {
+    const ins = convertLTTerminalsToInsertions(text, tokens, filteredLt);
+    if (ins.length === 0 && filteredLt.length) {
+      debugLtToVt(text, tokens, filteredLt);
+    }
+    return ins;
+  }, [text, tokens, filteredLt]);
 
-  // LT-only terminal insertions (no heuristics)
-  const terminalInsertions = useMemo<VirtualTerminalInsertion[]>(
-    () => {
-      if (typeof window !== "undefined" && (window as any).__CBM_DEBUG__) {
-        console.info("[VT] counts", { lt: ltInsertions.length, eop: 0, insertions: ltInsertions.length });
-      }
-      return ltInsertions; // LT-only
-    },
-    [ltInsertions]
-  );
+  const terminalInsertions = useMemo(() => {
+    if ((window as any).__CBM_DEBUG__) {
+      console.info("[VT] counts", { lt: ltInsertions.length, eop: 0, insertions: ltInsertions.length });
+    }
+    return ltInsertions;
+  }, [ltInsertions]);
 
   // 2) insert virtual terminals for display + scoring
   const displayTokens = useMemo(
