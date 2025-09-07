@@ -4,10 +4,7 @@ import React, { useMemo, useState, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Info, AlertTriangle, ListChecks } from "lucide-react";
 import { setExternalSpellChecker, getExternalSpellChecker } from "@/lib/spell/bridge";
@@ -252,6 +249,30 @@ function computeTWW(tokens: Token[]): number {
 
 // ———————————— UI Components ————————————
 
+function StatCard({
+  title,
+  value,
+  sub,
+}: {
+  title: string;
+  value: React.ReactNode;
+  sub?: React.ReactNode;
+}) {
+  return (
+    <Card className="h-full">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm font-medium">{title}</CardTitle>
+      </CardHeader>
+      <CardContent className="pt-0">
+        <div className="text-4xl font-semibold leading-none">{value}</div>
+        {sub ? (
+          <div className="mt-1 text-xs text-muted-foreground">{sub}</div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
 function SentenceList({ text }: { text: string }) {
   const sentences = useMemo(
     () => text.replace(/\n+/g, " ").split(/(?<=[\.!\?])\s+/).map((s) => s.trim()).filter(Boolean),
@@ -290,9 +311,14 @@ function WritingScorer() {
   );
   const [overrides, setOverrides] = useState<Record<string | number, WordOverride | PairOverride>>({});
   const [pairOverrides, setPairOverrides] = useState<PairOverrides>({});
-  const [userLex, setUserLex] = useState<string>("ocean forest Terrible Day trees firewood bilit");
-  const [packSel, setPackSel] = useState<string[]>(["us-k2", "us-k5", "general"]);
-  const [showFlags, setShowFlags] = useState<boolean>(true);
+  // Always-on flags (since the toggle is gone)
+  const showInfractions = true;
+
+  // If code referenced custom lexicon, freeze it empty:
+  const customLexicon = useMemo(() => new Set<string>(), []);
+
+  // If code referenced user-chosen dictionary packs, freeze to auto/default behavior.
+  const selectedPacks: string[] = useMemo(() => ["us-k2","us-k5","general"], []);
   
   const [spellStatus, setSpellStatus] = useState<"loading" | "hunspell" | "demo" | "error">("loading");
   const [spellEpoch, setSpellEpoch] = useState(0);
@@ -493,7 +519,7 @@ function WritingScorer() {
     return cws;
   }
 
-  const lexicon = useMemo(() => buildLexicon(packSel, userLex), [packSel, userLex]);
+  const lexicon = useMemo(() => buildLexicon(selectedPacks, ""), [selectedPacks]);
   
   // Add engine tag that changes when Hunspell loads
   const engineTag = spellStatus === "hunspell" ? "hun" : "demo";
@@ -613,135 +639,62 @@ function WritingScorer() {
         <CardTitle>Written Expression (TWW, WSC, CWS) – with Flags</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid md:grid-cols-2 gap-4">
-          <div>
-            <label className="text-sm font-medium">Paste student writing</label>
-            <Textarea className="min-h-[160px] mt-1" value={text} onChange={(e) => setText(e.target.value)} />
-
-            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-medium">Dictionary packs</label>
-                <div className="flex flex-wrap gap-2 mt-1">
-                  {Object.keys(PACKS).map((k) => (
-                    <Button
-                      key={k}
-                      size="sm"
-                      variant={packSel.includes(k) ? "default" : "outline"}
-                      onClick={() =>
-                        setPackSel((prev) => prev.includes(k) ? prev.filter((p) => p !== k) : [...prev, k])
-                      }
-                    >
-                      {k}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <label className="text-xs font-medium">Custom lexicon (semicolon/comma/space separated)</label>
-                <Input className="mt-1" value={userLex} onChange={(e) => setUserLex(e.target.value)} />
-              </div>
+        {/* Page body */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          {/* LEFT: Textbox + controls + legend + stream */}
+          <div className="space-y-3">
+            {/* Student writing textarea */}
+            <div>
+              <label className="text-sm font-medium">Paste student writing</label>
+              <Textarea className="min-h-[160px] mt-1" value={text} onChange={(e) => setText(e.target.value)} />
             </div>
 
-            <div className="flex items-center gap-2 mt-3">
-              <Checkbox id="flags" checked={showFlags} onCheckedChange={(v) => setShowFlags(!!v)} />
-              <label htmlFor="flags" className="text-sm">Show infractions & suggestions</label>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 mt-3">
-              <Button variant="secondary" onClick={() => { setOverrides({}); spellCache.current.clear(); }}>Reset overrides</Button>
-              <Button variant="ghost" onClick={() => { setText(""); setLtIssues([]); lastCheckedText.current=""; }}>Clear text</Button>
-
+            {/* Control strip: time + annunciators */}
+            <div className="mt-2 flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-2">
-                <label className="text-xs text-muted-foreground">Time (mm:ss)</label>
+                <span className="text-xs text-muted-foreground">Time (mm:ss)</span>
                 <input
                   value={timeMMSS}
                   onChange={(e) => setTimeMMSS(e.target.value)}
                   className="h-8 w-20 rounded border px-2 text-sm"
                   placeholder="mm:ss"
+                  aria-label="Probe time in minutes and seconds"
                 />
               </div>
 
-              <div className="ml-auto flex items-center gap-2 text-xs">
-                <span>Spell:</span>
-                {spellStatus === "hunspell" && <Badge>Hunspell</Badge>}
-                {spellStatus === "loading" && <Badge variant="secondary">loading…</Badge>}
-                {spellStatus === "demo" && <Badge variant="secondary">demo lexicon</Badge>}
-                {spellStatus === "error" && <Badge variant="destructive">error</Badge>}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Spell:</span>
+                <span className="inline-flex items-center rounded bg-slate-100 px-2 py-0.5 text-xs">
+                  Hunspell
+                </span>
+              </div>
 
-                <div className="text-xs text-muted-foreground">
-                  Grammar: <span className="inline-block rounded bg-slate-100 px-2 py-0.5">
-                    {grammarModeLabel}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <div className="grid grid-cols-3 gap-2 text-center">
-              <div className="p-3 rounded-2xl bg-white shadow-sm">
-                <div className="text-xs text-muted-foreground">Total Words Written</div>
-                <div className="text-2xl font-semibold">{tww}</div>
-                <div className="text-[10px] text-muted-foreground">numerals excluded</div>
-              </div>
-              <div className="p-3 rounded-2xl bg-white shadow-sm">
-                <div className="text-xs text-muted-foreground">Words Spelled Correctly</div>
-                <div className="text-2xl font-semibold">{wsc}</div>
-                <div className="text-[10px] text-muted-foreground">dictionary + overrides</div>
-              </div>
-              <div className="p-3 rounded-2xl bg-white shadow-sm">
-                <div className="text-xs text-muted-foreground">Correct Writing Sequences</div>
-                <div className="text-2xl font-semibold">{cwsCount}</div>
-                <div className="text-[10px] text-muted-foreground">adjacent-unit pairs</div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Grammar:</span>
+                <span className="inline-flex items-center rounded bg-slate-100 px-2 py-0.5 text-xs">
+                  {grammarModeLabel /* e.g., "auto (proxy)" | "public" | "off" */}
+                </span>
               </div>
             </div>
 
-            {/* %CWS */}
-            <Card>
-              <CardHeader><CardTitle>% CWS</CardTitle></CardHeader>
-              <CardContent>
-                <div className="text-5xl font-semibold">{percentCws}<span className="text-2xl">%</span></div>
-                <div className="text-xs text-muted-foreground">{cwsCount}/{eligibleBoundaries} eligible boundaries</div>
-              </CardContent>
-            </Card>
-
-            {/* CIWS */}
-            <Card>
-              <CardHeader><CardTitle>CIWS</CardTitle></CardHeader>
-              <CardContent>
-                <div className="text-5xl font-semibold">{ciws}</div>
-                <div className="text-xs text-muted-foreground">CWS − IWS (IWS={iws})</div>
-              </CardContent>
-            </Card>
-
-            {/* CWS/min */}
-            <Card>
-              <CardHeader><CardTitle>CWS / min</CardTitle></CardHeader>
-              <CardContent>
-                <div className="text-5xl font-semibold">
-                  {cwsPerMin === null ? "—" : (Math.round(cwsPerMin * 10) / 10).toFixed(1)}
-                </div>
-                <div className="text-xs text-muted-foreground">{durationSec ? `${timeMMSS} timed` : "enter time"}</div>
-              </CardContent>
-            </Card>
-
-            <div className="flex flex-wrap gap-2 text-xs mb-2">
+            {/* Legend */}
+            <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
               <span className="inline-flex items-center gap-1">
-                <span className="inline-block w-3 h-3 rounded bg-emerald-200 border border-emerald-300" /> correct
+                <span className="inline-block h-3 w-3 rounded bg-emerald-200 border border-emerald-300" />
+                correct
               </span>
               <span className="inline-flex items-center gap-1">
-                <span className="inline-block w-3 h-3 rounded bg-red-200 border border-red-300" /> incorrect
+                <span className="inline-block h-3 w-3 rounded bg-red-200 border border-red-300" />
+                incorrect
               </span>
               <span className="inline-flex items-center gap-1">
-                <span className="inline-block w-3 h-3 rounded bg-amber-200 border border-amber-300" /> possible (LanguageTool)
+                <span className="inline-block h-3 w-3 rounded bg-amber-200 border border-amber-300" />
+                possible (LanguageTool / heuristic)
               </span>
-              <span className="ml-2 text-slate-500">Click a caret to cycle: yellow → red → green → yellow</span>
+              <span className="text-slate-500">Click caret to cycle: yellow → red → green → yellow</span>
             </div>
 
-            <div className="mt-4 text-xs text-muted-foreground flex items-center gap-2">
-              <Info className="h-4 w-4" /> Click a <strong>word</strong> to toggle WSC; click the <strong>caret</strong> between tokens to cycle CWS (yellow=advisory, red=incorrect, green=correct).
-            </div>
-
+            {/* Highlighted word/caret stream */}
             <div className="mt-3 flex flex-wrap gap-1 p-3 rounded-2xl bg-muted/40">
               {/* initial caret uses bIndex = -1 */}
               {(() => {
@@ -774,7 +727,7 @@ function WritingScorer() {
                 const ok = isWordLikelyCorrect(tok.raw, lexicon);
                 const ov = (overrides[tok.idx] as WordOverride)?.csw;
                 const effectiveOk = ov === true ? true : ov === false ? false : ok;
-                const bad = showFlags && isWordTok && !effectiveOk;
+                const bad = showInfractions && isWordTok && !effectiveOk;
                 
                 const sc = getExternalSpellChecker();
                 const sugg = (isWordTok && sc && !effectiveOk) ? (sc.suggestions?.(tok.raw, 3) || []) : [];
@@ -836,32 +789,50 @@ function WritingScorer() {
                 );
               })}
             </div>
+          </div>
 
-            {showFlags && (
-              <div className="mt-4">
-                <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4" /> Infractions & Suggestions
-                </h4>
-                <InfractionList items={infractions} />
-              </div>
-            )}
+          {/* RIGHT: Metrics grid (2 rows × 3 cards) + infractions */}
+          <div className="space-y-4">
+            {/* Metrics grid */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <StatCard
+                title="Total Words Written"
+                value={tww /* your TWW value */}
+                sub="numerals excluded"
+              />
+              <StatCard
+                title="Words Spelled Correctly"
+                value={wsc /* your WSC value */}
+                sub="dictionary + overrides"
+              />
+              <StatCard
+                title="Correct Writing Sequences"
+                value={cwsCount}
+                sub="adjacent-unit pairs"
+              />
 
-            {/* somewhere under your scoring cards (simple readout) */}
-            {filteredLt.length > 0 && (
-              <div className="mt-3 text-xs p-2 rounded-xl border border-amber-300 bg-amber-50">
-                <div className="font-medium mb-1">Grammar suggestions (advisory):</div>
-                <ul className="list-disc ml-5 space-y-0.5">
-                  {filteredLt
-                    .slice(0, 12)
-                    .map((i, idx) => <li key={idx}>{i.category}: {i.message}</li>)}
-                </ul>
-              </div>
-            )}
+              <StatCard
+                title="% CWS"
+                value={<>{percentCws}<span className="text-2xl">%</span></>}
+                sub={`${cwsCount}/${eligibleBoundaries} eligible boundaries`}
+              />
+              <StatCard
+                title="CIWS"
+                value={ciws}
+                sub={`CWS − IWS (IWS=${iws})`}
+              />
+              <StatCard
+                title="CWS / min"
+                value={cwsPerMin === null ? "—" : (Math.round(cwsPerMin * 10) / 10).toFixed(1)}
+                sub={durationSec ? `${timeMMSS} timed` : "enter time"}
+              />
+            </div>
 
-            <details className="mt-4">
-              <summary className="cursor-pointer text-sm font-medium">Sentence view</summary>
-              <SentenceList text={text} />
-            </details>
+            {/* Infractions & Suggestions list — always visible now */}
+            <div>
+              <div className="mb-2 text-sm font-medium">Infractions &amp; Suggestions</div>
+              <InfractionList items={infractions} />
+            </div>
           </div>
         </div>
 
