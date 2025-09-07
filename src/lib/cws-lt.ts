@@ -273,7 +273,7 @@ export function ltBoundaryInsertions(tokens: Token[], issues: any[]) {
       || /missing.*punctuation.*sentence|paragraph/i.test(msg);
   };
 
-  const out: { beforeBIndex: number; char: "."; reason: string }[] = [];
+  const out: { beforeBIndex: number; message: string; char: "."; reason: "LT" }[] = [];
 
   for (const m of issues) {
     if (!looksLikeBoundary(m)) continue;
@@ -283,7 +283,12 @@ export function ltBoundaryInsertions(tokens: Token[], issues: any[]) {
     const next = tokens.find(t => (t.start ?? 0) >= after);
     const left = next ? next.idx - 1 : tokens.length - 1;
     if (left >= 0) {
-      out.push({ beforeBIndex: left, char: ".", reason: "LTBoundary" });
+      out.push({ 
+        beforeBIndex: left, 
+        message: "Possible missing sentence-ending punctuation (from LanguageTool).",
+        char: ".", 
+        reason: "LT" 
+      });
     }
   }
   return out;
