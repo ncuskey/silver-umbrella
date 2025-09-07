@@ -42,16 +42,27 @@ interface LTMatch {
 }
 interface LTResponse { matches: LTMatch[] }
 
+// Helper function to identify spelling/typo issues
+function isTypo(match: LTMatch): boolean {
+  const categoryId = (match.rule?.category?.id ?? "").toUpperCase();
+  const ruleId = (match.rule?.id ?? "").toUpperCase();
+  
+  return categoryId === "TYPOS" || ruleId.startsWith("MORFOLOGIK_RULE");
+}
+
 function mapIssues(data: LTResponse): GrammarIssue[] {
-  return (data.matches || []).map((m) => ({
-    offset: m.offset,
-    length: m.length,
-    category: m.rule?.category?.name || m.rule?.issueType || "GRAMMAR",
-    message: m.shortMessage || m.message,
-    replacements: (m.replacements || []).map(r => r.value),
-    ruleId: m.rule?.id,
-    categoryId: m.rule?.category?.id
-  }));
+  return (data.matches || []).map((m) => {
+    const isTypoIssue = isTypo(m);
+    return {
+      offset: m.offset,
+      length: m.length,
+      category: isTypoIssue ? "TYPOS" : (m.rule?.category?.name || m.rule?.issueType || "GRAMMAR"),
+      message: m.shortMessage || m.message,
+      replacements: (m.replacements || []).map(r => r.value),
+      ruleId: m.rule?.id,
+      categoryId: m.rule?.category?.id
+    };
+  });
 }
 
 // Exponential backoff for rate limiting
@@ -64,7 +75,13 @@ async function doCheck(baseUrl: string, text: string, lang: string, signal?: Abo
   const body = new URLSearchParams();
   body.set("text", text);
   body.set("language", lang);
+  body.set("level", "default"); // Match LT website defaults
   body.set("enabledOnly", "false");
+  
+  // Ensure spelling is enabled by setting preferredVariants for auto-detection
+  if (lang === "auto") {
+    body.set("preferredVariants", "en-US");
+  }
   
   const response = await fetch(endpoint, {
     method: "POST",

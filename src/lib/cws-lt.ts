@@ -38,12 +38,13 @@ function boundaryCharPos(tokens: Token[], bIndex: number): number {
 function isCwsCategory(issue: GrammarIssue) {
   const id = (issue.categoryId || "").toUpperCase();
   const ruleId = (issue.ruleId || "").toUpperCase();
+  const category = (issue.category || "").toUpperCase();
   
   // Allow punctuation-related issues that are relevant to CWS
   if (PUNCT_IDS.has(id) || PUNCT_IDS.has(ruleId)) return true;
   
   // exclude spelling/typography – those we already handle
-  if (id === "TYPOS" || id === "TYPOGRAPHY") return false;
+  if (id === "TYPOS" || id === "TYPOGRAPHY" || category === "TYPOS" || ruleId.startsWith("MORFOLOGIK_RULE")) return false;
   
   return true; // GRAMMAR, AGREEMENT, CONFUSED_WORDS, WORD_USAGE, MISC, etc.
 }

@@ -240,6 +240,9 @@ interface CwsHint {
 #### LanguageTool Client (`languagetool-client.ts`)
 - `createLanguageToolChecker()`: Factory for LanguageTool grammar checker
 - API integration with rate limiting support
+- **Enhanced Spelling Detection**: Properly configured to detect typos (MORFOLOGIK_RULE_* patterns) alongside grammar issues
+- **Language Variant Support**: Uses `en-US` variant and `preferredVariants` for auto-detection to ensure spelling rules remain active
+- **Website Parity**: Matches LanguageTool website defaults with `level=default` parameter
 - **AbortSignal Support**: Request cancellation to prevent stale results
 - **Automatic Grammar Checking**: Debounced text analysis with 800ms delay
 - Advisory-only suggestions (doesn't affect CBM scores)
@@ -249,7 +252,7 @@ interface CwsHint {
 #### CWS Advisory Hints System
 - `buildLtCwsHints()`: Maps LanguageTool grammar issues to CWS boundaries
 - **Smart Boundary Mapping**: Grammar issues mapped to nearest CWS boundaries within ±2 characters
-- **Category Filtering**: Only grammar issues (not spelling/punctuation) mapped to boundaries
+- **Enhanced Category Filtering**: Properly excludes spelling issues (TYPOS, MORFOLOGIK_RULE_*) from CWS boundary mapping
 - **Advisory Hints**: Grammar suggestions shown as yellow carets and advisory infractions
 - **Override Awareness**: Advisory hints disappear when users explicitly override boundary states
 
