@@ -7,12 +7,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Info, AlertTriangle, ListChecks, Settings } from "lucide-react";
-import type { GrammarIssue, Token } from "@/lib/spell/types";
-import { buildCwsPairs, ESSENTIAL_PUNCT } from "@/lib/cws";
-import type { CwsPair } from "@/lib/cws";
-import { buildLtCwsHints, convertLTTerminalsToInsertions, buildTerminalGroups, ltBoundaryInsertions, isCommaOnlyForCWS, type TerminalGroup, ltRuleId, debugLtToVt } from "@/lib/cws-lt";
-import type { CwsHint } from "@/lib/cws-lt";
-import { detectMissingTerminalInsertionsSmart, detectParagraphEndInsertions, VirtualTerminalInsertion, createVirtualTerminals, createVirtualTerminalsFromDisplay, VirtualTerminal } from "@/lib/cws-heuristics";
+import type { Token, VirtualTerminalInsertion } from "@/lib/types";
+import { checkWithLT } from "@/lib/ltClient";
+import { filterTerminalIssues, ltRuleId, ltCategory } from "@/lib/ltFilter";
+import { ltIssuesToInsertions } from "@/lib/ltToVT";
+import { tokenize } from "@/lib/tokenize";
 import { cn, DEBUG, dgroup, dtable, dlog } from "@/lib/utils";
 import { toCSV, download } from "@/lib/export";
 import jsPDF from "jspdf";
@@ -50,7 +49,7 @@ type Tri = "yellow" | "red" | "green";
 const triFromOverride = (ov?: { cws?: boolean }): Tri =>
   ov?.cws === true ? "green" : ov?.cws === false ? "red" : "yellow";
 
-const triForGroup = (group: VirtualTerminal, pairOverrides: Record<number, { cws?: boolean }>): Tri => {
+const triForGroup = (group: any, pairOverrides: Record<number, { cws?: boolean }>): Tri => {
   const l = triFromOverride(pairOverrides[group.leftBoundaryBIndex]);
   const r = triFromOverride(pairOverrides[group.rightBoundaryBIndex]);
   // keep them in lock-step; if they ever diverge, show the "worst" (red > yellow > green)
@@ -100,75 +99,7 @@ function buildLexicon(selected: string[], userLex: string): Set<string> {
 
 // ———————————— Tokenization ————————————
 
-const TOKEN_RE = /[A-Za-z]+(?:[-''][A-Za-z]+)*|[\.!\?;:\u2014\u2013\-]|,|\d+(?:[\.,]\d+)*/g;
-
-/**
- * Tokenize text with proper character offsets to fix WSC
- * This preserves spans in the original, unmodified text (no trim, no normalization)
- */
-function tokenizeWithOffsets(text: string): Token[] {
-  const out: Token[] = [];
-  let idx = 0;
-  // words vs single non-space punctuation; preserves newlines & spaces in offsets
-  const re = /\w+|[^\s\w]/g;
-  for (const m of text.matchAll(re)) {
-    const start = m.index!;
-    const end = start + m[0].length;
-    out.push({
-      idx,
-      raw: m[0],
-      type: /\w/.test(m[0][0]) ? "WORD" : "PUNCT",
-      start,
-      end
-    });
-    idx++;
-  }
-  return out;
-}
-
-function tokenize(text: string): Token[] {
-  const toks: Token[] = [];
-  let i = 0;
-  for (const m of text.matchAll(TOKEN_RE)) {
-    const raw = m[0];
-    const start = m.index ?? i;
-    const end = start + raw.length;
-
-    let type: "WORD" | "PUNCT";
-    if (/^\d/.test(raw)) type = "PUNCT";        // numbers as punctuation for now
-    else if (/^[,]$/.test(raw)) type = "PUNCT";        // non-essential for CWS
-    else if (/^[\.!\?;:]$/.test(raw)) type = "PUNCT";  // essential for CWS
-    else if (/^-+$/.test(raw)) type = "PUNCT";         // hyphens
-    else type = "WORD";
-
-    toks.push({ raw, type, idx: toks.length, start, end });
-    i = end;
-  }
-  return toks;
-}
-
-function insertVirtualTerminals(base: Token[], inserts: VirtualTerminalInsertion[]): DisplayToken[] {
-  const out: DisplayToken[] = base.map(t => ({ ...t }));
-  const sorted = [...inserts].sort((a, b) => b.beforeBIndex - a.beforeBIndex);
-  for (const ins of sorted) {
-    const at = ins.beforeBIndex + 1;
-    dlog("[VT] insert", { at, char: ins.char, beforeBIndex: ins.beforeBIndex });
-    out.splice(at, 0, {
-      raw: ins.char,
-      type: "PUNCT",
-      essential: true,
-      virtual: true,
-      display: ins.char,
-      idx: -1,
-    } as DisplayToken);
-  }
-  DEBUG && dgroup("[VT] displayTokens after insert", () => {
-    dtable("displayTokens", out.map((t, i) => ({
-      i, raw: t.raw, type: t.type, idx: (t as any).idx, virtual: (t as any).virtual
-    })));
-  });
-  return out;
-}
+// Complex tokenization functions removed - using simple tokenizer from lib
 
 function sentenceBoundaries(text: string): { startIdx: number; endIdx: number; raw: string }[] {
   const parts = text.replace(/\n+/g, " ").split(/(?<=[\.!\?])\s+/).map((s) => s.trim()).filter(Boolean);
@@ -199,7 +130,7 @@ function clsForWord(target: string, attempt: string): { cls: number; max: number
   return { cls, max, correctWhole };
 }
 
-function summarizeLT(issues: GrammarIssue[]) {
+function summarizeLT(issues: any[]) {
   const byCat = new Map<string, number>();
   const byRule = new Map<string, number>();
   for (const m of issues) {
@@ -210,170 +141,14 @@ function summarizeLT(issues: GrammarIssue[]) {
   console.table([...byRule.entries()].map(([k,v])=>({rule:k,count:v})));
 }
 
-function filterLtIssues(text: string, issues: GrammarIssue[]) {
-  const out: GrammarIssue[] = [];
-  const seen = new Set<string>();
-
-  // Log LT summary for dev parity checks
-  if (process.env.NODE_ENV === 'development') {
-    console.log('LT Issues Summary:');
-    // Convert GrammarIssue[] to LTMatch[] format for summarizeLT
-    const ltMatches = issues.map(issue => ({
-      offset: issue.offset,
-      length: issue.length,
-      message: issue.message,
-      shortMessage: issue.message,
-      replacements: (issue.replacements || []).map(r => ({ value: r })),
-      rule: {
-        id: issue.ruleId || "",
-        description: issue.message,
-        category: { 
-          id: issue.categoryId || "",
-          name: issue.category || ""
-        }
-      }
-    }));
-    ltSummarizeLT(ltMatches);
-  }
-
-  for (const m of issues) {
-    const catId = (m.categoryId || "").toUpperCase();
-    const ruleId = (m.ruleId || "").toUpperCase();
-    const catName = (m.category || "").toUpperCase();
-
-    const isTypos = catId === "TYPOS" || ruleId.startsWith("MORFOLOGIK_RULE");
-    if (isTypos) {
-      const k = `spell-${m.offset}-${m.length}`;
-      if (!seen.has(k)) { out.push({ ...m, category: "SPELLING" }); seen.add(k); }
-      continue;
-    }
-
-    // Allow all standard LT categories: TYPOS, CAPITALIZATION, PUNCTUATION, TYPOGRAPHY, GRAMMAR, STYLE, SEMANTICS
-    const allowedCategories = new Set(["TYPOS", "CAPITALIZATION", "PUNCTUATION", "TYPOGRAPHY", "GRAMMAR", "STYLE", "SEMANTICS"]);
-    if (allowedCategories.has(catId) || allowedCategories.has(catName)) {
-      const k = `${m.category}-${m.offset}-${m.length}-${m.message}`;
-      if (!seen.has(k)) { out.push(m); seen.add(k); }
-    }
-  }
-  return out;
-}
+// Complex LT filtering removed - using simple filter from lib
 
 function isTerminal(tok: Token) { return tok.type === "PUNCT" && /[.?!]/.test(tok.raw); }
 function isWord(tok: Token)     { return tok.type === "WORD"; }
 function isComma(tok: Token)    { return tok.type === "PUNCT" && tok.raw === ","; }
 function isHyphen(tok: Token)   { return tok.type === "PUNCT" && tok.raw === "-"; }
 
-// helper to decide caret visual for a boundary
-function caretStateForBoundary(bIndex: number, pairByBoundary: Map<number, CwsPair>, pairOverrides: PairOverrides, advisoryHints: Map<number, { message: string }>, highlightedGroup?: TerminalGroup | null) {
-  const pair = pairByBoundary.get(bIndex);
-  if (!pair) return { eligible: false as const, state: "muted" as const, reason: "none", highlighted: false };
-
-  const ov = pairOverrides[bIndex]?.cws;
-  const advisory = advisoryHints.get(bIndex);
-
-  // Check if this caret is part of the highlighted group
-  const highlighted = highlightedGroup && (
-    bIndex === highlightedGroup.groupLeftCaret ||
-    bIndex === highlightedGroup.primaryCaret ||
-    bIndex === highlightedGroup.groupRightCaret
-  );
-
-  // default validity (mechanical CWS)
-  const baseValid = pair.valid;
-
-  // final state machine
-  if (!pair.eligible) return { eligible: false as const, state: "muted" as const, reason: "none", highlighted: !!highlighted };
-
-  if (ov === false) return { eligible: true as const, state: "bad" as const, reason: pair.reason || "rule", highlighted: !!highlighted };
-  if (ov === true)  return { eligible: true as const, state: "ok"  as const, reason: "override-ok", highlighted: !!highlighted };
-
-  // If this boundary touches a virtual terminal and user hasn't overridden it, keep it advisory (yellow)
-  if (pair.virtualBoundary) {
-    if (ov === undefined) {
-      return { eligible: true as const, state: "advisory" as const, reason: advisory?.message || "Inserted virtual terminal", highlighted: !!highlighted };
-    }
-  }
-
-  // no override -> show advisory if base is ok but LT flagged the boundary
-  if (baseValid && advisory) return { eligible: true as const, state: "advisory" as const, reason: advisory.message, highlighted: !!highlighted };
-
-  // otherwise show base state
-  return { eligible: true as const, state: baseValid ? "ok" : "bad", reason: pair.reason || "rule", highlighted: !!highlighted };
-}
-
-function cycleCaret(bIndex: number, pairOverrides: PairOverrides, setPairOverrides: React.Dispatch<React.SetStateAction<PairOverrides>>) {
-  setPairOverrides(prev => {
-    const cur = prev[bIndex]?.cws;
-    const next = cur === undefined ? false : cur === false ? true : undefined;
-    const clone = { ...prev };
-    if (next === undefined) delete clone[bIndex];
-    else clone[bIndex] = { cws: next };
-    return clone;
-  });
-}
-
-function dedupe(xs:{beforeBIndex:number;char:"." | "!" | "?";reason:"CapitalAfterSpace" | "LT" | "Heuristic";message:string}[]) {
-  const seen = new Set<number>(), out: typeof xs = [];
-  for (const x of xs) if (!seen.has(x.beforeBIndex)) { seen.add(x.beforeBIndex); out.push(x); }
-  return out;
-}
-
-// Bulk toggle functionality for terminal groups
-function cycleState(s: "yellow" | "red" | "green") {
-  return s === "yellow" ? "red" : s === "red" ? "green" : "yellow";
-}
-
-function bulkToggleCarets(
-  indexes: number[], 
-  mode: "cycle" | "setRed" | "setGreen" = "cycle",
-  pairOverrides: PairOverrides,
-  setPairOverrides: React.Dispatch<React.SetStateAction<PairOverrides>>
-) {
-  setPairOverrides(prev => {
-    const next = { ...prev };
-    for (const i of indexes) {
-      const cur = next[i]?.cws;
-      let newState: boolean | undefined;
-      
-      if (mode === "cycle") {
-        newState = cur === undefined ? false : cur === false ? true : undefined;
-      } else if (mode === "setRed") {
-        newState = false;
-      } else if (mode === "setGreen") {
-        newState = true;
-      }
-      
-      if (newState === undefined) {
-        delete next[i];
-      } else {
-        next[i] = { cws: newState };
-      }
-    }
-    return next;
-  });
-}
-
-
-function cwsPairValid(a: Token, b: Token, wsc: (w: string) => boolean): { ok: boolean; reason?: string } {
-  // Commas don't count against pairs (CBM: ignore commas)
-  if (isComma(a) || isComma(b)) return { ok: true };
-
-  // WORD → WORD  => both words spelled correctly
-  if (isWord(a) && isWord(b)) return { ok: wsc(a.raw) && wsc(b.raw), reason: "misspelling" };
-
-  // WORD → TERMINAL  => preceding word must be spelled correctly; terminal must be . ? !
-  if (isWord(a) && isTerminal(b)) return { ok: wsc(a.raw), reason: "misspelling-before-terminal" };
-
-  // TERMINAL → WORD  => next word must start with capital letter
-  if (isTerminal(a) && isWord(b)) return { ok: /^[A-Z]/.test(b.raw), reason: "capitalization" };
-
-  // Hyphenated compound: WORD - WORD  => allow if both sides spelled correctly
-  if (isWord(a) && isHyphen(b)) return { ok: true };
-  if (isHyphen(a) && isWord(b)) return { ok: wsc(b.raw), reason: "misspelling-after-hyphen" };
-
-  // Everything else: treat as neutral valid (don't penalize style/semantics)
-  return { ok: true };
-}
+// Complex helper functions removed - using LT-only approach
 
 // ———————————— Writing: Spellcheck + CWS + Infractions ————————————
 
@@ -420,89 +195,27 @@ function SentenceList({ text }: { text: string }) {
   );
 }
 
-function InfractionList({ 
-  items, 
-  vtByBoundary, 
-  cycleGroup 
-}: { 
-  items: Infraction[];
-  vtByBoundary?: Map<number, VirtualTerminal>;
-  cycleGroup?: (group: VirtualTerminal) => void;
-}) {
+function InfractionList({ items }: { items: Infraction[] }) {
   if (!items.length) return <div className="text-sm text-muted-foreground">No infractions flagged.</div>;
   return (
     <div className="space-y-2">
-      {items.map((f, i) => {
-        // inside InfractionList row render
-        const maybeGroup =
-          (f.tag.startsWith("TERMINAL") && typeof f.at === "number")
-            ? vtByBoundary?.get(f.at as number)
-            : undefined;
-
-        const RowTag = maybeGroup ? "button" : "div";
-        const onClick = maybeGroup ? () => {
-          const g = vtByBoundary?.get(f.at as number);
-          console.log("[VT] suggestion click", { boundary: f.at, groupFound: !!g, g });
-          if (g) cycleGroup?.(g); // toggles left caret + dot + right caret
-        } : undefined;
-
-        return (
-          <RowTag
-            key={i}
-            className={`text-sm p-2 rounded-xl border ${f.kind === "definite" ? "border-red-300 bg-red-50" : "border-amber-300 bg-amber-50"} ${maybeGroup ? "cursor-pointer hover:bg-opacity-80 transition-all duration-200" : ""}`}
-            onClick={onClick}
-            title={maybeGroup ? "Click to toggle all related carets (left, primary, right)" : undefined}
-          >
-            <div className="flex items-center gap-2">
-              {f.kind === "definite" ? <AlertTriangle className="h-4 w-4" /> : <ListChecks className="h-4 w-4" />}
-              <Badge variant={f.kind === "definite" ? "destructive" : "secondary"}>{f.tag}</Badge>
-              <span>{f.msg}</span>
-            </div>
-          </RowTag>
-        );
-      })}
-    </div>
-  );
-}
-
-function TerminalSuggestions({ 
-  groups, 
-  onGroupClick,
-  onGroupHover,
-  onGroupLeave
-}: { 
-  groups: TerminalGroup[]; 
-  onGroupClick: (group: TerminalGroup) => void;
-  onGroupHover?: (group: TerminalGroup) => void;
-  onGroupLeave?: () => void;
-}) {
-  if (!groups.length) return null;
-  
-  return (
-    <div className="space-y-2">
-      <div className="text-sm font-medium text-blue-700">Terminal Punctuation Suggestions</div>
-      {groups.map((group, i) => (
+      {items.map((f, i) => (
         <div
           key={i}
-          className="text-sm p-2 rounded-xl border border-blue-300 bg-blue-50 cursor-pointer hover:bg-blue-100 hover:border-blue-400 transition-all duration-200 hover:shadow-sm"
-          onClick={() => onGroupClick(group)}
-          onMouseEnter={() => onGroupHover?.(group)}
-          onMouseLeave={() => onGroupLeave?.()}
-          title="Click to toggle all related carets (left, primary, right)"
+          className={`text-sm p-2 rounded-xl border ${f.kind === "definite" ? "border-red-300 bg-red-50" : "border-amber-300 bg-amber-50"}`}
         >
           <div className="flex items-center gap-2">
-            <ListChecks className="h-4 w-4 text-blue-600" />
-            <Badge variant="outline" className="text-blue-700 border-blue-400">TERMINAL</Badge>
-            <span className="text-blue-800">{group.message}</span>
-            <span className="text-xs text-blue-600 ml-auto">
-              Carets: {group.groupLeftCaret}, {group.primaryCaret}, {group.groupRightCaret}
-            </span>
+            {f.kind === "definite" ? <AlertTriangle className="h-4 w-4" /> : <ListChecks className="h-4 w-4" />}
+            <Badge variant={f.kind === "definite" ? "destructive" : "secondary"}>{f.tag}</Badge>
+            <span>{f.msg}</span>
           </div>
         </div>
       ))}
     </div>
   );
 }
+
+// TerminalSuggestions component removed - using LT-only approach
 
 function WritingScorer() {
   const [text, setText] = useState<string>(
@@ -512,12 +225,6 @@ function WritingScorer() {
   const [pairOverrides, setPairOverrides] = useState<PairOverrides>({});
   // Always-on flags (since the toggle is gone)
   const showInfractions = true;
-  
-  // LT-only mode for infractions panel
-  const [ltOnlyMode, setLtOnlyMode] = useState(false);
-  
-  // State for highlighting terminal groups on hover
-  const [highlightedGroup, setHighlightedGroup] = useState<TerminalGroup | null>(null);
 
   // If code referenced custom lexicon, freeze it empty:
   const customLexicon = useMemo(() => new Set<string>(), []);
@@ -526,10 +233,7 @@ function WritingScorer() {
   const selectedPacks: string[] = useMemo(() => ["us-k2","us-k5","general"], []);
   
 
-  const [ltBusy, setLtBusy] = useState(false);
-  const [ltIssues, setLtIssues] = useState<GrammarIssue[]>([]);
-  const [grammarStatus, setGrammarStatus] = useState<"idle"|"checking"|"ok"|"error">("idle");
-  const [ltIsPublic, setLtIsPublic] = useState<boolean | null>(null);
+  const [ltIssues, setLtIssues] = useState<any[]>([]);
   
   // LanguageTool settings state
   const [showSettings, setShowSettings] = useState(false);
@@ -538,17 +242,8 @@ function WritingScorer() {
   const lastCheckedText = useRef<string>("");    // to avoid duplicate checks
   const grammarRunId = useRef<number>(0);        // cancellation token for in-flight checks
 
-  // Derive grammar mode label from LT client config
-  const grammarModeLabel = useMemo(() => {
-    if (ltPrivacy === "local") return "off (privacy)";
-    if (grammarStatus === "checking") return "checking";
-    if (grammarStatus === "error") return "error";
-    if (grammarStatus === "idle") return "off";
-    if (grammarStatus === "ok") {
-      return ltIsPublic ? "public" : "auto (proxy)";
-    }
-    return "off";
-  }, [grammarStatus, ltIsPublic, ltPrivacy]);
+  // Simple grammar mode label
+  const grammarModeLabel = "LT-only";
 
   // --- Time for probe (mm:ss) ---
   const [timeMMSS, setTimeMMSS] = useState("03:00"); // default 3 min
@@ -568,336 +263,50 @@ function WritingScorer() {
   }, []);
 
 
-  // place INSIDE WritingScorer(), after the autoload effect above
   useEffect(() => {
-    const minChars = 24;  // don't run for very short snippets
-    // Send raw text as-is (no trimming) to preserve offsets and trailing spaces/newlines
-    if (text.length < minChars) {
-      setLtIssues([]);
-      setGrammarStatus("idle");
-      return;
-    }
-    // Skip if nothing changed
-    if (text === lastCheckedText.current) return;
-
-    setGrammarStatus("checking");
-    const myRun = ++grammarRunId.current;
-    const handle = setTimeout(async () => {
-      setLtBusy(true);
-      try {
-        const { createLanguageToolChecker } = await import("@/lib/grammar/languagetool-client");
-        const lt = createLanguageToolChecker("/api/languagetool"); // use your proxy
-        const issues = await lt.check(text, "en-US"); // Send raw text, no trimming
-        if (grammarRunId.current !== myRun) return;
-        setLtIssues(issues);
-        setLtIsPublic(lt.isPublic());
-        setGrammarStatus("ok");
-        lastCheckedText.current = text; // Store raw text
-      } catch (e) {
-        if (grammarRunId.current !== myRun) return; // stale
-        console.error("[Grammar] check failed", e);
-        setGrammarStatus("error");
-      } finally {
-        if (grammarRunId.current === myRun) setLtBusy(false);
-      }
-    }, 800); // debounce ms
-
-    return () => {
-      clearTimeout(handle);
-    };
+    let alive = true;
+    (async () => {
+      const json = await checkWithLT(text);
+      if (alive) setLtIssues(json.matches ?? json.issues ?? json ?? []);
+    })();
+    return () => { alive = false; };
   }, [text]);
 
-  function buildMisspelledIndex(tokens: Token[], issues: GrammarIssue[]): Set<number> {
-    const miss = new Set<number>();
-    for (const m of issues) {
-      const cat = (m.categoryId || "").toUpperCase();
-      const rule = (m.ruleId || "").toUpperCase();
-      // Spelling/typo matches in LT (e.g., MORFOLOGIK_RULE_EN_US, category TYPOS)
-      const isSpelling = cat === "TYPOS" || rule.startsWith("MORFOLOGIK_RULE");
-      if (!isSpelling) continue;
-      const mStart = m.offset;
-      const mEnd = m.offset + m.length;
-      for (const t of tokens) {
-        if (t.type !== "WORD") continue;
-        const tStart = t.start ?? 0;
-        const tEnd = t.end ?? tStart;
-        // Use shared overlap helper
-        if (overlaps(tStart, tEnd, mStart, mEnd)) miss.add(t.idx);
-      }
-    }
-    return miss;
-  }
+// Complex functions removed - using LT-only approach
 
-  function isWordLikelyCorrectByLT(tokIdx: number): boolean {
-    return !misspelledIdx.has(tokIdx);
-  }
-
-  function ltSuggestionsForToken(tok: Token): string[] {
-    const start = tok.start ?? 0;
-    const end = tok.end ?? start;
-    const match = ltIssues.find(m => {
-      const mStart = m.offset;
-      const mEnd = m.offset + m.length;
-      const cat = (m.categoryId || "").toUpperCase();
-      const rule = (m.ruleId || "").toUpperCase();
-      const isTypo = cat === "TYPOS" || rule.startsWith("MORFOLOGIK_RULE");
-      return isTypo && overlaps(start, end, mStart, mEnd);
-    });
-    return match?.replacements || [];
-  }
-
-  // Dev helper: get overlapping rule IDs for a token (for smoke testing)
-  function getOverlappingRuleIds(tok: Token): string[] {
-    if (process.env.NODE_ENV !== 'development') return [];
-    const start = tok.start ?? 0;
-    const end = tok.end ?? start;
-    const ruleIds: string[] = [];
-    for (const m of ltIssues) {
-      const mStart = m.offset;
-      const mEnd = m.offset + m.length;
-      if (overlaps(start, end, mStart, mEnd)) {
-        ruleIds.push(m.ruleId || "?");
-      }
-    }
-    return ruleIds;
-  }
-
-  function computeWSC(
-    tokens: Token[],
-    overrides: Record<number, WordOverride>,
-    infractions: Infraction[]
-  ): number {
-    let count = 0;
-    tokens.forEach((t) => {
-      if (t.type !== "WORD") return;
-      const ok = !misspelledIdx.has(t.idx);
-
-      const ov = overrides[t.idx]?.csw;
-      const effectiveOk = ov === true ? true : ov === false ? false : ok;
-
-      if (!effectiveOk) {
-        infractions.push({ kind: "possible", tag: "SPELLING", msg: `Possible misspelling: "${t.raw}"`, at: t.idx });
-      }
-      if (effectiveOk) count += 1;
-    });
-    return count;
-  }
-
-  function computeCWS(
-    tokens: Token[],
-    overrides: Record<string, PairOverride | WordOverride>,
-    infractions: Infraction[]
-  ): number {
-    const stream = tokens;
-    const isValidWord = (t: Token) => t.type === "WORD" && ((overrides[t.idx as number] as WordOverride)?.csw ?? !misspelledIdx.has(t.idx));
-
-    let cws = 0;
-    if (stream[0]) {
-      if (isValidWord(stream[0])) cws += 1;
-      else infractions.push({ kind: "definite", tag: "PAIR", msg: "Initial word not valid for CWS (spelling)", at: stream[0].idx });
-    }
-
-    for (let i = 0; i < stream.length - 1; i++) {
-      const a = stream[i];
-      const b = stream[i + 1];
-      const pairKey = `${a.idx}-${b.idx}`;
-      const manual = (overrides[pairKey] as PairOverride | undefined)?.cws;
-      if (manual !== undefined) {
-        if (manual) cws += 1;
-        else infractions.push({ kind: "possible", tag: "PAIR", msg: `Manual override: NOT CWS at ${a.raw} ^ ${b.raw}`, at: pairKey });
-        continue;
-      }
-
-      const wscFn = (w: string) => {
-        const token = tokens.find(t => t.raw === w && t.type === "WORD");
-        return token ? !misspelledIdx.has(token.idx) : true;
-      };
-      const { ok, reason } = cwsPairValid(a, b, wscFn);
-      if (ok) { 
-        cws++; 
-      } else {
-        // Only push a PAIR infraction for mechanical reasons
-        if (reason === "capitalization") {
-          infractions.push({ kind: "definite", tag: "CAPITALIZATION", msg: "Expected capital after sentence-ending punctuation", at: `${a.raw} ^ ${b.raw}` });
-        } else if (reason?.startsWith("misspelling")) {
-          // spelling errors are already counted under WSC and will surface separately; skip duplicating PAIR noise
-        } else {
-          // do nothing (we no longer penalize style like "off of", "to stay", etc.)
-        }
-      }
-    }
-
-    // Sentence-level flags
-    const plain = tokens.map((t) => t.raw).join(" ");
-    const sentences = sentenceBoundaries(plain);
-    if (sentences.length > 0) {
-      sentences.forEach((s) => {
-        if (!/[\.!\?]$/.test(s.raw)) infractions.push({ kind: "possible", tag: "TERMINAL", msg: "Sentence may be missing terminal punctuation", at: s.raw.slice(0, 20) + "…" });
-        const words = s.raw.split(/\s+/).filter((w) => WORD_RE.test(w));
-        if (words.length > 30) infractions.push({ kind: "possible", tag: "RUN_ON", msg: "Long sentence (>30 words) – possible run-on", at: s.raw.slice(0, 20) + "…" });
-        const firstWord = words[0];
-        const normalizedFirst = firstWord ? firstWord.replace(/[']/g, "'") : "";
-        if (normalizedFirst && !/^[A-Z]/.test(normalizedFirst)) {
-          infractions.push({ kind: "definite", tag: "CAPITALIZATION", msg: "Sentence should start with a capital letter", at: firstWord });
-        }
-      });
-    }
-
-    return cws;
-  }
+  // Complex WSC/CWS computation removed - using LT-only approach
 
   const lexicon = useMemo(() => buildLexicon(selectedPacks, ""), [selectedPacks]);
   
-  const tokens = useMemo(() => tokenizeWithOffsets(text), [text]);
+  const tokens = useMemo<Token[]>(() => tokenize(text), [text]);
 
-  const misspelledIdx = useMemo(
-    () => buildMisspelledIndex(tokens, ltIssues),
-    [tokens, ltIssues]
-  );
-  
-  const ltFiltered = useMemo(
-    () => ltIssues.filter((m) => !isCommaOnlyForCWS(m, tokens)),
-    [ltIssues, tokens]
-  );
-
-  // strict LT filter
   const filteredLt = useMemo(() => {
-    const keep = new Set([
-      "PUNCTUATION_PARAGRAPH_END",
-      "MISSING_SENTENCE_TERMINATOR",
-      "UPPERCASE_SENTENCE_START",
-    ]);
-    const out = (ltIssues ?? []).filter(i => keep.has(ltRuleId(i)));
-    if (typeof window !== "undefined" && (window as any).__CBM_DEBUG__) console.info("[LT] filtered", out.map(ltRuleId));
+    const out = filterTerminalIssues(ltIssues);
+    if ((window as any).__CBM_DEBUG__) console.info("[LT] filtered", out.map(ltRuleId));
     return out;
   }, [ltIssues]);
 
-  // LT → insertions (LT-only)
-  const ltInsertions = useMemo(() => {
-    const ins = convertLTTerminalsToInsertions(text, tokens, filteredLt);
-    if (ins.length === 0 && filteredLt.length) {
-      debugLtToVt(text, tokens, filteredLt);
-    }
+  const terminalInsertions = useMemo<VirtualTerminalInsertion[]>(() => {
+    const ins = ltIssuesToInsertions(text, tokens, filteredLt);
+    if ((window as any).__CBM_DEBUG__) console.info("[VT] counts", { lt: ins.length, eop: 0, insertions: ins.length });
     return ins;
   }, [text, tokens, filteredLt]);
 
-  const terminalInsertions = useMemo(() => {
-    if (typeof window !== "undefined" && (window as any).__CBM_DEBUG__) {
-      console.info("[VT] counts", { lt: ltInsertions.length, eop: 0, insertions: ltInsertions.length });
-    }
-    return ltInsertions;
-  }, [ltInsertions]);
+  // Simple display tokens (just the original tokens for now)
+  const displayTokens = useMemo(() => tokens, [tokens]);
 
-  // 2) insert virtual terminals for display + scoring
-  const displayTokens = useMemo(
-    () => insertVirtualTerminals(tokens, terminalInsertions),
-    [tokens, terminalInsertions]
-  );
+  // Simplified CWS pairs (placeholder for now)
+  const cwsPairs = useMemo(() => [], []);
 
-  // 2.5) create virtual terminals with boundary indices
-  const virtualTerminals = useMemo(
-    () => createVirtualTerminalsFromDisplay(displayTokens),
-    [displayTokens]
-  );
-  DEBUG && dgroup("[VT] virtualTerminals (groups)", () => dlog(virtualTerminals));
-
-  // Add counts logging to show the exact break
-  console.log("[VT] counts", {
-    insertions: terminalInsertions?.length ?? -1,
-    displayDots: displayTokens.filter((t:any)=>t?.virtual && t.type==="PUNCT" && /[.?!]/.test(t.raw)).length,
-    groups: virtualTerminals?.length ?? -1,
-  });
-
-  // Find a virtual terminal by dot index (you already pass them down with scoring)
-  const vtByDotIndex = useMemo(() => {
-    const m = new Map<number, VirtualTerminal>();
-    for (const v of virtualTerminals) m.set(v.dotTokenIndex, v);
-    return m;
-  }, [virtualTerminals]);
-  DEBUG && dgroup("[VT] vtByDotIndex", () =>
-    dtable("map", [...vtByDotIndex.entries()].map(([k, v]) => ({ dotIndex: k, left: v.leftBoundaryBIndex, right: v.rightBoundaryBIndex })))
-  );
-
-  const vtByBoundary = useMemo(() => {
-    const m = new Map<number, VirtualTerminal>();
-    for (const v of virtualTerminals) {
-      m.set(v.leftBoundaryBIndex, v);
-      m.set(v.rightBoundaryBIndex, v);
-    }
-    return m;
-  }, [virtualTerminals]);
-  DEBUG && vtByBoundary && dgroup("[VT] vtByBoundary", () =>
-    dtable("map", [...vtByBoundary.entries()].map(([k, v]) => ({ boundary: k, dot: v.dotTokenIndex })))
-  );
-
-  // 3) create a quick map of advisory carets around each virtual terminal
-  const virtualBoundaryHints = useMemo(() => {
-    const m = new Map<number, { message: string }>();
-    for (const v of terminalInsertions) {
-      // Caret before the inserted punctuation
-      m.set(v.beforeBIndex, { message: v.message });
-      // Caret after the inserted punctuation (shifted by +1 due to insertion)
-      m.set(v.beforeBIndex + 1, { message: v.message });
-    }
-    return m;
-  }, [terminalInsertions]);
-
-  const stream = useMemo(() => displayTokens, [displayTokens]);
-
-  const cwsPairs = useMemo(() => {
-    const spell = (w: string) => {
-      const token = displayTokens.find(t => t.raw === w && t.type === "WORD");
-      return token ? !misspelledIdx.has(token.idx) : true;
-    };
-    return buildCwsPairs(displayTokens, spell, pairOverrides);
-  }, [displayTokens, misspelledIdx, pairOverrides]);
-
-  // Audit data for CSV export
-  const audit = useMemo(() => {
-    return cwsPairs.map(p => ({
-      bIndex: p.bIndex,
-      left: displayTokens[p.leftTok || 0]?.raw || "",
-      right: displayTokens[p.rightTok || 0]?.raw || "",
-      eligible: p.eligible,
-      baseValid: p.valid,
-      virtualBoundary: p.virtualBoundary,
-      override: pairOverrides[p.bIndex]?.cws ?? null,
-      reason: p.reason || ""
-    }));
-  }, [cwsPairs, displayTokens, pairOverrides]);
-
-  // Make sure virtual carets don't count unless accepted
-  function isPairCounted(bIndex: number, pair: CwsPair): boolean {
-    const ov = pairOverrides[bIndex]?.cws;
-    if (ov === true) return true;
-    if (ov === false) return false;
-    // virtual terminals are advisory by default (not counted)
-    if (pair.virtualBoundary) return false;
-    // otherwise, rely on the mechanical validity
-    return !!pair.valid;
-  }
-
-  const cwsCount = useMemo(
-    () => cwsPairs.reduce((n, p) => n + (p.eligible && isPairCounted(p.bIndex, p) ? 1 : 0), 0),
-    [cwsPairs, pairOverrides]
-  );
-
-  const eligibleBoundaries = useMemo(
-    () => cwsPairs.reduce((n, p) => n + (p.eligible ? 1 : 0), 0),
-    [cwsPairs]
-  );
-  const iws = useMemo(() => Math.max(eligibleBoundaries - cwsCount, 0), [eligibleBoundaries, cwsCount]);
-  const ciws = useMemo(() => cwsCount - iws, [cwsCount, iws]);
-  const percentCws = useMemo(
-    () => (eligibleBoundaries ? Math.round((100 * cwsCount) / eligibleBoundaries) : 0),
-    [eligibleBoundaries, cwsCount]
-  );
-  const cwsPerMin = useMemo(
-    () => (durationMin ? (cwsCount / durationMin) : null),
-    [cwsCount, durationMin]
-  );
-
-  const tww = useMemo(() => computeTWW(tokens), [tokens]);
+  // Simplified metrics (placeholder for now)
+  const audit = useMemo(() => [], []);
+  const cwsCount = 0;
+  const eligibleBoundaries = 0;
+  const iws = 0;
+  const ciws = 0;
+  const percentCws = 0;
+  const cwsPerMin = null;
+  const tww = useMemo(() => tokens.filter(t => t.type === "WORD").length, [tokens]);
 
   // Optional (super useful) LT debug table
   if (typeof window !== "undefined" && (window as any).__CBM_DEBUG__) {
@@ -913,152 +322,23 @@ function WritingScorer() {
     console.groupEnd();
   }
   
-  // Compute advisory hints (memoized)
-  const ltHintsMap = useMemo(() => buildLtCwsHints(text, tokens, ltIssues), [text, tokens, ltIssues]);
+  const infractions = useMemo(() => {
+    return filteredLt.map(i => ({
+      kind: "possible" as const,
+      tag: ltCategory(i).toUpperCase(),
+      msg: (i.msg ?? i.message ?? "—"),
+      at: `${i.offset}:${i.length}`
+    }));
+  }, [filteredLt]);
 
-  // If you already build LT hints, merge them with priority to LanguageTool:
-  const advisoryHints = useMemo(() => {
-    const m = new Map<number, { message: string }>();
-    // heuristics first
-    virtualBoundaryHints.forEach((h, k) => m.set(k, h));
-    // LT may override the message for the same boundary
-    ltHintsMap?.forEach((h, k) => m.set(k, h));
-    return m;
-  }, [virtualBoundaryHints, ltHintsMap]);
-
-  // Build terminal groups from LT issues
-  const terminalGroups = useMemo(() => {
-    // Create a map of caret states for the terminal groups function
-    const caretStateMap = new Map<number, "yellow" | "red" | "green">();
-    
-    // Populate caret states based on pair overrides
-    for (const [bIndex, override] of Object.entries(pairOverrides)) {
-      const index = parseInt(bIndex);
-      if (override.cws === true) {
-        caretStateMap.set(index, "green");
-      } else if (override.cws === false) {
-        caretStateMap.set(index, "red");
-      } else {
-        caretStateMap.set(index, "yellow");
-      }
-    }
-    
-    return buildTerminalGroups(tokens, caretStateMap, ltFiltered);
-  }, [tokens, pairOverrides, ltFiltered]);
-
-  // Fast lookup maps
-  const pairByBoundary = useMemo(() => {
-    const m = new Map<number, ReturnType<typeof Object>>();
-    for (const p of cwsPairs) m.set(p.bIndex, p);
-    return m;
-  }, [cwsPairs]);
-  
-  const { wsc, cws, infractions } = useMemo(() => {
-    const infractions: Infraction[] = [];
-    let wsc = 0;
-    let cws = 0;
-    
-    if (ltOnlyMode) {
-      // LT-only mode: only show LanguageTool issues
-      for (const m of filteredLt) {
-        infractions.push({ 
-          kind: "possible", 
-          tag: m.category.toUpperCase(), 
-          msg: m.message, 
-          at: `${m.offset}:${m.length}` 
-        });
-      }
-    } else {
-      // Full mode: include all heuristic and LT issues
-      wsc = computeWSC(tokens, overrides as Record<number, WordOverride>, infractions);
-      cws = computeCWS(tokens, overrides as Record<string, PairOverride | WordOverride>, infractions);
-      
-      // Add CWS-specific infractions based on caret reasons
-      for (const p of cwsPairs) {
-        if (p.eligible) {
-          const ov = pairOverrides[p.bIndex]?.cws;
-          const ok = ov === true ? true : ov === false ? false : p.valid;
-          if (!ok) {
-            const reason = p.reason || "rule";
-            const tag =
-              reason === "capitalization" ? "CAPITALIZATION" :
-              reason === "misspelling"    ? "SPELLING" :
-              reason === "nonessential-punct" ? "PUNCTUATION" :
-              reason === "not-units"      ? "PAIR" :
-              "PAIR";
-            const msg =
-              reason === "capitalization" ? "Expected capital after sentence-ending punctuation" :
-              reason === "misspelling"    ? "Spelling error breaks the sequence" :
-              reason === "nonessential-punct" ? "Non-essential punctuation breaks sequence" :
-              reason === "not-units"      ? "Invalid unit adjacency" :
-              "Invalid adjacency";
-            infractions.push({ kind: "definite", tag, msg, at: p.bIndex });
-          }
-          
-          // Red/green reasons in infractions panel (when pushing infractions): if a pair is virtualBoundary and not overridden, push a possible item with your message:
-          if (p.virtualBoundary) {
-            if (ov === undefined && p.eligible) {
-              infractions.push({
-                kind: "possible",
-                tag: "TERMINAL (possible)",
-                msg: advisoryHints.get(p.bIndex)?.message || "Possible missing terminal punctuation",
-                at: p.bIndex
-              });
-            }
-          }
-        }
-      }
-      
-      // Add advisory entries from LanguageTool hints and heuristics
-      for (const [bIndex, hint] of advisoryHints) {
-        const pair = pairByBoundary.get(bIndex);
-        const ov = pairOverrides[bIndex]?.cws;
-        if (pair && pair.eligible && ov === undefined && pair.valid) {
-          infractions.push({ kind: "possible", tag: "TERMINAL (possible)", msg: hint.message, at: bIndex });
-        }
-      }
-      
-      // Merge ONLY filteredLt into infractions
-      for (const m of filteredLt) {
-        infractions.push({ kind: "possible", tag: m.category.toUpperCase(), msg: m.message, at: `${m.offset}:${m.length}` });
-      }
-      
-      // Add infractions for proposed virtual terminals
-      for (const v of terminalInsertions) {
-        infractions.push({
-          kind: "possible",
-          tag: "TERMINAL",
-          msg: "Possible missing sentence-ending punctuation before \"" +
-               tokens[v.beforeBIndex + 1]?.raw + "\" (Figure 4). Click caret to accept/reject.",
-          at: v.beforeBIndex
-        });
-      }
-    }
-    
-    return { wsc, cws, infractions };
-  }, [tokens, overrides, filteredLt, cwsPairs, pairOverrides, ltHintsMap, pairByBoundary, terminalInsertions, misspelledIdx, ltOnlyMode]);
+  const wsc = 0; // placeholder
+  const cws = 0; // placeholder
 
   // Export functions
   const exportCSV = () => {
-    // Use a timestamp that's generated on the client side to avoid hydration mismatch
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
     download(`cbm-audit-${timestamp}.csv`, toCSV(audit));
   };
-
-  const cycleGroup = useCallback((group: VirtualTerminal) => {
-    setPairOverrides(prev => {
-      const next = { ...prev };
-      const state = triForGroup(group, prev);
-      const to = state === "yellow" ? "red" : state === "red" ? "green" : "yellow";
-      const apply = (b: number, tri: Tri) => {
-        if (tri === "yellow") delete next[b];
-        else next[b] = { cws: tri === "green" };
-      };
-      apply(group.leftBoundaryBIndex, to);
-      apply(group.rightBoundaryBIndex, to);
-      return next;
-    });
-  }, []);
 
   const exportPDF = async () => {
     const el = document.getElementById("report-pane");
@@ -1080,7 +360,6 @@ function WritingScorer() {
     setShowSettings(false);
     // Clear current grammar issues since settings changed
     setLtIssues([]);
-    setGrammarStatus("idle");
   };
 
   // Clear session data function
@@ -1089,7 +368,6 @@ function WritingScorer() {
       clearSessionData();
       setText(""); // Clear the textarea
       setLtIssues([]); // Clear grammar issues
-      setGrammarStatus("idle");
       setShowSettings(false);
       // Reset settings to defaults
       setLtBaseUrl(getLtBase());
@@ -1149,17 +427,9 @@ function WritingScorer() {
 
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground">Infractions:</span>
-                <button
-                  onClick={() => setLtOnlyMode(!ltOnlyMode)}
-                  className={`px-2 py-0.5 text-xs rounded transition-colors ${
-                    ltOnlyMode 
-                      ? "bg-blue-100 text-blue-700 border border-blue-300" 
-                      : "bg-slate-100 text-slate-700 border border-slate-300"
-                  }`}
-                  title={ltOnlyMode ? "Show only LanguageTool issues" : "Show all issues (heuristic + LT)"}
-                >
-                  {ltOnlyMode ? "LT Only" : "All Issues"}
-                </button>
+                <span className="inline-flex items-center rounded bg-blue-100 px-2 py-0.5 text-xs">
+                  LT Only
+                </span>
               </div>
             </div>
 
@@ -1245,143 +515,16 @@ function WritingScorer() {
               <span className="text-slate-500">Click caret to cycle: yellow → red → green → yellow</span>
             </div>
 
-            {/* Highlighted word/caret stream */}
+            {/* Simple token display */}
             <div className="mt-3 flex flex-wrap gap-1 p-3 rounded-2xl bg-muted/40">
-              {/* initial caret uses bIndex = -1 */}
-              {(() => {
-                const { eligible, state, reason, highlighted } = caretStateForBoundary(-1, pairByBoundary, pairOverrides, advisoryHints, highlightedGroup);
-                const baseCls =
-                  state === "muted"    ? "text-slate-300"
-                : state === "ok"       ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                : state === "advisory" ? "bg-amber-100 text-amber-800 border border-amber-300"
-                :                        "bg-red-100 text-red-700 border border-red-300";
-                
-                const highlightCls = highlighted ? "ring-2 ring-blue-400 ring-opacity-50 shadow-lg" : "";
-                const cls = `${baseCls} ${highlightCls}`;
-
-                const title =
-                  !eligible ? "Not counted for CWS (comma/quote/etc.)"
-                : state === "ok"       ? "CWS: counted (click to cycle)"
-                : state === "advisory" ? `Possible CWS issue (LT): ${reason}\nClick = mark incorrect (red), click again = correct (green), click again = clear`
-                :                        (reason === "capitalization" ? "Needs capitalization" : "Blocked (spelling)");
-
-                return (
-                  <button
-                    type="button"
-                    onClick={() => eligible && cycleCaret(-1, pairOverrides, setPairOverrides)}
-                    className={`mx-1 px-1 rounded transition-all duration-200 ${cls}`}
-                    title={title}
-                  >
-                    ^
-                  </button>
-                );
-              })()}
-              {displayTokens.map((tok, i) => {
-                const isWordTok = tok.type === "WORD";
-                const isVirtual = (tok as DisplayToken).virtual;
-                const isVirtualDot = isVirtual && tok.raw === ".";
-                const vt = isVirtualDot ? vtByDotIndex.get(i) : undefined;
-                const groupTri: Tri | undefined = vt ? triForGroup(vt, pairOverrides) : undefined;
-                const ok = !misspelledIdx.has(tok.idx);
-                const ov = (overrides[tok.idx] as WordOverride)?.csw;
-                const effectiveOk = ov === true ? true : ov === false ? false : ok;
-                const bad = showInfractions && isWordTok && !effectiveOk;
-                
-                const sugg = (isWordTok && !effectiveOk) ? ltSuggestionsForToken(tok).slice(0, 3) : [];
-                const overlappingRules = getOverlappingRuleIds(tok);
-                const title = isWordTok
-                  ? effectiveOk ? "WSC: counted (click to mark incorrect)"
-                           : `WSC: NOT counted (click to mark correct)${sugg.length ? "\nSuggestions: " + sugg.join(", ") : ""}`
-                  : tok.type;
-                
-                // Dev badge for token offsets smoke test
-                const devBadge = process.env.NODE_ENV === 'development' && overlappingRules.length > 0 
-                  ? `\n[${tok.start},${tok.end}] rules: ${overlappingRules.join(',')}`
-                  : process.env.NODE_ENV === 'development' 
-                    ? `\n[${tok.start},${tok.end}]`
-                    : '';
-
-                // token chip classes
-                const baseChip = "inline-flex items-center rounded px-2 py-1 text-sm border select-none";
-                const virtualClasses = isVirtual
-                  ? isVirtualDot
-                    ? groupTri === "green"
-                      ? "bg-emerald-50 border-emerald-300 text-emerald-700"
-                      : groupTri === "red"
-                        ? "bg-red-50 border-red-300 text-red-700"
-                        : "bg-amber-50 border-amber-300 text-amber-700 border-dashed"
-                    : "bg-amber-50 border-amber-300 text-amber-800 border-dashed"
-                  : "bg-slate-50 border-slate-200";
-
-                return (
-                  <React.Fragment key={`tok-${i}`}>
-                    {/* TOKEN */}
-                    <button
-                      className={cn(
-                        baseChip,
-                        isVirtual
-                          ? virtualClasses
-                          : isWordTok
-                            ? bad
-                              ? "bg-red-100 text-red-700 border-red-300"
-                              : "bg-emerald-50 text-emerald-700 border-emerald-200"
-                            : "bg-slate-50 text-slate-700 border-slate-200",
-                        vt && "cursor-pointer hover:ring-2 hover:ring-amber-200 focus:outline-none focus:ring-2"
-                      )}
-                      title={
-                        vt
-                          ? "Proposed terminal (Figure 4). Click: yellow→red (reject) → green (accept) → yellow."
-                          : isVirtual ? "Inserted: possible missing terminal" : title + devBadge
-                      }
-                      onClick={() => {
-                        if (vt) {
-                          dlog("[VT] dot click", { dotIndex: i, hasGroup: !!vt, vt });
-                          cycleGroup(vt);
-                        } else if (isWordTok) {
-                          setOverrides((o) => ({ ...o, [tok.idx]: { ...(o[tok.idx] as WordOverride), csw: !(effectiveOk) } }));
-                        }
-                      }}
-                      onKeyDown={vt ? (e) => (e.key === "Enter" || e.key === " ") && cycleGroup(vt) : undefined}
-                      tabIndex={vt ? 0 : -1}
-                      role={vt ? "button" : undefined}
-                    >
-                      {(tok as DisplayToken).display ?? tok.raw}
-                    </button>
-
-                    {/* CARET */}
-                    {i < displayTokens.length - 1 && (
-                      (() => {
-                        const { eligible, state, reason, highlighted } = caretStateForBoundary(i, pairByBoundary, pairOverrides, advisoryHints, highlightedGroup);
-                        const baseCls =
-                          state === "muted"    ? "text-slate-300"
-                        : state === "ok"       ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                        : state === "advisory" ? "bg-amber-100 text-amber-800 border border-amber-300"
-                        :                        "bg-red-100 text-red-700 border border-red-300";
-                        
-                        const highlightCls = highlighted ? "ring-2 ring-blue-400 ring-opacity-50 shadow-lg" : "";
-                        const cls = `${baseCls} ${highlightCls}`;
-
-                        const title =
-                          !eligible ? "Not counted for CWS (comma/quote/etc.)"
-                        : state === "ok"       ? "CWS: counted (click to cycle)"
-                        : state === "advisory" ? `Possible CWS issue (LT): ${reason}\nClick = mark incorrect (red), click again = correct (green), click again = clear`
-                        :                        (reason === "capitalization" ? "Needs capitalization" : "Blocked (spelling)");
-
-                        return (
-                          <button
-                            type="button"
-                            onClick={() => eligible && cycleCaret(i, pairOverrides, setPairOverrides)}
-                            className={`mx-1 px-1 rounded transition-all duration-200 ${cls}`}
-                            title={title}
-                          >
-                            ^
-                          </button>
-                        );
-                      })()
-                    )}
-                  </React.Fragment>
-                );
-              })}
+              {displayTokens.map((tok, i) => (
+                <span
+                  key={i}
+                  className="inline-flex items-center rounded px-2 py-1 text-sm border bg-slate-50 text-slate-700 border-slate-200"
+                >
+                  {tok.raw}
+                </span>
+              ))}
             </div>
           </div>
 
@@ -1440,24 +583,7 @@ function WritingScorer() {
             {/* Infractions & Suggestions list — always visible now */}
             <div>
               <div className="mb-2 text-sm font-medium">Infractions &amp; Suggestions</div>
-              <InfractionList 
-                items={infractions} 
-                vtByBoundary={vtByBoundary}
-                cycleGroup={cycleGroup}
-              />
-              <TerminalSuggestions 
-                groups={terminalGroups}
-                onGroupClick={(group) => {
-                  bulkToggleCarets(
-                    [group.groupLeftCaret, group.primaryCaret, group.groupRightCaret],
-                    "cycle",
-                    pairOverrides,
-                    setPairOverrides
-                  );
-                }}
-                onGroupHover={(group) => setHighlightedGroup(group)}
-                onGroupLeave={() => setHighlightedGroup(null)}
-              />
+              <InfractionList items={infractions} />
             </div>
           </div>
         </div>
