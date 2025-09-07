@@ -86,8 +86,7 @@ export function createVirtualTerminals(
  */
 // NEW: robust group builder that only looks at the rendered stream
 export function createVirtualTerminalsFromDisplay(displayTokens: Token[]): VirtualTerminal[] {
-  type VT = { insertAfterIdx:number; dotTokenIndex:number; leftBoundaryBIndex:number; rightBoundaryBIndex:number; };
-  const out: VT[] = [];
+  const out: VirtualTerminal[] = [];
   for (let i = 0; i < displayTokens.length; i++) {
     const t: any = displayTokens[i];
     if (!t?.virtual || t.type !== "PUNCT" || !/[.?!]/.test(t.raw)) continue;
@@ -99,6 +98,7 @@ export function createVirtualTerminalsFromDisplay(displayTokens: Token[]): Virtu
     if (leftOriginalIdx < 0) continue;
     out.push({
       insertAfterIdx: leftOriginalIdx,
+      reason: "LT", // Default to LT since this is used when LT is active
       dotTokenIndex: i,
       leftBoundaryBIndex: leftOriginalIdx,
       rightBoundaryBIndex: leftOriginalIdx + 1,
@@ -129,7 +129,7 @@ export function detectMissingTerminalInsertionsSmart(text: string, tokens: Token
     const hasPunct = /[.?!;:,]$/.test(leftRaw);
     if (hasPunct) continue;
 
-    out.push({ beforeBIndex: i, char: ".", reason: "HeuristicCapitalBreak", message: "Possible missing sentence-ending punctuation before a capitalized word." });
+    out.push({ beforeBIndex: i, char: ".", reason: "Heuristic", message: "Possible missing sentence-ending punctuation before a capitalized word." });
   }
   return out;
 }
