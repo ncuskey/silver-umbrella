@@ -257,17 +257,21 @@ interface CwsHint {
 ### CWS-LanguageTool Integration (`src/lib/cws-lt.ts`)
 
 #### Intelligent Comma Filtering System
-- `isCommaOnlyForCWS()`: Context-aware comma suggestion filtering for CWS boundaries
-- **List Context Detection**: Keeps Oxford commas and mid-list commas using `isLikelyListComma()`
+- `isCommaOnlyForCWS()`: Smart CWS comma policy with Oxford/serial comma preservation
+- **Oxford Comma Detection**: Preserves Oxford/serial commas in patterns like "apples, oranges, and bananas"
 - **Clause Filtering**: Removes clause-structuring commas (e.g., "…, and I") from CWS suggestions
-- **Smart Detection**: Scans up to 7 tokens ahead and 5 tokens back to determine list context
+- **Direct Token Analysis**: Uses efficient token analysis instead of complex scanning
 - **Replacement Analysis**: Checks both rule IDs and actual replacement values for comma detection
 
-#### Enhanced Boundary Detection
+#### Smart LanguageTool Boundary Detection
 - `suggestsTerminal()`: Detects terminal punctuation suggestions in LanguageTool replacements
-- `ltBoundaryInsertions()`: Comprehensive boundary detection combining multiple detection methods
-- **Replacement-Based Detection**: Catches cases like "warm I" → "warm. I" through replacement analysis
-- **Message Pattern Matching**: Enhanced regex patterns for boundary-related suggestions
+- `ltBoundaryInsertions()`: Multi-signal boundary detection with three detection approaches:
+  - **Replacement Signals**: Detects when LT suggests adding terminal punctuation (`.`, `!`, `?`)
+  - **Message Signals**: Analyzes LT messages for explicit boundary mentions using regex patterns
+  - **Structural Signals**: Detects patterns like "forest The" with capitalized words following non-terminal words
+- `tokenIndexAt()`: Helper function for precise character position to token mapping
+- **Coordinating Conjunction Filtering**: Prevents false positives with conjunctions like "and", "or", "but", "so", "then", "yet"
+- **Debug Logging**: Conditional debug output for boundary detection troubleshooting
 - **Category-Aware Filtering**: Respects punctuation/grammar categories while applying comma filtering
 
 #### CWS Advisory Hints System
@@ -277,6 +281,13 @@ interface CwsHint {
 - **Comma-Filtered Processing**: Uses refined comma filtering to improve hint quality
 - **Advisory Hints**: Grammar suggestions shown as yellow carets and advisory infractions
 - **Override Awareness**: Advisory hints disappear when users explicitly override boundary states
+
+#### Integration & Wiring Logic (`src/app/page.tsx`)
+- `dedupe()`: Efficient deduplication function for removing duplicate boundary insertions
+- **LT-First Priority**: LanguageTool boundary detection runs first, with paragraph-end detection as fallback
+- **Smart Filtering**: Uses `isCommaOnlyForCWS()` to filter comma-only issues before boundary detection
+- **Comprehensive Logging**: Console output shows counts for LT insertions, paragraph-end insertions, and final deduplicated count
+- **Efficient Memoization**: All computations properly memoized to avoid unnecessary recalculations
 
 #### Terminal Group System
 - `buildTerminalGroups()`: Groups LT punctuation/grammar issues with three related carets

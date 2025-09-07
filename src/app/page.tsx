@@ -312,6 +312,12 @@ function cycleCaret(bIndex: number, pairOverrides: PairOverrides, setPairOverrid
   });
 }
 
+function dedupe(xs:{beforeBIndex:number;char:string;reason:string}[]) {
+  const seen = new Set<number>(), out: typeof xs = [];
+  for (const x of xs) if (!seen.has(x.beforeBIndex)) { seen.add(x.beforeBIndex); out.push(x); }
+  return out;
+}
+
 // Bulk toggle functionality for terminal groups
 function cycleState(s: "yellow" | "red" | "green") {
   return s === "yellow" ? "red" : s === "red" ? "green" : "yellow";
@@ -753,14 +759,9 @@ function WritingScorer() {
   const fromEoP = useMemo(() => detectParagraphEndInsertions(text, tokens), [text, tokens]);
 
   const terminalInsertions = useMemo(() => {
-    const seen = new Set<number>(), out: any[] = [];
-    for (const x of [...fromLT, ...fromEoP]) if (!seen.has(x.beforeBIndex)) { seen.add(x.beforeBIndex); out.push(x); }
-    console.log("[VT] counts", {
-      insertions: out.length,
-      lt: fromLT.length,
-      eop: fromEoP.length
-    });
-    return out;
+    const chosen = dedupe([...fromLT, ...fromEoP]);
+    console.log("[VT] counts", { lt: fromLT.length, eop: fromEoP.length, insertions: chosen.length });
+    return chosen;
   }, [fromLT, fromEoP]);
 
   // 2) insert virtual terminals for display + scoring

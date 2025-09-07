@@ -225,32 +225,22 @@ export function detectMissingTerminalInsertions(text: string, tokens: Token[]): 
 }
 
 export function detectParagraphEndInsertions(text: string, tokens: any[]) {
-  const out: { beforeBIndex: number; char: "."; reason: string }[] = [];
-  const re = /\r?\n\s*\r?\n|$/g; 
-  let m: RegExpExecArray | null;
-  let lastIndex = -1;
-  
+  const out: { beforeBIndex:number; char:"."; reason:string }[] = [];
+  const re = /\r?\n\s*\r?\n|$/g; let m: RegExpExecArray|null;
   while ((m = re.exec(text))) {
-    // Prevent infinite loop if regex matches same position
-    if (m.index === lastIndex) {
-      re.lastIndex++;
-      continue;
-    }
-    lastIndex = m.index;
-    
     const endPos = m.index;
-    let lastIdx = -1, hasTerminal = false;
-    for (let i = tokens.length - 1; i >= 0; i--) {
-      const t = tokens[i];
+    let lastIdx = -1, hasTerm = false;
+    for (let i=tokens.length-1;i>=0;i--) {
+      const t=tokens[i];
       if ((t.end ?? 0) <= endPos && t.type === "WORD") { lastIdx = i; break; }
     }
     if (lastIdx < 0) continue;
-    for (let j = lastIdx + 1; j < tokens.length; j++) {
-      const t = tokens[j];
+    for (let j=lastIdx+1;j<tokens.length;j++) {
+      const t=tokens[j];
       if ((t.start ?? 0) >= endPos) break;
-      if (t.type === "PUNCT" && /[.!?…]/.test(t.raw)) { hasTerminal = true; break; }
+      if (t.type === "PUNCT" && /[.!?…]/.test(t.raw)) { hasTerm = true; break; }
     }
-    if (!hasTerminal) out.push({ beforeBIndex: lastIdx, char: ".", reason: "ParagraphEnd" });
+    if (!hasTerm) out.push({ beforeBIndex: lastIdx, char: ".", reason: "ParagraphEnd" });
   }
   return out;
 }

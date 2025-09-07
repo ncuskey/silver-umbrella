@@ -10,6 +10,16 @@ export function caretAfterMatch(m: any, tokens: any[]) {
   return next ? next.idx - 1 : tokens.length - 1; // caret between idx and idx+1
 }
 
+function tokenIndexAt(charPos: number, tokens: any[]) {
+  // index of token that covers charPos, or nearest token to the left
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if ((t.start ?? 0) <= charPos && charPos < (t.end ?? 0)) return i;
+    if ((t.start ?? 0) > charPos) return Math.max(0, i - 1);
+  }
+  return tokens.length - 1;
+}
+
 function isLikelyListComma(tokens: any[], caretIdx: number) {
   // caret between tokens[caretIdx] and tokens[caretIdx+1]
   const L = tokens[caretIdx], R = tokens[caretIdx + 1];
@@ -44,19 +54,23 @@ function isLikelyListComma(tokens: any[], caretIdx: number) {
 }
 
 export function isCommaOnlyForCWS(m: any, tokens: any[]) {
-  const id = (m.rule?.id || "").toUpperCase();
+  const id  = (m.rule?.id || "").toUpperCase();
   const msg = m.message || "";
   const reps = Array.isArray(m.replacements) ? m.replacements : [];
-  const commaOnly = reps.length > 0 && reps.every((r: any) => (r?.value || "").trim() === ",");
+  const commaOnly = reps.length > 0 && reps.every(r => (r?.value || "").trim() === ",");
   const mentionsComma = /(^|[^a-z])comma([^a-z]|$)/i.test(msg) || id.includes("COMMA");
 
-  if (!(commaOnly || mentionsComma)) return false; // not purely a comma change → keep
-
-  // Allow comma if it's part of a list sequence
+  if (!(commaOnly || mentionsComma)) return false;
+  // allow list/serial commas
   const caretIdx = caretAfterMatch(m, tokens);
-  if (isLikelyListComma(tokens, caretIdx)) return false; // keep for CWS
+  const L = tokens[caretIdx], R = tokens[caretIdx + 1];
+  const isWordWord = L?.type === "WORD" && R?.type === "WORD";
+  const next = tokens[caretIdx + 1], next2 = tokens[caretIdx + 2];
+  const oxford = isWordWord && next?.type === "WORD" &&
+                 /^(and|or)$/i.test(next.raw) && next2?.type === "WORD";
+  if (oxford) return false; // keep for CWS
 
-  // Otherwise, it's clause-structuring (e.g., "…, and I") → ignore for CWS
+  // everything else = clause structuring (ignore)
   return true;
 }
 
@@ -64,6 +78,8 @@ function suggestsTerminal(m: any) {
   const reps = Array.isArray(m.replacements) ? m.replacements : [];
   return reps.some((r: any) => /^[.?!]$/.test((r?.value || "").trim()));
 }
+
+const STOP_LEFT = new Set(["and", "or", "but", "so", "then", "yet"]);
 
 const isWord = (t: Token) => t.type === "WORD";
 const isEssentialPunct = (t: Token) => t.type === "PUNCT" && ESSENTIAL_PUNCT.has(t.raw);
@@ -326,25 +342,66 @@ export function buildTerminalGroups(
   return groups;
 }
 
-// src/lib/cws-lt.ts (or near other LT helpers)
+// ---- revised detector ----
 export function ltBoundaryInsertions(tokens: any[], issues: any[]) {
   const out: { beforeBIndex: number; char: "."; reason: string }[] = [];
-  
-  // keep everything except comma-only
-  const ltIssuesForCWS = issues.filter((m) => !isCommaOnlyForCWS(m, tokens));
-  
-  for (const m of ltIssuesForCWS || []) {
-    const cat = (m.rule?.category?.id || "").toUpperCase();
-    const goodCat = cat === "PUNCTUATION" || cat === "GRAMMAR";
-    const msg = m.message || "";
-    const looksLikeBoundary =
-      suggestsTerminal(m) ||
-      (goodCat && (/(missing|add|insert)\s+(?:[.?!]|punctuation).*?(sentence|paragraph)/i.test(msg) ||
-                   /make this a new sentence/i.test(msg)));
 
-    if (!looksLikeBoundary) continue;
-    const left = caretAfterMatch(m, tokens);
-    if (left >= 0) out.push({ beforeBIndex: left, char: ".", reason: "LTBoundary" });
+  for (const m of issues || []) {
+    const id   = (m.rule?.id || "").toUpperCase();
+    const cat  = (m.rule?.category?.id || "").toUpperCase();
+    const msg  = m.message || "";
+    const goodCat = cat === "PUNCTUATION" || cat === "GRAMMAR";
+
+    // 1) clear textual/replacement signals
+    const repBoundary = suggestsTerminal(m);
+    const msgBoundary =
+      /(missing|add|insert)\s+(?:[.?!]|punctuation).*?(sentence|paragraph)/i.test(msg) ||
+      /make this a new sentence/i.test(msg) ||
+      id === "PUNCTUATION_PARAGRAPH_END";
+
+    // 2) structural signal tied to the *highlighted* span:
+    //    when LT highlights the left token ("forest") we still want the caret between L and R
+    const rightEdge = m.offset + m.length - 1;
+    const li = tokenIndexAt(rightEdge, tokens);
+    const ri = li + 1;
+
+    const L = tokens[li], R = tokens[ri];
+    const near      = !!(L && R) && (R.start - L.end) <= 2; // space or none
+    const rightCap  = !!R && R.type === "WORD" && /^[A-Z]/.test(String(R.raw));
+    const leftTerm  = !!L && /[.?!…]$/.test(String(L.raw));
+    const leftStop  = !!L && L.type === "WORD" && STOP_LEFT.has(String(L.raw).toLowerCase());
+    const structuralBoundary = goodCat && near && rightCap && !leftTerm && !leftStop;
+
+    // 3) accept if *any* of these hold
+    const keep = goodCat && (repBoundary || msgBoundary || structuralBoundary);
+    if (!keep) continue;
+
+    // caret to insert the dot
+    const caret =
+      repBoundary || msgBoundary
+        ? caretAfterMatch(m, tokens)  // usually highlights the whole span; caret after it is best
+        : li;                          // structural: between L (li) and R (li+1)
+
+    if (caret >= 0) {
+      out.push({
+        beforeBIndex: caret,
+        char: ".",
+        reason:
+          repBoundary ? "LTBoundary(rep)" :
+          msgBoundary ? "LTBoundary(msg)" :
+                        "LTBoundary(struct)"
+      });
+    }
+
+    // DEV TRACE (visible when debug is on)
+    if ((typeof window !== "undefined") && (window as any).__CBM_DEBUG__) {
+      // keep short to avoid noise
+      console.log("[LT→boundary]", {
+        id, cat, msg: msg.slice(0, 60),
+        L: L?.raw, R: R?.raw, caret,
+        repBoundary, msgBoundary, structuralBoundary
+      });
+    }
   }
   return out;
 }

@@ -21,6 +21,9 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 - **Spelling Suggestions**: Tooltip suggestions for misspelled words via LanguageTool
 - **LanguageTool Grammar**: Automatic grammar checking with debounced text analysis
 - **Request Cancellation**: AbortSignal support for grammar checking requests
+- **Smart LT Boundary Detection**: Multi-signal boundary detection using replacement signals, message analysis, and structural patterns
+- **CWS Comma Policy**: Intelligent filtering that preserves Oxford/serial commas while filtering clause-structuring commas
+- **Paragraph-End Fallback**: Robust paragraph-end punctuation detection as fallback when LT misses boundaries
 - **Infraction Flagging**: Automated detection of definite vs. possible issues
 - **Interactive Overrides**: Click words to toggle WSC scoring, click carets to cycle CWS states
 - **CWS Engine**: Strictly mechanical, CBM-aligned engine with visual caret indicators and boundary validation
@@ -353,15 +356,17 @@ The tool is designed for easy extension:
 
 ## Recent Updates
 
-### Latest Improvements (v3.8) - LT-First Insertion Strategy & Smarter Heuristics
-- **LT-First Insertion Strategy**: LanguageTool now provides authoritative terminal punctuation suggestions with heuristics as intelligent fallback
-- **Smarter Heuristic Filtering**: Enhanced `detectMissingTerminalInsertionsSmart` function with improved false positive reduction
-- **STOP_LEFT Filtering**: Added filter to avoid "and I / Then I" false positives by skipping common conjunctions ("and", "or", "but", "so", "then", "yet")
-- **Capitalized "I" Protection**: Special handling to prevent insertions before "I" to avoid false positives like "and I" or "Then I"
-- **Enhanced Logging**: Comprehensive counts logging showing LT vs heuristic split for debugging and transparency
-- **Display Stream Groups**: Groups built from rendered display stream ensure stability across re-renders
-- **Consistent Dot Rendering**: Virtual terminal dots render consistently whether using LT or heuristic detection
-- **Improved Boundary Detection**: Better handling of "forest The" and "trees Then" patterns while avoiding false positives
+### Latest Improvements (v3.8) - Smart LanguageTool Boundary Detection
+- **Multi-Signal Boundary Detection**: Enhanced `ltBoundaryInsertions()` with three detection signals:
+  - **Replacement Signals**: Detects when LT suggests adding terminal punctuation (`.`, `!`, `?`)
+  - **Message Signals**: Analyzes LT messages for explicit boundary mentions
+  - **Structural Signals**: Detects patterns like "forest The" with capitalized words following non-terminal words
+- **Smart CWS Comma Policy**: Updated `isCommaOnlyForCWS()` to preserve Oxford/serial commas while filtering clause-structuring commas
+- **Enhanced Token Analysis**: Added `tokenIndexAt()` helper for precise character position to token mapping
+- **Coordinating Conjunction Filtering**: Prevents false positives with conjunctions like "and", "or", "but", "so", "then", "yet"
+- **Debug Logging**: Added conditional debug output for boundary detection troubleshooting
+- **Efficient Deduplication**: Clean `dedupe()` function for removing duplicate boundary insertions
+- **LT-First Priority**: LanguageTool boundary detection runs first, with paragraph-end detection as fallback
 
 ### Previous Improvements (v3.7) - LT Authority & Debug Visibility
 - **LT Authority Priority**: LanguageTool now provides authoritative terminal punctuation suggestions, with heuristics as fallback only
