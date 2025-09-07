@@ -4,13 +4,13 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "NODE_OPTIONS='--max-old-space-size=4096' next build",
     "start": "next start",
     "lint": "next lint",
     "test": "vitest --ui",
     "test:run": "vitest run",
     "size:report": "du -sh node_modules/* | sort -h | tail -n 30",
-    "analyze": "ANALYZE=1 next build"
+    "analyze": "ANALYZE=1 NODE_OPTIONS='--max-old-space-size=4096' next build"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.0",
