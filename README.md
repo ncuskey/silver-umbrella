@@ -190,6 +190,9 @@ The CWS (Correct Writing Sequences) engine implements strictly mechanical, CBM-a
 - **Clear Visual Feedback**: Dashed amber borders, hover effects, and tooltips clearly indicate proposed insertions
 - **Accessibility**: Keyboard navigation support with Enter/Space key activation for virtual terminal dots
 - **Comprehensive Boundary Tracking**: Each virtual terminal tracks its dot token index and associated CWS boundary indices
+- **Fixed Boundary Mapping**: Corrected virtual terminal boundary index calculation to ensure proper group-to-caret mapping
+- **Clickable Infraction Items**: TERMINAL (possible) items in the infractions panel are now clickable and toggle the entire virtual terminal group
+- **Dual Interaction Methods**: Users can toggle virtual terminal groups either by clicking the virtual dots in the text stream or by clicking TERMINAL items in the infractions panel
 
 ### Terminal Group System
 - **LT-Driven Grouping**: LanguageTool punctuation/grammar issues automatically grouped with three related carets
@@ -293,7 +296,16 @@ The tool is designed for easy extension:
 
 ## Recent Updates
 
-### Latest Improvements (v3.3) - Terminal Group System & Bulk Toggle Operations
+### Latest Improvements (v3.4) - Virtual Terminal Boundary Mapping Fixes
+- **Fixed Virtual Terminal Mapping**: Corrected `createVirtualTerminals` function to properly map virtual terminal groups to display token indices
+- **Boundary Index Alignment**: Fixed boundary index calculation to ensure virtual terminal groups correctly correspond to their caret positions
+- **Clickable Infraction Items**: TERMINAL (possible) items in the infractions panel are now clickable and toggle the entire virtual terminal group
+- **Dual Interaction Methods**: Users can now toggle virtual terminal groups from both the text stream (virtual dots) and the infractions panel (TERMINAL items)
+- **Improved User Experience**: Consistent interaction model across all virtual terminal interfaces
+- **Boundary Lookup Optimization**: Added `vtByBoundary` memo for efficient boundary-to-group mapping
+- **Enhanced Accessibility**: TERMINAL items show hover effects and tooltips when clickable
+
+### Previous Improvements (v3.3) - Terminal Group System & Bulk Toggle Operations
 - **Terminal Group System**: Revolutionary feature that groups LT punctuation/grammar issues with three related carets
 - **Bulk Toggle Functionality**: One-click cycling of multiple carets simultaneously for efficient teacher workflow
 - **Visual Group Highlighting**: Hover effects show which carets belong to each terminal group with blue ring highlighting

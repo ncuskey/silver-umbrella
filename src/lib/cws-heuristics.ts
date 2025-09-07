@@ -20,66 +20,43 @@ export type VirtualTerminal = {
   rightBoundaryBIndex: number;             // caret between ["." ^ rightWord]
 };
 
-/**
- * Convert VirtualTerminalInsertion to VirtualTerminal with boundary indices
- * This should be called after virtual terminals are inserted into the token stream
- */
 export function createVirtualTerminals(
   insertions: VirtualTerminalInsertion[],
   originalTokens: Token[],
   displayTokens: Token[]
 ): VirtualTerminal[] {
-  const result: VirtualTerminal[] = [];
-  
-  // Sort insertions by beforeBIndex to process them in order
-  const sorted = [...insertions].sort((a, b) => a.beforeBIndex - b.beforeBIndex);
-  
-  for (let i = 0; i < sorted.length; i++) {
-    const insertion = sorted[i];
-    const originalIdx = insertion.beforeBIndex;
-    
-    // Find the dot token index in the display tokens
-    // The dot should be inserted after the original token at originalIdx
-    let dotTokenIndex = -1;
-    let displayIdx = 0;
-    let originalCount = 0;
-    
-    for (let j = 0; j < displayTokens.length; j++) {
-      if (displayTokens[j].idx === -1) {
-        // This is a virtual token
-        if (originalCount === originalIdx + 1) {
-          dotTokenIndex = j;
-          break;
-        }
-      } else {
-        // This is an original token
-        if (originalCount === originalIdx) {
-          dotTokenIndex = j + 1; // Dot comes after this token
-          break;
-        }
-        originalCount++;
-      }
+  // Fast lookup to grab reason/message if we have a matching beforeBIndex
+  const insByBefore = new Map(insertions.map(i => [i.beforeBIndex, i]));
+
+  const out: VirtualTerminal[] = [];
+
+  for (let i = 0; i < displayTokens.length; i++) {
+    const t = displayTokens[i] as any;
+
+    // we only care about the synthetic sentence terminals we inserted
+    if (!t?.virtual) continue;
+    if (t.type !== "PUNCT") continue;
+    if (!(/[.?!]/.test(t.raw))) continue;
+
+    // find the nearest ORIGINAL token to the left in the display stream
+    // (anything with idx >= 0 came from the original text)
+    let insertAfterIdx = -1;
+    for (let j = i - 1; j >= 0; j--) {
+      const dj = displayTokens[j] as any;
+      if (Number.isInteger(dj?.idx) && dj.idx >= 0) { insertAfterIdx = dj.idx; break; }
     }
-    
-    if (dotTokenIndex === -1) continue; // Skip if we couldn't find the dot
-    
-    // Calculate boundary indices
-    // leftBoundaryBIndex: boundary between leftWord and dot
-    const leftBoundaryBIndex = originalIdx;
-    
-    // rightBoundaryBIndex: boundary between dot and rightWord  
-    const rightBoundaryBIndex = originalIdx + 1;
-    
-    result.push({
-      insertAfterIdx: originalIdx,
-      reason: insertion.reason,
-      dotTokenIndex,
-      leftBoundaryBIndex,
-      rightBoundaryBIndex,
+    if (insertAfterIdx < 0) continue; // nothing to anchor to (shouldn't happen often)
+
+    // build the group purely from display positions
+    out.push({
+      insertAfterIdx,        // original-token index (left word)
+      dotTokenIndex: i,      // <— index IN displayTokens (what you use in vtByDotIndex)
+      leftBoundaryBIndex: i - 1,  // caret between [leftWord ^ "."]
+      rightBoundaryBIndex: i      // caret between ["." ^ rightWord]
+      // reason stays on the insertion object; not needed for toggling
     });
   }
-  
-  return result;
+  return out;
 }
 
 
