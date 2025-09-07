@@ -181,7 +181,9 @@ The CWS (Correct Writing Sequences) engine implements strictly mechanical, CBM-a
 - **Grammar Mode Badge**: Always-visible indicator showing current grammar configuration (public/proxy/off)
 
 ### Virtual Terminal Insertion
+- **LT Boundary Integration**: LanguageTool boundary suggestions are converted to virtual terminal insertions for seamless CWS integration
 - **Smart Detection**: Automatically detects WORD [space] CapitalWord patterns that look like new sentences
+- **LT-First Priority**: LanguageTool boundary detection runs first, with heuristics as fallback
 - **Heuristic Filtering**: Uses contextual clues (newlines, 2+ spaces, sentence starters) to reduce false positives
 - **Title Case Avoidance**: Excludes TitleCase spans like "The Terrible Day" to prevent over-flagging
 - **Visual Insertion**: Inserts dotted "." tokens between words with distinct amber styling
@@ -199,6 +201,8 @@ The CWS (Correct Writing Sequences) engine implements strictly mechanical, CBM-a
 - **Stable Group System**: Groups are now built from rendered display tokens, making them stable across re-renders
 - **LT Authority Integration**: When LanguageTool is active, it provides authoritative terminal punctuation suggestions
 - **Consistent Dot Rendering**: Dot chips render consistently whether using heuristics or LanguageTool analysis
+- **Smart Deduplication**: When LT and heuristics suggest the same boundary, LT takes precedence
+- **Paragraph-End Detection**: Robust fallback detection for missing terminal punctuation at paragraph breaks
 
 ### Terminal Group System
 - **LT-Driven Grouping**: LanguageTool punctuation/grammar issues automatically grouped with three related carets
@@ -356,7 +360,19 @@ The tool is designed for easy extension:
 
 ## Recent Updates
 
-### Latest Improvements (v3.9) - Smarter LT Boundary Extraction
+### Latest Improvements (v4.0) - LT Boundary Integration & Virtual Terminal System
+- **LT Boundary Integration**: Complete integration of LanguageTool boundary suggestions with CWS virtual terminal system
+- **Virtual Terminal Insertions**: LT boundary suggestions are now converted to `VirtualTerminalInsertion` format for seamless integration
+- **Smart Comma Filtering**: Enhanced comma filtering that preserves list commas while filtering clause-structuring commas for CWS
+- **Paragraph-End Detection**: Robust paragraph-end punctuation detection as fallback when LT misses boundaries
+- **LT-First Priority**: LanguageTool boundary detection runs first, with paragraph-end detection as fallback
+- **Debug Table Integration**: Optional LT debug table showing rule IDs, categories, messages, and replacements when debug mode is enabled
+- **Enhanced Boundary Detection**: Multi-signal boundary detection using replacement signals, message analysis, and structural patterns
+- **Consistent Integration**: All LT boundary suggestions use the same `VirtualTerminalInsertion` format as heuristics
+- **Smart Deduplication**: When LT and heuristics suggest the same boundary, LT takes precedence
+- **Comprehensive Debug Logging**: Enhanced debug system with LT issue table and virtual terminal counts
+
+### Previous Improvements (v3.9) - Smarter LT Boundary Extraction
 - **Enhanced Multi-Signal Detection**: Completely rewritten `ltBoundaryInsertions()` with sophisticated boundary detection:
   - **Replacement Signals**: Detects when LT suggests adding terminal punctuation (`.`, `!`, `?`)
   - **Message Signals**: Analyzes LT messages for explicit boundary mentions using regex patterns

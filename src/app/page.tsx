@@ -757,18 +757,38 @@ function WritingScorer() {
     [ltIssues, tokens]
   );
 
-  const fromLT  = useMemo(() => ltBoundaryInsertions(tokens, ltFiltered), [tokens, ltFiltered]);
-  const fromEoP = useMemo(() => detectParagraphEndInsertions(text, tokens), [text, tokens]);
+  // Build filtered LT issues once
+  const filteredLt = useMemo(
+    () => filterLtIssues(text, ltIssues),
+    [text, ltIssues]
+  );
 
-  const terminalInsertions = useMemo(() => {
-    const seen = new Set<number>();
-    const out: Array<{ beforeBIndex: number; char: "." | "!" | "?"; reason: "LT" | "Heuristic"; message: string }> = [];
-    for (const x of [...fromLT, ...fromEoP]) {
-      if (!seen.has(x.beforeBIndex)) { seen.add(x.beforeBIndex); out.push(x); }
+  // LT → insertions
+  const ltInsertions = useMemo<VirtualTerminalInsertion[]>(() => {
+    const ins = ltBoundaryInsertions(text, tokens, filteredLt);
+    return ins;
+  }, [text, tokens, filteredLt]);
+
+  // Paragraph ends → insertions
+  const eopInsertions = useMemo<VirtualTerminalInsertion[]>(() => {
+    return detectParagraphEndInsertions(text, tokens);
+  }, [text, tokens]);
+
+  // Final: accept LT first, then add paragraph ends, then dedupe
+  const terminalInsertions = useMemo<VirtualTerminalInsertion[]>(() => {
+    const all = [...ltInsertions, ...eopInsertions];
+    const byBoundary = new Map<number, VirtualTerminalInsertion>();
+    // Prefer LT over Heuristic when colliding
+    for (const v of all) {
+      const prev = byBoundary.get(v.beforeBIndex);
+      if (!prev || (prev.reason !== "LT" && v.reason === "LT")) byBoundary.set(v.beforeBIndex, v);
     }
-    console.log("[VT] counts", { lt: fromLT.length, eop: fromEoP.length, insertions: out.length });
+    const out = [...byBoundary.values()];
+    if (typeof window !== "undefined" && (window as any).__CBM_DEBUG__) {
+      console.info("[VT] counts", { lt: ltInsertions.length, eop: eopInsertions.length, insertions: out.length });
+    }
     return out;
-  }, [fromLT, fromEoP]);
+  }, [ltInsertions, eopInsertions]);
 
   // 2) insert virtual terminals for display + scoring
   const displayTokens = useMemo(
@@ -880,12 +900,20 @@ function WritingScorer() {
   );
 
   const tww = useMemo(() => computeTWW(tokens), [tokens]);
-  
-  // Build filtered LT issues once
-  const filteredLt = useMemo(
-    () => filterLtIssues(text, ltIssues),
-    [text, ltIssues]
-  );
+
+  // Optional (super useful) LT debug table
+  if (typeof window !== "undefined" && (window as any).__CBM_DEBUG__) {
+    console.group("[LT] issues");
+    console.table(filteredLt.map(r => ({
+      id: r.ruleId,
+      category: r.categoryId,
+      msg: r.message,
+      offset: r.offset,
+      len: r.length,
+      reps: (r.replacements || []).join(" | "),
+    })));
+    console.groupEnd();
+  }
   
   // Compute advisory hints (memoized)
   const ltHintsMap = useMemo(() => buildLtCwsHints(text, tokens, ltIssues), [text, tokens, ltIssues]);
@@ -896,7 +924,7 @@ function WritingScorer() {
     // heuristics first
     virtualBoundaryHints.forEach((h, k) => m.set(k, h));
     // LT may override the message for the same boundary
-    ltHintsMap.forEach((h, k) => m.set(k, h));
+    ltHintsMap?.forEach((h, k) => m.set(k, h));
     return m;
   }, [virtualBoundaryHints, ltHintsMap]);
 
