@@ -435,7 +435,7 @@ function InfractionList({
 
         const RowTag = maybeGroup ? "button" : "div";
         const onClick = maybeGroup ? () => {
-          dlog("[VT] suggestion click", { boundary: f.at, group: vtByBoundary.get(f.at as number) });
+          dlog("[VT] suggestion click", { boundary: f.at, group: vtByBoundary?.get(f.at as number) });
           cycleGroup?.(maybeGroup);
         } : undefined;
 
