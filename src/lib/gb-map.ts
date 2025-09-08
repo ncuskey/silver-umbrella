@@ -1,6 +1,7 @@
 import type { Token } from "./types";
 import type { TokenModel } from "@/components/Token";
 import type { TerminalGroupModel } from "@/components/TerminalGroup";
+import { buildTerminalGroups as buildTerminalGroupsNew } from "./buildTerminalGroups";
 
 export type TokState = 'ok' | 'maybe' | 'bad';
 
@@ -54,10 +55,19 @@ export function bootstrapStatesFromGB(
   // 3) Build terminal groups using the new deduplication logic
   const gbInserts = edits
     .filter(e => e.err_cat === 'PUNC' && e.edit_type === 'INSERT' && e.replace === '.')
-    .map(e => ({ boundaryIdx: mapOffsetToBoundaryIndex(e.start, tokens) }));
+    .map(e => ({ anchorIndex: mapOffsetToBoundaryIndex(e.start, tokens) }));
 
   const paragraphs = getParagraphs(text, tokens);
-  const terminalGroups = buildTerminalGroups(tokens, gbInserts, paragraphs);
+  const terminalGroupsRaw = buildTerminalGroupsNew(tokens, gbInserts, paragraphs);
+  
+  // Convert to TerminalGroupModel format
+  const terminalGroups: TerminalGroupModel[] = terminalGroupsRaw.map(g => ({
+    id: g.id,
+    anchorIndex: g.anchorIndex,
+    status: g.status,
+    selected: g.selected,
+    source: g.source
+  }));
 
   return { tokenModels, terminalGroups };
 }
@@ -130,48 +140,3 @@ function getParagraphs(text: string, tokens: Token[]): Array<{ start: number; en
   
   return result;
 }
-
-function buildTerminalGroups(
-  tokens: Token[],
-  gbInserts: Array<{ boundaryIdx: number }>,
-  paragraphs: Array<{ start: number; end: number }>,
-): TerminalGroupModel[] {
-  const groups: TerminalGroupModel[] = [];
-  const byAnchor = new Map<number, TerminalGroupModel>();
-
-  const add = (anchorIndex: number, status: TokState, source: 'GB'|'PARA') => {
-    if (byAnchor.has(anchorIndex)) return;                  // ✅ de-dupe
-    const g: TerminalGroupModel = { 
-      id: `tg-${anchorIndex}`, 
-      anchorIndex, 
-      status, 
-      selected: false, 
-      source 
-    };
-    byAnchor.set(anchorIndex, g);
-    groups.push(g);
-  };
-
-  // A) GB '.' inserts → maybe
-  for (const e of gbInserts) {
-    add(e.boundaryIdx, 'maybe', 'GB');
-  }
-
-  // B) Paragraph end terminals → maybe (except last paragraph and empty paras)
-  paragraphs.forEach((p, i) => {
-    const isLastPara = i === paragraphs.length - 1;
-    // find last *word* token in the paragraph
-    let lastWordIdx = -1;
-    for (let k = p.end; k >= p.start; k--) {
-      if (tokens[k]?.type === 'WORD') { lastWordIdx = k; break; }
-    }
-    const isEmpty = lastWordIdx === -1;
-    if (isEmpty || isLastPara) return;                      // ✅ skip empty & final block
-
-    const anchor = lastWordIdx + 1;
-    add(anchor, 'maybe', 'PARA');                           // ✅ add only if not already added by GB
-  });
-
-  return groups;
-}
-

@@ -15,10 +15,12 @@ import { gbToVtInsertions, withParagraphFallbackDots, newlineBoundarySet } from 
 import { tokenize } from "@/lib/tokenize";
 import { cn, DEBUG, dgroup, dtable, dlog } from "@/lib/utils";
 import { toCSV, download } from "@/lib/export";
-import { TerminalGroup, type TerminalGroupModel } from "@/components/TerminalGroup";
+import TerminalGroup, { type TerminalGroupModel } from "@/components/TerminalGroup";
 import { Token, type TokenModel } from "@/components/Token";
 import { bootstrapStatesFromGB, type TokState } from "@/lib/gb-map";
 import { useTokensAndGroups } from "@/lib/useTokensAndGroups";
+import { computeKpis } from "@/lib/computeKpis";
+import { toggleToken, toggleTerminalGroup } from "@/state/ui";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 
@@ -356,21 +358,6 @@ function WritingScorer() {
   const { tokens: tokenModels, groups: terminalGroups, setTokens: setTokenModels, setGroups: setTerminalGroups } = useTokensAndGroups();
   const [selected, setSelected] = useState<{type:"token"|"group"; id:number|string} | null>(null);
 
-  // Single UI state object
-  const [ui, setUi] = useState({
-    tokens: tokenModels,
-    terminalGroups: terminalGroups
-  });
-
-  // Update UI state when tokenModels or terminalGroups change
-  useEffect(() => {
-    setUi(prev => ({
-      ...prev,
-      tokens: tokenModels,
-      terminalGroups: terminalGroups
-    }));
-  }, [tokenModels, terminalGroups]);
-
   // click routing from a cell
   function onCellActivate(c: UICell) {
     if (c.kind === "token") {
@@ -390,19 +377,14 @@ function WritingScorer() {
 
   // Click handlers for tokens and groups
   const onTokenClick = (idx: number) => {
-    setUi(prev => ({
-      ...prev,
-      tokens: prev.tokens.map((t, i) => i === idx ? { ...t, state: cycle(t.state), selected: !t.selected } : t)
-    }));
+    const token = ui.tokens[idx];
+    if (token) {
+      toggleToken(token.id, setUi);
+    }
   };
 
   const onTerminalGroupToggle = (id: string) => {
-    setUi(prev => ({
-      ...prev,
-      terminalGroups: prev.terminalGroups.map(g =>
-        g.id === id ? { ...g, status: cycle(g.status), selected: !g.selected } : g
-      ),
-    }));
+    toggleTerminalGroup(id, setUi);
   };
 
   // Render helpers
@@ -500,6 +482,25 @@ function WritingScorer() {
   }
   const durationSec = useMemo(() => parseMMSS(timeMMSS), [timeMMSS]);
   const durationMin = durationSec ? durationSec / 60 : 0;
+
+  // Single UI state object with KPIs
+  const [ui, setUi] = useState({
+    tokens: tokenModels,
+    terminalGroups: terminalGroups,
+    minutes: durationMin,
+    kpis: computeKpis(tokenModels, terminalGroups, durationMin)
+  });
+
+  // Update UI state when tokenModels or terminalGroups change
+  useEffect(() => {
+    setUi(prev => ({
+      ...prev,
+      tokens: tokenModels,
+      terminalGroups: terminalGroups,
+      minutes: durationMin,
+      kpis: computeKpis(tokenModels, terminalGroups, durationMin)
+    }));
+  }, [tokenModels, terminalGroups, durationMin]);
 
 // Complex functions removed - using LT-only approach
 
@@ -643,49 +644,8 @@ function WritingScorer() {
     console.info("[UI] carets", caretRow);
   }
 
-  // Derived KPIs (no mutation; useMemo keyed on UI)
-  const kpis = React.useMemo(() => {
-    const words = ui.tokens.filter(t => t.kind === 'word');
-    const spelledCorrect = words.filter(t => t.state !== 'bad').length;
-
-    // CWS: boundaries between tokens that are part of a correct adjacent pair (word + terminal punctuation)
-    // We treat terminal groups as the punctuation.
-    const terminals = new Set(ui.terminalGroups.map(g => g.anchorIndex)); // anchorIndex: where group attaches
-    let cws = 0, eligible = 0;
-
-    for (let i = 0; i < ui.tokens.length - 1; i++) {
-      const a = ui.tokens[i], b = ui.tokens[i+1];
-      // "eligible boundary" definition you've been using:
-      const isEligible = (a.kind === 'word' && (b.kind === 'word' || terminals.has(i+1)));
-      if (isEligible) {
-        eligible++;
-        const aOk = a.state === 'ok';
-        const bOk = terminals.has(i+1)
-          ? ui.terminalGroups.find(g => g.anchorIndex === i+1)?.status === 'ok'
-          : (b.kind === 'word' ? b.state === 'ok' : false);
-        if (aOk && bOk) cws++;
-      }
-    }
-
-    const percentCws = eligible ? Math.round((cws / eligible) * 100) : 0;
-
-    // TWW calculation
-    const tww = ui.tokens.filter(t => t.kind === 'word').length;
-
-    // CWS per minute calculation
-    const [mm, ss] = timeMMSS.split(":").map(n => parseInt(n, 10) || 0);
-    const minutes = Math.max(0.5, mm + ss/60);
-    const cwsPerMinute = cws / minutes;
-
-    return { 
-      tww, 
-      spelledCorrect, 
-      cws, 
-      eligible, 
-      percentCws, 
-      cwsPerMinute 
-    };
-  }, [ui.tokens, ui.terminalGroups, timeMMSS]);
+  // Use computed KPIs from UI state
+  const kpis = ui.kpis;
 
   // Simplified CWS pairs (placeholder for now)
   const cwsPairs = useMemo(() => [], []);
@@ -898,7 +858,7 @@ function WritingScorer() {
               />
               <StatCard
                 title="Words Spelled Correctly"
-                value={kpis.spelledCorrect}
+                value={kpis.wsc}
                 sub="dictionary + overrides"
               />
               <StatCard
@@ -909,7 +869,7 @@ function WritingScorer() {
 
               <StatCard
                 title="% CWS"
-                value={<>{kpis.percentCws}<span className="text-2xl">%</span></>}
+                value={<>{kpis.pctCws}<span className="text-2xl">%</span></>}
                 sub={`${kpis.cws}/${kpis.eligible} eligible boundaries`}
               />
               <StatCard
@@ -919,7 +879,7 @@ function WritingScorer() {
               />
               <StatCard
                 title="CWS / min"
-                value={kpis.cwsPerMinute === null ? "—" : (Math.round(kpis.cwsPerMinute * 10) / 10).toFixed(1)}
+                value={kpis.cwsPerMin === null ? "—" : (Math.round(kpis.cwsPerMin * 10) / 10).toFixed(1)}
                 sub={durationSec ? `${timeMMSS} timed` : "enter time"}
               />
             </div>

@@ -23,6 +23,9 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 - **Visual Synchronization**: All members of terminal groups share colors, selection state, and visual feedback
 - **Paragraph-Aware Terminal Insertion**: Respects paragraph boundaries and suppresses terminals at the very end of text
 - **Reactive KPI Updates**: KPIs automatically recalculate when tokens or groups are clicked
+- **Deduplication Logic**: New `buildTerminalGroups` function eliminates duplicate "^ . ^ . ^" triples at paragraph breaks
+- **Immediate KPI Computation**: Click handlers trigger instant KPI recalculation with console logging for debugging
+- **Tailwind Color Safelist**: Comprehensive safelist ensures all dynamic color classes render properly
 - **GrammarBot API**: Professional spell checking and grammar analysis via GrammarBot's neural API
 - **GrammarBot Integration**: Professional spell checking and grammar checking via GrammarBot API
 - **Spell Engine Status**: Visual indicator showing GrammarBot spell checking mode

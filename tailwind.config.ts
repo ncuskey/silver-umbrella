@@ -9,14 +9,27 @@ const config: Config = {
 
   // ✅ Add this block
   safelist: [
-    // greens
+    // emerald colors (for "ok" status)
+    'bg-emerald-50','text-emerald-800','border-emerald-300','ring-emerald-300',
+    // amber colors (for "maybe" status)
+    'bg-amber-50','text-amber-800','border-amber-300','ring-amber-300',
+    // rose colors (for "bad" status)
+    'bg-rose-50','text-rose-800','border-rose-300','ring-rose-300',
+    // ring and selection styles
+    'ring-2','ring-offset-1','ring-offset-white',
+    // additional colors for other components
     'bg-green-50','bg-green-100','text-green-800','ring-green-300','ring-green-400',
-    // ambers
-    'bg-amber-50','bg-amber-100','text-amber-800','ring-amber-300','ring-amber-400',
-    // reds
+    'bg-amber-100','ring-amber-400',
     'bg-red-50','bg-red-100','text-red-800','ring-red-300','ring-red-400',
-    // neutral / selection helpers you use on tokens
-    'ring-1','ring-2','ring-offset-1','ring-offset-white','ring-offset-background',
+    // UI component colors
+    'bg-slate-100','bg-slate-200','text-slate-500','text-slate-600','border-slate-200',
+    'bg-blue-50','bg-blue-100','text-blue-700','text-blue-800','border-blue-200',
+    'bg-red-200','border-red-300','text-red-600','text-red-800','hover:bg-red-200',
+    'bg-emerald-200','border-emerald-300',
+    'bg-amber-200','border-amber-300','text-amber-700',
+    'hover:bg-blue-200',
+    // neutral / selection helpers
+    'ring-1','ring-offset-background',
     'border','border-dashed','border-transparent','border-amber-300','border-amber-400',
   ],
 
