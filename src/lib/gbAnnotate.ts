@@ -1,6 +1,18 @@
 import type { GbEdit } from "./gbClient";
 import type { Token, VirtualTerminalInsertion } from "./types";
 
+export function groupInsertionsByBoundary(
+  insertions: VirtualTerminalInsertion[]
+): Map<number, VirtualTerminalInsertion[]> {
+  const byB = new Map<number, VirtualTerminalInsertion[]>();
+  for (const ins of insertions ?? []) {
+    const b = ins.beforeBIndex ?? 0;           // boundary index already set in GB→VT
+    if (!byB.has(b)) byB.set(b, []);
+    byB.get(b)!.push(ins);
+  }
+  return byB;
+}
+
 /** Severity shown in the pill colors */
 export type UiState = "correct" | "incorrect" | "possible";
 

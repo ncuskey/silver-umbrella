@@ -201,6 +201,21 @@ The CWS (Correct Writing Sequences) engine implements strictly mechanical, CBM-a
 - **Interactive Tooltips**: Hover over tokens to see error categories and suggestions
 - **Debug Logging**: Console output for development debugging with `__CBM_DEBUG__` flag
 
+### GB Insertion Display System
+- **Insertion Pills**: Blue pills show suggested punctuation insertions from GrammarBot:
+  - **Light Blue Pills**: Display the exact punctuation GB suggests (`.`, `!`, `?`)
+  - **Rounded Design**: Distinctive pill styling to differentiate from token pills
+  - **Boundary Grouping**: Insertions grouped by boundary index for proper placement
+- **Synthetic Carets**: Additional carets after each insertion to close the group:
+  - **Visual Pattern**: Shows `^ . ^` pattern for each suggested insertion
+  - **Proper Spacing**: `caret-sibling` class provides optimal visual spacing
+  - **Group Closure**: Each insertion group is properly closed with a synthetic caret
+- **Interleaved Display**: Seamless integration with existing token and caret display:
+  - **Boundary-First**: Caret at boundary, then insertions, then synthetic caret, then token
+  - **End-of-Text Support**: Handles final insertions at end-of-text boundary
+  - **Responsive Layout**: Maintains flex-wrap behavior for different screen sizes
+- **Accessibility**: Proper ARIA labels for screen readers and keyboard navigation
+
 ### LanguageTool Integration (Legacy)
 - **API-based Spell Checking**: Uses LanguageTool's public API for professional spell checking
 - **Enhanced Spelling Detection**: Properly configured to detect typos (MORFOLOGIK_RULE_* patterns) alongside grammar issues
@@ -422,7 +437,18 @@ The tool is designed for easy extension:
 
 ## Recent Updates
 
-### Latest Improvements (v6.2) - GB Token Annotation & Visual Enhancement
+### Latest Improvements (v6.3) - GB Insertion Display System
+- **GB Insertion Pills**: New blue pill system displays suggested punctuation insertions from GrammarBot
+- **Synthetic Caret System**: Additional carets after each insertion create proper visual grouping (`^ . ^` pattern)
+- **Boundary Grouping**: `groupInsertionsByBoundary()` function organizes insertions by boundary index
+- **Interleaved Display**: Seamless integration with existing token and caret display system
+- **End-of-Text Support**: Proper handling of final insertions at end-of-text boundary
+- **Responsive Design**: Maintains flex-wrap behavior and accessibility features
+- **CSS Enhancement**: Added `.pill-insert` and `.caret-sibling` styles for optimal visual presentation
+- **Type Safety**: Full TypeScript support with proper type definitions for insertion cells
+- **Test Coverage**: Comprehensive test suite for boundary grouping functionality
+
+### Previous Improvements (v6.2) - GB Token Annotation & Visual Enhancement
 - **GB Token Annotation**: New visual token highlighting system with color-coded pills (green=correct, yellow=possible, red=incorrect)
 - **Caret Row Display**: Visual caret indicators above tokens showing GB-proposed terminal punctuation positions
 - **Capitalization Overlays**: Optional display of capitalization fixes without changing source text

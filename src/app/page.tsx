@@ -10,7 +10,7 @@ import { Info, AlertTriangle, ListChecks, Settings } from "lucide-react";
 import type { Token, VirtualTerminalInsertion } from "@/lib/types";
 import { checkWithGrammarBot } from "@/lib/gbClient";
 import { gbEditsToInsertions } from "@/lib/gbToVT";
-import { annotateFromGb, buildCaretRow, type CaretState, type DisplayToken as GbDisplayToken } from "@/lib/gbAnnotate";
+import { annotateFromGb, buildCaretRow, groupInsertionsByBoundary, type CaretState, type DisplayToken as GbDisplayToken } from "@/lib/gbAnnotate";
 import { tokenize } from "@/lib/tokenize";
 import { cn, DEBUG, dgroup, dtable, dlog } from "@/lib/utils";
 import { toCSV, download } from "@/lib/export";
@@ -285,18 +285,42 @@ function WritingScorer() {
 
   // Interleave caret cells between token cells for the grid
   type Cell =
-    | { kind: "caret"; caret: CaretState; i: number }
-    | { kind: "token"; token: GbDisplayToken; i: number };
+    | { kind: "caret"; caret: CaretState; i: number; synthetic?: boolean }
+    | { kind: "token"; text: string; ui: "correct"|"possible"|"incorrect"; i: number }
+    | { kind: "insert"; text: string; i: number }; // e.g., ".", "!", "?"
+
+  const insertionMap = useMemo(
+    () => groupInsertionsByBoundary(vtInsertions /* GB→VT array */),
+    [vtInsertions]
+  );
 
   const gridCells: Cell[] = useMemo(() => {
     const cells: Cell[] = [];
-    for (let i = 0; i < displayTokens.length; i++) {
-      cells.push({ kind: "caret", caret: caretRow[i], i });      // boundary before token i
-      cells.push({ kind: "token", token: displayTokens[i], i }); // token i
+    const N = displayTokens.length;
+
+    for (let b = 0; b <= N; b++) {
+      // 1) caret at boundary b
+      cells.push({ kind: "caret", caret: caretRow[b], i: b });
+
+      // 2) any GB insertions *at* boundary b: show them *after* the caret,
+      //    then add a synthetic caret to close the group (^ . ^)
+      const insList = insertionMap.get(b) ?? [];
+      for (let k = 0; k < insList.length; k++) {
+        const ins = insList[k];
+        // show the exact replacement symbol GB suggested
+        cells.push({ kind: "insert", text: ins.char ?? ".", i: b });
+        // synthetic caret to close the group
+        cells.push({ kind: "caret", caret: "active", i: b, synthetic: true });
+      }
+
+      // 3) token after boundary b (for b < N)
+      if (b < N) {
+        const t = displayTokens[b];
+        cells.push({ kind: "token", text: t.overlay ?? t.raw, ui: t.ui, i: b });
+      }
     }
-    cells.push({ kind: "caret", caret: caretRow[displayTokens.length], i: displayTokens.length }); // final boundary
     return cells;
-  }, [displayTokens, caretRow]);
+  }, [displayTokens, caretRow, insertionMap]);
 
   if (typeof window !== "undefined" && (window as any).__CBM_DEBUG__) {
     console.info("[UI] tokens", displayTokens);
@@ -469,28 +493,30 @@ function WritingScorer() {
 
             {/* Token display with interleaved carets */}
             <div className="cbm-flow mt-3 p-3 rounded-2xl bg-muted/40">
-              {gridCells.map((c) =>
+              {gridCells.map((c, idx) =>
                 c.kind === "caret" ? (
                   <span
-                    key={`c-${c.i}`}
-                    className={`cbm-cell ${c.caret === "active" ? "caret-active" : "caret-ghost"}`}
-                    aria-label={`boundary-${c.i}`}
+                    key={`c-${idx}`}
+                    className={`cbm-cell ${c.caret === "active" ? "caret-active" : "caret-ghost"} ${
+                      c.synthetic ? "caret-sibling" : ""
+                    }`}
+                    aria-label={`boundary-${c.i}${c.synthetic ? "-after-insert" : ""}`}
                   >
                     ^
                   </span>
+                ) : c.kind === "insert" ? (
+                  <span key={`i-${idx}`} className="cbm-cell pill-insert" aria-label="inserted-punctuation">
+                    {c.text}
+                  </span>
                 ) : (
                   <span
-                    key={`t-${c.i}`}
+                    key={`t-${idx}`}
                     className={`cbm-cell ${
-                      c.token.ui === "incorrect"
-                        ? "pill-incorrect"
-                        : c.token.ui === "possible"
-                        ? "pill-possible"
-                        : "pill-correct"
+                      c.ui === "incorrect" ? "pill-incorrect" :
+                      c.ui === "possible"  ? "pill-possible"  : "pill-correct"
                     }`}
-                    title={(c.token.gbHits ?? []).map(e => e.err_cat || e.edit_type).join(", ")}
                   >
-                    {c.token.overlay ?? c.token.raw}
+                    {c.text}
                   </span>
                 )
               )}
