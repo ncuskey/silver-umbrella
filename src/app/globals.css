@@ -206,3 +206,49 @@
   outline-offset: 2px; 
   border-radius: 6px; 
 }
+
+/* Terminal Group Styles */
+.tg {
+  display: inline-flex; 
+  align-items: center; 
+  gap: .22rem;
+  padding: .06rem .28rem; 
+  border-radius: .5rem; 
+  cursor: pointer;
+  border: 2px solid var(--c-ok);
+}
+
+.tg--ok { 
+  --c-ok: #22c55e; 
+  border-color: var(--c-ok); 
+  background: rgba(34, 197, 94, .10); 
+}
+
+.tg--maybe { 
+  --c-ok: #f59e0b; 
+  border-color: var(--c-ok); 
+  background: rgba(245, 158, 11, .10); 
+}
+
+.tg--bad { 
+  --c-ok: #ef4444; 
+  border-color: var(--c-ok); 
+  background: rgba(239, 68, 68, .10); 
+}
+
+.tg__inner { 
+  pointer-events: none; 
+}
+
+.token--caret, .token--dot { 
+  border: none; 
+  background: transparent; 
+}
+
+.token--dot { 
+  font-weight: 700; 
+}
+
+.linebreak { 
+  height: .6rem; 
+}

@@ -29,18 +29,20 @@
 │   │   ├── layout.tsx         # Root layout component
 │   │   └── page.tsx           # Main application component
 │   ├── components/
-│   │   └── ui/                # Reusable UI components (shadcn/ui)
-│   │       ├── badge.tsx      # Badge component
-│   │       ├── button.tsx     # Button with variants
-│   │       ├── card.tsx       # Card layout components
-│   │       ├── checkbox.tsx   # Checkbox input
-│   │       ├── input.tsx      # Text input
-│   │       ├── tabs.tsx       # Tab navigation
-│   │       └── textarea.tsx   # Textarea input
+│   │   ├── ui/                # Reusable UI components (shadcn/ui)
+│   │   │   ├── badge.tsx      # Badge component
+│   │   │   ├── button.tsx     # Button with variants
+│   │   │   ├── card.tsx       # Card layout components
+│   │   │   ├── checkbox.tsx   # Checkbox input
+│   │   │   ├── input.tsx      # Text input
+│   │   │   ├── tabs.tsx       # Tab navigation
+│   │   │   └── textarea.tsx   # Textarea input
+│   │   └── TerminalGroup.tsx  # Terminal group component for ^ . ^ units
 │   ├── lib/
 │   │   ├── gbClient.ts        # GrammarBot API client
 │   │   ├── gbToVT.ts          # GrammarBot to Virtual Terminal conversion
 │   │   ├── gbAnnotate.ts      # GrammarBot annotation and display logic
+│   │   ├── gb-map.ts          # GB state mapping and terminal group initialization
 │   │   ├── tokenize.ts        # Text tokenization
 │   │   ├── types.ts           # Core type definitions
 │   │   ├── export.ts          # CSV and PDF export utilities
@@ -83,6 +85,7 @@
 - `CBMApp`: Root component with tab navigation
 - `WritingScorer`: Written expression assessment tool
 - `SpellingScorer`: Spelling assessment tool
+- `TerminalGroup`: Unified terminal group component for ^ . ^ units
 - `SentenceList`: Displays parsed sentences
 - `InfractionList`: Shows flagged issues
 
@@ -179,7 +182,10 @@ interface DisplayToken extends Token {
 - **Token Styles**: Correct (green), possible (amber), incorrect (red) pill styles
 - **Insertion Styles**: Yellow dot styling for punctuation insertions
 - **Terminal Group Styles**: Unified styling for `.cbm.token`, `.cbm.caret`, and `.cbm.insert-dot` states
+- **New Terminal Group CSS**: `.tg`, `.tg--ok`, `.tg--maybe`, `.tg--bad` with unified borders and backgrounds
+- **Non-Interactive Children**: `.tg__inner` with `pointer-events: none` for inner tokens
 - **Selection Indicators**: Visual selection rings (`.is-selected`) for both tokens and groups
+- **Paragraph Spacing**: `.linebreak` styling for proper paragraph separation
 
 #### Utility Functions (`src/lib/utils.ts`)
 - `cn()`: Combines clsx and tailwind-merge for conditional classes
@@ -201,12 +207,30 @@ interface DisplayToken extends Token {
 - **Selection Rings**: Visual selection indicators for both tokens and groups
 
 ### Terminal Group System
-- **Group ID Assignment**: Unique group IDs assigned to terminal groups (^ . ^)
-- **State Management**: Separate `tokenUi` and `groupUi` state hooks for independent control
-- **Unified Cycling**: Single click handler cycles entire groups while maintaining token control
-- **Visual Synchronization**: All group members share colors and selection state
+- **TerminalGroup Component**: Unified React component that wraps ^ . ^ as single clickable units
+- **State Management**: Separate `tokenStates` and `groupStates` hooks with `TokState` type (ok/maybe/bad)
+- **GB State Mapping**: `bootstrapStatesFromGB()` maps GrammarBot categories to initial states
+- **Unified Cycling**: Single click handler cycles entire groups while maintaining individual token control
+- **Visual Synchronization**: All group members share colors, borders, and selection state
+- **Non-Interactive Children**: Inner tokens made non-interactive with `pointer-events: none`
+- **CSS Integration**: Comprehensive `.tg` styling with state-specific colors and borders
 - **Accessibility**: Full keyboard navigation and ARIA support for groups
-- **CSS Integration**: Comprehensive styling for group states and selection indicators
+
+### GB State Mapping System (`src/lib/gb-map.ts`)
+
+#### State Mapping Functions
+- `bootstrapStatesFromGB()`: Initializes token and terminal group states from GrammarBot data
+- **Category Mapping**: Maps GB error categories to initial UI states
+  - `SPELL` → red (bad) on affected word tokens
+  - `PUNC` → yellow (maybe) for terminal groups at boundaries  
+  - `GRMR` → yellow (maybe) on word tokens
+- **Terminal Group Creation**: Creates `TerminalGroupModel` objects for punctuation suggestions
+- **End-of-Text Filtering**: Ignores PUNC insertions at final text position
+
+#### Type Definitions
+- `TokState`: Union type for token states ('ok' | 'maybe' | 'bad')
+- `TerminalGroupModel`: Interface for terminal group data structure
+- `GBEdit`: Interface matching GrammarBot edit structure
 
 ### Automated Validation
 - **Spelling Detection**: GrammarBot-based spell checking
@@ -349,18 +373,21 @@ The tool implements scoring methods aligned with educational research:
 
 ## Recent Updates
 
-### Latest Improvements (v7.0) - Terminal Group Functionality & KPI Calculations
-- **Terminal Group System**: Implemented unified terminal group functionality treating (^ . ^) as single, clickable units
-- **Group ID Assignment**: Added `groupByBoundary` mapping to assign unique group IDs to terminal groups
-- **Unified State Management**: Added `tokenUi` and `groupUi` state hooks for separate token and group state management
-- **Group Cycling**: Single click handler cycles entire terminal groups while maintaining individual token control
-- **Visual Synchronization**: All members of a terminal group (carets and dots) share the same visual state and selection ring
-- **KPI Integration**: Wired TWW, WSC, and CWS calculations directly to GrammarBot issues for real-time accuracy
-- **CWS Rule Implementation**: Proper CWS scoring with capitalization rules, terminal punctuation handling, and comma exclusion
-- **Enhanced Accessibility**: Full keyboard navigation and ARIA support for terminal groups
-- **CSS Terminal Group Styles**: Added comprehensive styling for `.cbm.token`, `.cbm.caret`, and `.cbm.insert-dot` states
-- **Selection Indicators**: Visual selection rings (`.is-selected`) for both tokens and groups
-- **Real-time Metrics**: Automatic KPI updates based on GrammarBot analysis with proper error handling
+### Latest Improvements (v8.0) - Unified Terminal Group System & State Management
+- **TerminalGroup Component**: Created `src/components/TerminalGroup.tsx` that wraps `^ . ^` as single clickable units with unified borders
+- **GB State Mapping**: Implemented `src/lib/gb-map.ts` with `bootstrapStatesFromGB()` to map GB categories to initial states
+  - `SPELL` → red (bad) on affected word tokens
+  - `PUNC` → yellow (maybe) for terminal groups at boundaries
+  - `GRMR` → yellow (maybe) on word tokens
+- **State Cycling System**: Implemented green (ok) → yellow (maybe) → red (bad) → green (ok) cycling for both words and terminal groups
+- **Unified State Management**: Added `tokenStates` and `groupStates` hooks with separate state tracking for tokens and groups
+- **KPI Override System**: Updated `calcWSC()` and `calcCWS()` to respect current state overrides in real-time
+- **Terminal Group Rendering**: Integrated TerminalGroup component into paragraph rendering with proper group detection
+- **CSS Terminal Group Styles**: Added comprehensive `.tg`, `.tg--ok`, `.tg--maybe`, `.tg--bad` styling with proper color scheme
+- **Non-Interactive Children**: Inner tokens (carets and dots) are made non-interactive with `pointer-events: none`
+- **Paragraph Boundary Support**: Maintained existing paragraph handling with `.linebreak` styling for proper spacing
+- **Type Safety**: Full TypeScript support with `TokState` and `TerminalGroupModel` types
+- **Real-time Metrics**: KPI calculations now reflect user overrides immediately when states change
 
 ### Previous Improvements (v6.4) - Enhanced Punctuation Handling & Interactive UI
 - **Terminal Punctuation Filtering**: Added filter in `gbToVT.ts` to exclude punctuation insertions at the very end of text (`e.start === text.length`)
