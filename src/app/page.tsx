@@ -19,7 +19,6 @@ import { TerminalGroup, type TerminalGroupModel } from "@/components/TerminalGro
 import { Token, type TokenModel } from "@/components/Token";
 import { bootstrapStatesFromGB, type TokState } from "@/lib/gb-map";
 import { useTokensAndGroups } from "@/lib/useTokensAndGroups";
-import { useKPIs } from "@/lib/useKPIs";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 
@@ -40,6 +39,22 @@ import html2canvas from "html2canvas";
  */
 
 // ———————————— Types & Constants ————————————
+
+// keep these as plain string literals so Tailwind can see them (and we safelist them anyway)
+const STATUS_CLS: Record<'ok'|'maybe'|'bad', string> = {
+  ok:    'bg-green-50 text-green-800 ring-green-300',
+  maybe: 'bg-amber-50 text-amber-800 ring-amber-300',
+  bad:   'bg-red-50 text-red-800 ring-red-300',
+};
+
+function bubbleCls(status: 'ok'|'maybe'|'bad', selected: boolean) {
+  return [
+    'inline-flex items-center rounded-xl px-2 py-0.5 leading-6',
+    'ring-1 ring-offset-1 ring-offset-white',  // or ring-offset-background
+    STATUS_CLS[status],
+    selected ? 'ring-2' : ''
+  ].join(' ');
+}
 
 type UnitType = "word" | "numeral" | "comma" | "essentialPunct" | "other" | "PUNCT" | "WORD" | "HYPHEN";
 
@@ -338,43 +353,79 @@ function WritingScorer() {
   const showInfractions = true;
   
   // New state management using hooks
-  const { tokens: tokenModels, groups: terminalGroups, setTokens: setTokenModels, setGroups: setTerminalGroups, toggleWord, toggleTerminal } = useTokensAndGroups();
+  const { tokens: tokenModels, groups: terminalGroups, setTokens: setTokenModels, setGroups: setTerminalGroups } = useTokensAndGroups();
   const [selected, setSelected] = useState<{type:"token"|"group"; id:number|string} | null>(null);
+
+  // Single UI state object
+  const [ui, setUi] = useState({
+    tokens: tokenModels,
+    terminalGroups: terminalGroups
+  });
+
+  // Update UI state when tokenModels or terminalGroups change
+  useEffect(() => {
+    setUi(prev => ({
+      ...prev,
+      tokens: tokenModels,
+      terminalGroups: terminalGroups
+    }));
+  }, [tokenModels, terminalGroups]);
 
   // click routing from a cell
   function onCellActivate(c: UICell) {
     if (c.kind === "token") {
-      const tokenModel = tokenModels.find(tm => tm.id === `token-${c.ti}`);
-      if (tokenModel) {
-        toggleWord(tokenModel.id);
-        setSelected({ type: "token", id: c.ti });
-      }
+      onTokenClick(c.ti);
+      setSelected({ type: "token", id: c.ti });
     }
     if (c.kind === "insert" || (c.kind === "caret" && c.groupId)) {
-      toggleTerminal(c.groupId!.toString());
+      onTerminalGroupClick(c.groupId!.toString());
       setSelected({ type: "group", id: c.groupId!.toString() });
     }
     // plain caret (no group) does nothing
   }
+
+  // Helper function to cycle through statuses
+  const cycleStatus = (s: 'ok'|'maybe'|'bad'): 'ok'|'maybe'|'bad' =>
+    s === 'ok' ? 'maybe' : s === 'maybe' ? 'bad' : 'ok';
+
+  // Click handlers for tokens and groups
+  const onTokenClick = (idx: number) => {
+    setUi(prev => ({
+      ...prev,
+      tokens: prev.tokens.map((t, i) => i === idx ? { ...t, state: cycleStatus(t.state), selected: !t.selected } : t)
+    }));
+  };
+
+  const onTerminalGroupClick = (id: string) => {
+    setUi(prev => ({
+      ...prev,
+      terminalGroups: prev.terminalGroups.map(g =>
+        g.id === id ? { ...g, state: cycleStatus(g.state), selected: !g.selected } : g
+      ),
+    }));
+  };
 
   // Render helpers
   const isSel = (t:"token"|"group", id:number|string) => selected?.type===t && selected.id===id;
 
   function clsForCell(c: UICell) {
     if (c.kind === "token") {
-      const tokenModel = tokenModels.find(tm => tm.id === `token-${c.ti}`);
-      const state = tokenModel?.state ?? "ok";
-      return `cbm token ${state} ${isSel("token", c.ti) ? "is-selected":""}`;
+      const token = ui.tokens[c.ti];
+      const state = token?.state ?? "ok";
+      const selected = isSel("token", c.ti);
+      return bubbleCls(state, selected);
     }
     if (c.kind === "insert") {
-      const groupModel = terminalGroups.find(g => g.id === c.groupId?.toString());
-      const state = groupModel?.state ?? "maybe";
-      return `cbm insert-dot ${state} ${isSel("group", c.groupId?.toString() ?? "") ? "is-selected":""}`;
+      const group = ui.terminalGroups.find(g => g.id === c.groupId?.toString());
+      const state = group?.state ?? "maybe";
+      const selected = isSel("group", c.groupId?.toString() ?? "");
+      return bubbleCls(state, selected);
     }
     if (c.kind === "caret") {
-      const groupModel = c.groupId ? terminalGroups.find(g => g.id === c.groupId?.toString()) : null;
-      const state = groupModel?.state ?? "ok";
-      return `cbm caret ${state} ${c.groupId && isSel("group", c.groupId?.toString() ?? "") ? "is-selected":""}`;
+      const group = c.groupId ? ui.terminalGroups.find(g => g.id === c.groupId?.toString()) : null;
+      const state = group?.state ?? "ok";
+      const selected = Boolean(c.groupId && isSel("group", c.groupId?.toString() ?? ""));
+      return bubbleCls(state, selected);
     }
     return "";
   }
@@ -403,7 +454,7 @@ function WritingScorer() {
 
   // Click and keyboard handlers
   const onCaretClick = (i: number) => setFocus({ type: "caret", index: i });
-  const onTokenClick = (i: number) => setFocus({ type: "token", index: i });
+  const onTokenClickFocus = (i: number) => setFocus({ type: "token", index: i });
   const onInsertClick = (i: number) => setFocus({ type: "insert", index: i });
 
   const onKey = (e: React.KeyboardEvent, type: "caret" | "token" | "insert", i: number) => {
@@ -592,20 +643,57 @@ function WritingScorer() {
     console.info("[UI] carets", caretRow);
   }
 
-  // KPI calculations using the new hook
-  const kpis = useKPIs(tokens, tokenModels, terminalGroups, timeMMSS);
+  // Derived KPIs (no mutation; useMemo keyed on UI)
+  const kpis = React.useMemo(() => {
+    const words = ui.tokens.filter(t => t.kind === 'word');
+    const spelledCorrect = words.filter(t => t.state !== 'bad').length;
+
+    // CWS: boundaries between tokens that are part of a correct adjacent pair (word + terminal punctuation)
+    // We treat terminal groups as the punctuation.
+    const terminals = new Set(ui.terminalGroups.map(g => g.leftIdx)); // leftIdx: where group attaches
+    let cws = 0, eligible = 0;
+
+    for (let i = 0; i < ui.tokens.length - 1; i++) {
+      const a = ui.tokens[i], b = ui.tokens[i+1];
+      // "eligible boundary" definition you've been using:
+      const isEligible = (a.kind === 'word' && (b.kind === 'word' || terminals.has(i+1)));
+      if (isEligible) {
+        eligible++;
+        const aOk = a.state === 'ok';
+        const bOk = terminals.has(i+1)
+          ? ui.terminalGroups.find(g => g.leftIdx === i+1)?.state === 'ok'
+          : (b.kind === 'word' ? b.state === 'ok' : false);
+        if (aOk && bOk) cws++;
+      }
+    }
+
+    const percentCws = eligible ? Math.round((cws / eligible) * 100) : 0;
+
+    // TWW calculation
+    const tww = ui.tokens.filter(t => t.kind === 'word').length;
+
+    // CWS per minute calculation
+    const [mm, ss] = timeMMSS.split(":").map(n => parseInt(n, 10) || 0);
+    const minutes = Math.max(0.5, mm + ss/60);
+    const cwsPerMinute = cws / minutes;
+
+    return { 
+      tww, 
+      spelledCorrect, 
+      cws, 
+      eligible, 
+      percentCws, 
+      cwsPerMinute 
+    };
+  }, [ui.tokens, ui.terminalGroups, timeMMSS]);
 
   // Simplified CWS pairs (placeholder for now)
   const cwsPairs = useMemo(() => [], []);
 
   // Simplified metrics (placeholder for now)
   const audit = useMemo(() => [], []);
-  const cwsCount = kpis.cws;
-  const eligibleBoundaries = kpis.eligible;
   const iws = 0;
   const ciws = 0;
-  const percentCws = kpis.percentCws;
-  const cwsPerMinValue: number = kpis.cwsPerMinute;
 
   // Infractions list (pure GB)
   const infractions = useMemo(() =>
@@ -763,18 +851,17 @@ function WritingScorer() {
                   {block.map((c, idx) => {
                     // Check if this is part of a terminal group
                     if (c.kind === "caret" && c.groupId) {
-                      const group = terminalGroups.find(g => g.id === c.groupId?.toString());
+                      const group = ui.terminalGroups.find(g => g.id === c.groupId?.toString());
                       if (group) {
+                        const selected = isSel("group", c.groupId?.toString() ?? "");
                         return (
                           <TerminalGroup
                             key={`tg-${pIdx}-${idx}`}
-                            group={group}
-                            onToggle={toggleTerminal}
-                          >
-                            <span className="token--caret">^</span>
-                            <span className="token--dot">.</span>
-                            <span className="token--caret">^</span>
-                          </TerminalGroup>
+                            id={group.id}
+                            status={group.state}
+                            selected={selected}
+                            onClick={onTerminalGroupClick}
+                          />
                         );
                       }
                     }
@@ -816,14 +903,14 @@ function WritingScorer() {
               />
               <StatCard
                 title="Correct Writing Sequences"
-                value={cwsCount}
+                value={kpis.cws}
                 sub="adjacent-unit pairs"
               />
 
               <StatCard
                 title="% CWS"
-                value={<>{percentCws}<span className="text-2xl">%</span></>}
-                sub={`${cwsCount}/${eligibleBoundaries} eligible boundaries`}
+                value={<>{kpis.percentCws}<span className="text-2xl">%</span></>}
+                sub={`${kpis.cws}/${kpis.eligible} eligible boundaries`}
               />
               <StatCard
                 title="CIWS"
@@ -832,7 +919,7 @@ function WritingScorer() {
               />
               <StatCard
                 title="CWS / min"
-                value={cwsPerMinValue === null ? "—" : (Math.round(cwsPerMinValue * 10) / 10).toFixed(1)}
+                value={kpis.cwsPerMinute === null ? "—" : (Math.round(kpis.cwsPerMinute * 10) / 10).toFixed(1)}
                 sub={durationSec ? `${timeMMSS} timed` : "enter time"}
               />
             </div>

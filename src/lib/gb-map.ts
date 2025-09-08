@@ -50,13 +50,24 @@ export function bootstrapStatesFromGB(
     }
   }
 
-  // 3) Create terminal groups
+  // 3) Create terminal groups (respecting paragraphs and suppressing very last terminal)
   const terminalGroups: TerminalGroupModel[] = [];
+  const paragraphs = text.split(/\r?\n/);
+  const paragraphEndTokenIndices = getParagraphEndTokenIndices(paragraphs, tokens);
+  
   for (const e of edits) {
     if (e.err_cat === 'PUNC' && e.replace === '.' && e.start < text.length) {
       const beforeWordIdx = wordIndexEndingAt(tokens, e.start);
       if (beforeWordIdx != null) {
-        terminalGroups.push(makeTerminalGroup(tokens, beforeWordIdx, 'maybe'));
+        // Check if this is at the very end of the whole text block
+        const isLastParagraph = paragraphEndTokenIndices.length > 0 && 
+          paragraphEndTokenIndices[paragraphEndTokenIndices.length - 1] === tokens.length - 1;
+        const isLastTokenOverall = beforeWordIdx === tokens.length - 1;
+        
+        // Skip if this is the last paragraph and its end token is also the last token overall
+        if (!(isLastParagraph && isLastTokenOverall)) {
+          terminalGroups.push(makeTerminalGroup(tokens, beforeWordIdx, 'maybe'));
+        }
       }
     }
   }
@@ -90,4 +101,36 @@ function makeTerminalGroup(tokens: Token[], wordIdx: number, state: TokState): T
     dotIdx: wordIdx + 1,
     rightIdx: wordIdx + 2
   };
+}
+
+/**
+ * Get the end token index for each paragraph
+ */
+function getParagraphEndTokenIndices(paragraphs: string[], tokens: Token[]): number[] {
+  const endIndices: number[] = [];
+  let currentOffset = 0;
+  
+  for (let i = 0; i < paragraphs.length; i++) {
+    const paragraph = paragraphs[i];
+    const paragraphEndOffset = currentOffset + paragraph.length;
+    
+    // Find the last token that ends at or before this paragraph's end
+    let endTokenIdx = -1;
+    for (let j = 0; j < tokens.length; j++) {
+      if (tokens[j].end <= paragraphEndOffset) {
+        endTokenIdx = j;
+      } else {
+        break;
+      }
+    }
+    
+    if (endTokenIdx !== -1) {
+      endIndices.push(endTokenIdx);
+    }
+    
+    // Move to next paragraph (accounting for newline)
+    currentOffset = paragraphEndOffset + 1; // +1 for the newline
+  }
+  
+  return endIndices;
 }
