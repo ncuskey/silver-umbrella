@@ -115,8 +115,24 @@
   align-items: center;
 }
 
+/* CBM Paragraphs Container - stacks paragraphs vertically */
+.cbm-paragraphs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Each paragraph is a horizontal row */
+.cbm-paragraph {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
 /* Each item is an inline-sized chunk that doesn't stretch */
-.cbm-flow > .cbm-cell {
+.cbm-flow > .cbm-cell,
+.cbm-paragraph > .cbm-cell {
   display: inline-flex;
   align-items: center;
   flex: 0 0 auto;     /* don't grow or shrink */

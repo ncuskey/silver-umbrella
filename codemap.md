@@ -220,6 +220,16 @@ interface DisplayToken extends Token {
 - **Display Token Management**: Handles token styling and overlays
 - **Caret State Management**: Manages ghost/active caret states
 
+#### Paragraph Utilities (`src/lib/paragraphUtils.ts`)
+- `charOffsetToBoundaryIndex()`: Converts character offset to boundary index
+- `charOffsetToTokenIndex()`: Converts character offset to token index
+- `newlineBoundarySet()`: Detects paragraph boundaries from newline characters
+- `gbToVtInsertions()`: Converts GB edits to VT insertions, filtering end-of-text
+- `withParagraphFallbackDots()`: Adds fallback periods at paragraph boundaries
+- **Paragraph Detection**: Automatic recognition of carriage returns and line breaks
+- **Smart Fallback**: Adds periods where GB didn't suggest punctuation at paragraph ends
+- **Boundary Mapping**: Accurate character-to-boundary index conversion
+
 ### Export System (`src/lib/export.ts`)
 
 #### Export Utilities
