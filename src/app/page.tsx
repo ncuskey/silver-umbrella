@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Info, AlertTriangle, ListChecks, Settings } from "lucide-react";
-import type { Token, VirtualTerminalInsertion } from "@/lib/types";
+import type { Token as LibToken, VirtualTerminalInsertion } from "@/lib/types";
 import { checkWithGrammarBot } from "@/lib/gbClient";
 import { gbEditsToInsertions } from "@/lib/gbToVT";
 import { annotateFromGb, buildCaretRow, groupInsertionsByBoundary, type CaretState, type DisplayToken as GbDisplayToken } from "@/lib/gbAnnotate";
@@ -15,8 +15,11 @@ import { gbToVtInsertions, withParagraphFallbackDots, newlineBoundarySet } from 
 import { tokenize } from "@/lib/tokenize";
 import { cn, DEBUG, dgroup, dtable, dlog } from "@/lib/utils";
 import { toCSV, download } from "@/lib/export";
-import { TerminalGroup, type State } from "@/components/TerminalGroup";
-import { bootstrapStatesFromGB, type TokState, type TerminalGroupModel } from "@/lib/gb-map";
+import { TerminalGroup, type TerminalGroupModel } from "@/components/TerminalGroup";
+import { Token, type TokenModel } from "@/components/Token";
+import { bootstrapStatesFromGB, type TokState } from "@/lib/gb-map";
+import { useTokensAndGroups } from "@/lib/useTokensAndGroups";
+import { useKPIs } from "@/lib/useKPIs";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 
@@ -47,7 +50,7 @@ type UICell =
   | { kind: "caret"; bi: number; groupId?: number; ui: UIState }
   | { kind: "insert"; bi: number; text: "."|"!"|"?" ; groupId: number; ui: UIState };
 
-type DisplayToken = Token & { virtual?: boolean; essential?: boolean; display?: string };
+type DisplayToken = LibToken & { virtual?: boolean; essential?: boolean; display?: string };
 
 interface WordOverride { csw?: boolean }
 interface PairOverride { cws?: boolean }
@@ -143,10 +146,10 @@ function clsForWord(target: string, attempt: string): { cls: number; max: number
 
 // Complex LT filtering removed - using simple filter from lib
 
-function isTerminal(tok: Token) { return tok.type === "PUNCT" && /[.?!]/.test(tok.raw); }
-function isWord(tok: Token)     { return tok.type === "WORD"; }
-function isComma(tok: Token)    { return tok.type === "PUNCT" && tok.raw === ","; }
-function isHyphen(tok: Token)   { return tok.type === "PUNCT" && tok.raw === "-"; }
+function isTerminal(tok: LibToken) { return tok.type === "PUNCT" && /[.?!]/.test(tok.raw); }
+function isWord(tok: LibToken)     { return tok.type === "WORD"; }
+function isComma(tok: LibToken)    { return tok.type === "PUNCT" && tok.raw === ","; }
+function isHyphen(tok: LibToken)   { return tok.type === "PUNCT" && tok.raw === "-"; }
 
 // Complex helper functions removed - using LT-only approach
 
@@ -259,7 +262,7 @@ function cwsPerMin(cws: number, mmss: string): number {
   return cws / minutes;
 }
 
-function computeTWW(tokens: Token[]): number {
+function computeTWW(tokens: LibToken[]): number {
   return tokens.filter((t) => t.type === "WORD").length;
 }
 
@@ -334,33 +337,23 @@ function WritingScorer() {
   // Always-on flags (since the toggle is gone)
   const showInfractions = true;
   
-  // Terminal group state management
-  const CYCLE: Record<TokState, TokState> = { ok: "maybe", maybe: "bad", bad: "ok" };
-  const [tokenStates, setTokenStates] = useState<Record<number, TokState>>({});   // key: token index
-  const [groupStates, setGroupStates] = useState<Record<string, TokState>>({});   // key: groupId
-  const [terminalGroups, setTerminalGroups] = useState<TerminalGroupModel[]>([]);
+  // New state management using hooks
+  const { tokens: tokenModels, groups: terminalGroups, setTokens: setTokenModels, setGroups: setTerminalGroups, toggleWord, toggleTerminal } = useTokensAndGroups();
   const [selected, setSelected] = useState<{type:"token"|"group"; id:number|string} | null>(null);
-
-  function cycleToken(ti: number) {
-    setTokenStates(m => {
-      const cur = m[ti] ?? "ok";
-      return { ...m, [ti]: CYCLE[cur] };
-    });
-    setSelected({ type: "token", id: ti });
-  }
-
-  function cycleGroup(groupId: string) {
-    setGroupStates(m => {
-      const cur = m[groupId] ?? "maybe";
-      return { ...m, [groupId]: CYCLE[cur] };
-    });
-    setSelected({ type: "group", id: groupId });
-  }
 
   // click routing from a cell
   function onCellActivate(c: UICell) {
-    if (c.kind === "token") return cycleToken(c.ti);
-    if (c.kind === "insert" || (c.kind === "caret" && c.groupId)) return cycleGroup(c.groupId!.toString());
+    if (c.kind === "token") {
+      const tokenModel = tokenModels.find(tm => tm.id === `token-${c.ti}`);
+      if (tokenModel) {
+        toggleWord(tokenModel.id);
+        setSelected({ type: "token", id: c.ti });
+      }
+    }
+    if (c.kind === "insert" || (c.kind === "caret" && c.groupId)) {
+      toggleTerminal(c.groupId!.toString());
+      setSelected({ type: "group", id: c.groupId!.toString() });
+    }
     // plain caret (no group) does nothing
   }
 
@@ -368,11 +361,20 @@ function WritingScorer() {
   const isSel = (t:"token"|"group", id:number|string) => selected?.type===t && selected.id===id;
 
   function clsForCell(c: UICell) {
-    if (c.kind === "token")      return `cbm token ${tokenStates[c.ti] ?? "ok"} ${isSel("token", c.ti) ? "is-selected":""}`;
-    if (c.kind === "insert")     return `cbm insert-dot ${groupStates[c.groupId?.toString() ?? ""] ?? "maybe"} ${isSel("group", c.groupId?.toString() ?? "") ? "is-selected":""}`;
+    if (c.kind === "token") {
+      const tokenModel = tokenModels.find(tm => tm.id === `token-${c.ti}`);
+      const state = tokenModel?.state ?? "ok";
+      return `cbm token ${state} ${isSel("token", c.ti) ? "is-selected":""}`;
+    }
+    if (c.kind === "insert") {
+      const groupModel = terminalGroups.find(g => g.id === c.groupId?.toString());
+      const state = groupModel?.state ?? "maybe";
+      return `cbm insert-dot ${state} ${isSel("group", c.groupId?.toString() ?? "") ? "is-selected":""}`;
+    }
     if (c.kind === "caret") {
-      const ui = c.groupId ? (groupStates[c.groupId.toString()] ?? "maybe") : "ok";
-      return `cbm caret ${ui} ${c.groupId && isSel("group", c.groupId.toString()) ? "is-selected":""}`;
+      const groupModel = c.groupId ? terminalGroups.find(g => g.id === c.groupId?.toString()) : null;
+      const state = groupModel?.state ?? "ok";
+      return `cbm caret ${state} ${c.groupId && isSel("group", c.groupId?.toString() ?? "") ? "is-selected":""}`;
     }
     return "";
   }
@@ -454,7 +456,7 @@ function WritingScorer() {
 
   const lexicon = useMemo(() => buildLexicon(selectedPacks, ""), [selectedPacks]);
   
-  const tokens = useMemo<Token[]>(() => tokenize(text), [text]);
+  const tokens = useMemo<LibToken[]>(() => tokenize(text), [text]);
 
   useEffect(() => {
     let alive = true;
@@ -462,15 +464,16 @@ function WritingScorer() {
       const resp = await checkWithGrammarBot(text);
       if (alive) {
         setGb(resp);
-        // Initialize terminal groups from GB data
+        // Initialize token models and terminal groups from GB data
         if (resp?.edits) {
-          const groups = bootstrapStatesFromGB(text, tokens, resp.edits);
-          setTerminalGroups(groups);
+          const { tokenModels: newTokenModels, terminalGroups: newTerminalGroups } = bootstrapStatesFromGB(text, tokens, resp.edits);
+          setTokenModels(newTokenModels);
+          setTerminalGroups(newTerminalGroups);
         }
       }
     })();
     return () => { alive = false; };
-  }, [text, tokens]);
+  }, [text, tokens, setTokenModels, setTerminalGroups]);
 
   const terminalInsertions = useMemo<VirtualTerminalInsertion[]>(() => {
     const edits = gb?.edits ?? [];
@@ -589,23 +592,20 @@ function WritingScorer() {
     console.info("[UI] carets", caretRow);
   }
 
-  // KPI calculations
-  const tww = useMemo(() => calcTWW(displayTokens), [displayTokens]);
-  const wsc = useMemo(() => calcWSC(displayTokens, gb, tokenStates), [displayTokens, gb, tokenStates]);
-  const { cws, eligible } = useMemo(() => calcCWS(displayTokens, gb, vtInsertions, tokenStates, groupStates), [displayTokens, gb, vtInsertions, tokenStates, groupStates]);
-  const cwsPerMinute: number = useMemo(() => cwsPerMin(cws, timeMMSS), [cws, timeMMSS]);
+  // KPI calculations using the new hook
+  const kpis = useKPIs(tokens, tokenModels, terminalGroups, timeMMSS);
 
   // Simplified CWS pairs (placeholder for now)
   const cwsPairs = useMemo(() => [], []);
 
   // Simplified metrics (placeholder for now)
   const audit = useMemo(() => [], []);
-  const cwsCount = cws;
-  const eligibleBoundaries = eligible;
+  const cwsCount = kpis.cws;
+  const eligibleBoundaries = kpis.eligible;
   const iws = 0;
   const ciws = 0;
-  const percentCws = eligible > 0 ? Math.round((cws / eligible) * 100) : 0;
-  const cwsPerMinValue: number = cwsPerMinute;
+  const percentCws = kpis.percentCws;
+  const cwsPerMinValue: number = kpis.cwsPerMinute;
 
   // Infractions list (pure GB)
   const infractions = useMemo(() =>
@@ -768,12 +768,8 @@ function WritingScorer() {
                         return (
                           <TerminalGroup
                             key={`tg-${pIdx}-${idx}`}
-                            id={group.id}
-                            state={groupStates[group.id] ?? "maybe"}
-                            onToggle={cycleGroup}
-                            leftIdx={group.leftIdx}
-                            dotIdx={group.dotIdx}
-                            rightIdx={group.rightIdx}
+                            group={group}
+                            onToggle={toggleTerminal}
                           >
                             <span className="token--caret">^</span>
                             <span className="token--dot">.</span>
@@ -810,12 +806,12 @@ function WritingScorer() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
               <StatCard
                 title="Total Words Written"
-                value={tww /* your TWW value */}
+                value={kpis.tww}
                 sub="numerals excluded"
               />
               <StatCard
                 title="Words Spelled Correctly"
-                value={wsc /* your WSC value */}
+                value={kpis.spelledCorrect}
                 sub="dictionary + overrides"
               />
               <StatCard

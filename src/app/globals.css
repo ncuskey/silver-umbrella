@@ -207,46 +207,84 @@
   border-radius: 6px; 
 }
 
-/* Terminal Group Styles */
+/* State CSS Variables - Single source of truth for colors */
+.state-ok    { --c: #22c55e; --bg: rgba(34,197,94,.12);  --fg: #065f46; }
+.state-maybe { --c: #f59e0b; --bg: rgba(245,158,11,.12); --fg: #92400e; }
+.state-bad   { --c: #ef4444; --bg: rgba(239,68,68,.12); --fg: #7f1d1d; }
+
+/* Word tokens */
+.token { 
+  border: 2px solid var(--c, transparent); 
+  background: var(--bg, transparent); 
+  color: var(--fg, inherit); 
+  cursor: pointer;
+  border-radius: .6rem; 
+  padding: .1rem .4rem;
+  font-size: inherit;
+  line-height: 1;
+}
+
+.token--word { 
+  border-radius: .6rem; 
+  padding: .1rem .4rem; 
+}
+
+/* Caret & dot inside a terminal group inherit the group's color and have no own borders */
+.token--caret, .token--dot { 
+  border: none; 
+  background: transparent; 
+  color: var(--fg, inherit); 
+  cursor: inherit;
+  padding: 0;
+  margin: 0 2px;
+}
+
+.token--dot { 
+  font-weight: 700; 
+}
+
+.token--newline {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: default;
+  padding: 0;
+  margin: 0;
+}
+
+/* Terminal group wraps ^ . ^ and draws one border */
 .tg {
   display: inline-flex; 
   align-items: center; 
   gap: .22rem;
-  padding: .06rem .28rem; 
-  border-radius: .5rem; 
+  border: 2px solid var(--c, transparent); 
+  background: var(--bg, transparent);
+  border-radius: .6rem; 
+  padding: .08rem .32rem; 
   cursor: pointer;
-  border: 2px solid var(--c-ok);
-}
-
-.tg--ok { 
-  --c-ok: #22c55e; 
-  border-color: var(--c-ok); 
-  background: rgba(34, 197, 94, .10); 
-}
-
-.tg--maybe { 
-  --c-ok: #f59e0b; 
-  border-color: var(--c-ok); 
-  background: rgba(245, 158, 11, .10); 
-}
-
-.tg--bad { 
-  --c-ok: #ef4444; 
-  border-color: var(--c-ok); 
-  background: rgba(239, 68, 68, .10); 
 }
 
 .tg__inner { 
   pointer-events: none; 
 }
 
-.token--caret, .token--dot { 
-  border: none; 
-  background: transparent; 
+/* Legacy compatibility - keep existing styles working */
+.tg--ok { 
+  --c: #22c55e; 
+  border-color: var(--c); 
+  background: rgba(34, 197, 94, .10); 
 }
 
-.token--dot { 
-  font-weight: 700; 
+.tg--maybe { 
+  --c: #f59e0b; 
+  border-color: var(--c); 
+  background: rgba(245, 158, 11, .10); 
+}
+
+.tg--bad { 
+  --c: #ef4444; 
+  border-color: var(--c); 
+  background: rgba(239, 68, 68, .10); 
 }
 
 .linebreak { 

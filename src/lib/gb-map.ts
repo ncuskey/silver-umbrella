@@ -1,4 +1,6 @@
 import type { Token } from "./types";
+import type { TokenModel } from "@/components/Token";
+import type { TerminalGroupModel } from "@/components/TerminalGroup";
 
 export type TokState = 'ok' | 'maybe' | 'bad';
 
@@ -11,46 +13,55 @@ export interface GBEdit {
   edit_type?: string;
 }
 
-export interface TerminalGroupModel {
-  id: string;
-  state: TokState;
-  leftIdx: number;
-  dotIdx: number;
-  rightIdx: number;
-}
-
 export function bootstrapStatesFromGB(
   text: string,
   tokens: Token[],
   edits: GBEdit[]
-): TerminalGroupModel[] {
-  // 1) default to ok
-  for (const t of tokens) (t as any).state = 'ok';
+): { tokenModels: TokenModel[]; terminalGroups: TerminalGroupModel[] } {
+  // 1) Create token models with initial states
+  const tokenModels: TokenModel[] = tokens.map((token, index) => ({
+    id: `token-${index}`,
+    kind: token.type === 'WORD' ? 'word' : 
+          token.raw === '^' ? 'caret' :
+          token.raw === '.' || token.raw === '!' || token.raw === '?' ? 'dot' :
+          token.raw === '\n' ? 'newline' : 'word',
+    text: token.raw,
+    state: 'ok' as TokState
+  }));
 
-  // 2) words
+  // 2) Apply GB-driven states to words
   for (const e of edits) {
     if (e.err_cat === 'SPELL') {
       for (const t of tokensInSpan(tokens, e.start, e.end)) {
-        if (t.type === 'WORD') (t as any).state = 'bad';
+        const tokenIndex = tokens.indexOf(t);
+        if (tokenIndex !== -1 && t.type === 'WORD') {
+          tokenModels[tokenIndex].state = 'bad';
+        }
       }
     }
     if (e.err_cat === 'GRMR') {
       const t = tokenAtOffset(tokens, e.start);
-      if (t && t.type === 'WORD') (t as any).state = 'maybe';
+      if (t) {
+        const tokenIndex = tokens.indexOf(t);
+        if (tokenIndex !== -1 && t.type === 'WORD') {
+          tokenModels[tokenIndex].state = 'maybe';
+        }
+      }
     }
   }
 
-  // 3) terminal groups
-  const groups: TerminalGroupModel[] = [];
+  // 3) Create terminal groups
+  const terminalGroups: TerminalGroupModel[] = [];
   for (const e of edits) {
     if (e.err_cat === 'PUNC' && e.replace === '.' && e.start < text.length) {
       const beforeWordIdx = wordIndexEndingAt(tokens, e.start);
       if (beforeWordIdx != null) {
-        groups.push(makeTerminalGroup(tokens, beforeWordIdx, 'maybe')); // creates ^ . ^ wrapper
+        terminalGroups.push(makeTerminalGroup(tokens, beforeWordIdx, 'maybe'));
       }
     }
   }
-  return groups;
+
+  return { tokenModels, terminalGroups };
 }
 
 function tokensInSpan(tokens: Token[], start: number, end: number): Token[] {

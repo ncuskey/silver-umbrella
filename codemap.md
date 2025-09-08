@@ -37,12 +37,15 @@
 │   │   │   ├── input.tsx      # Text input
 │   │   │   ├── tabs.tsx       # Tab navigation
 │   │   │   └── textarea.tsx   # Textarea input
+│   │   ├── Token.tsx          # Token component with state management
 │   │   └── TerminalGroup.tsx  # Terminal group component for ^ . ^ units
 │   ├── lib/
 │   │   ├── gbClient.ts        # GrammarBot API client
 │   │   ├── gbToVT.ts          # GrammarBot to Virtual Terminal conversion
 │   │   ├── gbAnnotate.ts      # GrammarBot annotation and display logic
 │   │   ├── gb-map.ts          # GB state mapping and terminal group initialization
+│   │   ├── useTokensAndGroups.ts # State management hook for tokens and groups
+│   │   ├── useKPIs.ts         # KPI calculation hook with automatic recomputation
 │   │   ├── tokenize.ts        # Text tokenization
 │   │   ├── types.ts           # Core type definitions
 │   │   ├── export.ts          # CSV and PDF export utilities
@@ -206,31 +209,44 @@ interface DisplayToken extends Token {
 - **Focus Management**: Visual focus indicators with yellow outline rings
 - **Selection Rings**: Visual selection indicators for both tokens and groups
 
-### Terminal Group System
-- **TerminalGroup Component**: Unified React component that wraps ^ . ^ as single clickable units
-- **State Management**: Separate `tokenStates` and `groupStates` hooks with `TokState` type (ok/maybe/bad)
-- **GB State Mapping**: `bootstrapStatesFromGB()` maps GrammarBot categories to initial states
-- **Unified Cycling**: Single click handler cycles entire groups while maintaining individual token control
-- **Visual Synchronization**: All group members share colors, borders, and selection state
+### State Management System
+
+#### Token Component (`src/components/Token.tsx`)
+- **State Classes**: Every token has `state-ok`, `state-maybe`, or `state-bad` CSS classes
+- **Data Attributes**: Added `data-state` and `data-id` attributes for additional styling hooks
+- **Click Handling**: Only word tokens are clickable, with proper disabled state for other token types
+- **Type Safety**: Full TypeScript support with `TokenModel` interface
+
+#### TerminalGroup Component (`src/components/TerminalGroup.tsx`)
+- **Unified Wrapper**: Wraps `^ . ^` as single clickable units with unified borders
+- **State Management**: Uses `TerminalGroupModel` interface with proper state tracking
 - **Non-Interactive Children**: Inner tokens made non-interactive with `pointer-events: none`
 - **CSS Integration**: Comprehensive `.tg` styling with state-specific colors and borders
 - **Accessibility**: Full keyboard navigation and ARIA support for groups
 
-### GB State Mapping System (`src/lib/gb-map.ts`)
+#### State Management Hooks
 
-#### State Mapping Functions
-- `bootstrapStatesFromGB()`: Initializes token and terminal group states from GrammarBot data
+##### useTokensAndGroups (`src/lib/useTokensAndGroups.ts`)
+- **Immutable Updates**: Uses `useCallback` with `map()` for immutable state changes
+- **State Cycling**: Implements proper cycling: ok → maybe → bad → ok
+- **Debug Logging**: Temporary console.log statements for state verification
+- **Type Safety**: Full TypeScript support with proper interfaces
+
+##### useKPIs (`src/lib/useKPIs.ts`)
+- **Automatic Recomputation**: `useEffect` hook that recomputes KPIs when state changes
+- **Real-time Updates**: TWW, WSC, CWS calculations update automatically
+- **State Integration**: Respects current token and group state overrides
+- **Performance**: Efficient calculations with proper dependency tracking
+
+#### GB State Mapping (`src/lib/gb-map.ts`)
+- **Initial State Application**: `bootstrapStatesFromGB()` applies initial states from GB edits
 - **Category Mapping**: Maps GB error categories to initial UI states
   - `SPELL` → red (bad) on affected word tokens
-  - `PUNC` → yellow (maybe) for terminal groups at boundaries  
+  - `PUNC` → yellow (maybe) for terminal groups at boundaries
   - `GRMR` → yellow (maybe) on word tokens
+- **Token Model Creation**: Creates proper `TokenModel` objects with state information
 - **Terminal Group Creation**: Creates `TerminalGroupModel` objects for punctuation suggestions
-- **End-of-Text Filtering**: Ignores PUNC insertions at final text position
 
-#### Type Definitions
-- `TokState`: Union type for token states ('ok' | 'maybe' | 'bad')
-- `TerminalGroupModel`: Interface for terminal group data structure
-- `GBEdit`: Interface matching GrammarBot edit structure
 
 ### Automated Validation
 - **Spelling Detection**: GrammarBot-based spell checking
@@ -373,21 +389,18 @@ The tool implements scoring methods aligned with educational research:
 
 ## Recent Updates
 
-### Latest Improvements (v8.0) - Unified Terminal Group System & State Management
-- **TerminalGroup Component**: Created `src/components/TerminalGroup.tsx` that wraps `^ . ^` as single clickable units with unified borders
-- **GB State Mapping**: Implemented `src/lib/gb-map.ts` with `bootstrapStatesFromGB()` to map GB categories to initial states
-  - `SPELL` → red (bad) on affected word tokens
-  - `PUNC` → yellow (maybe) for terminal groups at boundaries
-  - `GRMR` → yellow (maybe) on word tokens
-- **State Cycling System**: Implemented green (ok) → yellow (maybe) → red (bad) → green (ok) cycling for both words and terminal groups
-- **Unified State Management**: Added `tokenStates` and `groupStates` hooks with separate state tracking for tokens and groups
-- **KPI Override System**: Updated `calcWSC()` and `calcCWS()` to respect current state overrides in real-time
-- **Terminal Group Rendering**: Integrated TerminalGroup component into paragraph rendering with proper group detection
-- **CSS Terminal Group Styles**: Added comprehensive `.tg`, `.tg--ok`, `.tg--maybe`, `.tg--bad` styling with proper color scheme
-- **Non-Interactive Children**: Inner tokens (carets and dots) are made non-interactive with `pointer-events: none`
-- **Paragraph Boundary Support**: Maintained existing paragraph handling with `.linebreak` styling for proper spacing
-- **Type Safety**: Full TypeScript support with `TokState` and `TerminalGroupModel` types
-- **Real-time Metrics**: KPI calculations now reflect user overrides immediately when states change
+### Latest Improvements (v8.0) - Comprehensive State Management System
+- **Token Component**: Created `src/components/Token.tsx` with proper state classes (`state-ok`, `state-maybe`, `state-bad`) and data attributes
+- **TerminalGroup Component**: Updated `src/components/TerminalGroup.tsx` to use new state management structure with proper CSS classes
+- **State CSS Variables**: Added comprehensive state CSS with CSS custom properties (`--c`, `--bg`, `--fg`) as single source of truth for colors
+- **Immutable State Management**: Implemented `src/lib/useTokensAndGroups.ts` hook with `useCallback` for immutable state updates using `map()` instead of mutations
+- **Automatic KPI Recomputation**: Added `src/lib/useKPIs.ts` hook with `useEffect` that automatically recomputes KPIs when token or group states change
+- **Initial State Application**: Enhanced `src/lib/gb-map.ts` with `bootstrapStatesFromGB()` to properly apply initial states from GB edits to tokens and groups
+- **Debug Logging**: Added temporary debug console.log statements to verify state application and track changes
+- **State Cycling**: Implemented proper cycling order: green → yellow → red → green (ok → maybe → bad → ok) for both words and terminal groups
+- **CSS Integration**: Comprehensive styling system with state-specific colors and proper inheritance for terminal group children
+- **Component Architecture**: Clean separation between Token and TerminalGroup components with proper interfaces and type safety
+- **Real-time Updates**: All state changes trigger automatic KPI recalculation and UI updates without manual intervention
 
 ### Previous Improvements (v6.4) - Enhanced Punctuation Handling & Interactive UI
 - **Terminal Punctuation Filtering**: Added filter in `gbToVT.ts` to exclude punctuation insertions at the very end of text (`e.start === text.length`)
