@@ -29,8 +29,9 @@ export function bootstrapStatesFromGB(
     state: 'ok' as TokState
   }));
 
-  // 2) Apply GB-driven states to words
+  // 2) Apply GB-driven states to words (ignore PUNC edits for word coloring)
   for (const e of edits) {
+    if (e.err_cat === 'PUNC') continue; // don't touch words; the terminal group visual handles it
     if (e.err_cat === 'SPELL') {
       for (const t of tokensInSpan(tokens, e.start, e.end)) {
         const tokenIndex = tokens.indexOf(t);
@@ -50,27 +51,13 @@ export function bootstrapStatesFromGB(
     }
   }
 
-  // 3) Create terminal groups (respecting paragraphs and suppressing very last terminal)
-  const terminalGroups: TerminalGroupModel[] = [];
-  const paragraphs = text.split(/\r?\n/);
-  const paragraphEndTokenIndices = getParagraphEndTokenIndices(paragraphs, tokens);
-  
-  for (const e of edits) {
-    if (e.err_cat === 'PUNC' && e.replace === '.' && e.start < text.length) {
-      const beforeWordIdx = wordIndexEndingAt(tokens, e.start);
-      if (beforeWordIdx != null) {
-        // Check if this is at the very end of the whole text block
-        const isLastParagraph = paragraphEndTokenIndices.length > 0 && 
-          paragraphEndTokenIndices[paragraphEndTokenIndices.length - 1] === tokens.length - 1;
-        const isLastTokenOverall = beforeWordIdx === tokens.length - 1;
-        
-        // Skip if this is the last paragraph and its end token is also the last token overall
-        if (!(isLastParagraph && isLastTokenOverall)) {
-          terminalGroups.push(makeTerminalGroup(tokens, beforeWordIdx, 'maybe'));
-        }
-      }
-    }
-  }
+  // 3) Build terminal groups using the new deduplication logic
+  const gbInserts = edits
+    .filter(e => e.err_cat === 'PUNC' && e.edit_type === 'INSERT' && e.replace === '.')
+    .map(e => ({ boundaryIdx: mapOffsetToBoundaryIndex(e.start, tokens) }));
+
+  const paragraphs = getParagraphs(text, tokens);
+  const terminalGroups = buildTerminalGroups(tokens, gbInserts, paragraphs);
 
   return { tokenModels, terminalGroups };
 }
@@ -93,21 +80,19 @@ function wordIndexEndingAt(tokens: Token[], offset: number): number | null {
   return null;
 }
 
-function makeTerminalGroup(tokens: Token[], wordIdx: number, state: TokState): TerminalGroupModel {
-  return {
-    id: `tg-${wordIdx}`,
-    state,
-    leftIdx: wordIdx,
-    dotIdx: wordIdx + 1,
-    rightIdx: wordIdx + 2
-  };
+function mapOffsetToBoundaryIndex(offset: number, tokens: Token[]): number {
+  // Find the token that contains or is after this offset
+  const tokenIndex = tokens.findIndex(t => t.start >= offset);
+  if (tokenIndex === -1) {
+    // Offset is after all tokens, so it's the end boundary
+    return tokens.length;
+  }
+  return tokenIndex;
 }
 
-/**
- * Get the end token index for each paragraph
- */
-function getParagraphEndTokenIndices(paragraphs: string[], tokens: Token[]): number[] {
-  const endIndices: number[] = [];
+function getParagraphs(text: string, tokens: Token[]): Array<{ start: number; end: number }> {
+  const paragraphs = text.split(/\r?\n/);
+  const result: Array<{ start: number; end: number }> = [];
   let currentOffset = 0;
   
   for (let i = 0; i < paragraphs.length; i++) {
@@ -125,12 +110,68 @@ function getParagraphEndTokenIndices(paragraphs: string[], tokens: Token[]): num
     }
     
     if (endTokenIdx !== -1) {
-      endIndices.push(endTokenIdx);
+      // Find the first token in this paragraph
+      let startTokenIdx = -1;
+      for (let j = 0; j < tokens.length; j++) {
+        if (tokens[j].start >= currentOffset) {
+          startTokenIdx = j;
+          break;
+        }
+      }
+      
+      if (startTokenIdx !== -1) {
+        result.push({ start: startTokenIdx, end: endTokenIdx });
+      }
     }
     
     // Move to next paragraph (accounting for newline)
     currentOffset = paragraphEndOffset + 1; // +1 for the newline
   }
   
-  return endIndices;
+  return result;
 }
+
+function buildTerminalGroups(
+  tokens: Token[],
+  gbInserts: Array<{ boundaryIdx: number }>,
+  paragraphs: Array<{ start: number; end: number }>,
+): TerminalGroupModel[] {
+  const groups: TerminalGroupModel[] = [];
+  const byAnchor = new Map<number, TerminalGroupModel>();
+
+  const add = (anchorIndex: number, status: TokState, source: 'GB'|'PARA') => {
+    if (byAnchor.has(anchorIndex)) return;                  // ✅ de-dupe
+    const g: TerminalGroupModel = { 
+      id: `tg-${anchorIndex}`, 
+      anchorIndex, 
+      status, 
+      selected: false, 
+      source 
+    };
+    byAnchor.set(anchorIndex, g);
+    groups.push(g);
+  };
+
+  // A) GB '.' inserts → maybe
+  for (const e of gbInserts) {
+    add(e.boundaryIdx, 'maybe', 'GB');
+  }
+
+  // B) Paragraph end terminals → maybe (except last paragraph and empty paras)
+  paragraphs.forEach((p, i) => {
+    const isLastPara = i === paragraphs.length - 1;
+    // find last *word* token in the paragraph
+    let lastWordIdx = -1;
+    for (let k = p.end; k >= p.start; k--) {
+      if (tokens[k]?.type === 'WORD') { lastWordIdx = k; break; }
+    }
+    const isEmpty = lastWordIdx === -1;
+    if (isEmpty || isLastPara) return;                      // ✅ skip empty & final block
+
+    const anchor = lastWordIdx + 1;
+    add(anchor, 'maybe', 'PARA');                           // ✅ add only if not already added by GB
+  });
+
+  return groups;
+}
+

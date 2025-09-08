@@ -3,12 +3,11 @@ import React from 'react';
 export type TGState = 'ok' | 'maybe' | 'bad';
 
 export interface TerminalGroupModel {
-  id: string;
-  state: TGState;
-  leftIdx: number;
-  dotIdx: number;
-  rightIdx: number;
-  selected?: boolean;
+  id: string;              // "tg-<anchorIndex>"
+  anchorIndex: number;     // boundary index *after* the word
+  status: TGState;         // 'ok' | 'maybe' | 'bad'
+  selected: boolean;
+  source: 'GB' | 'PARA';
 }
 
 // keep these as plain string literals so Tailwind can see them (and we safelist them anyway)
@@ -31,23 +30,24 @@ export function TerminalGroup({
   id,
   status,
   selected,
-  onClick,
+  onToggle,
 }: {
   id: string;
   status: 'ok'|'maybe'|'bad';
   selected: boolean;
-  onClick: (id: string) => void;
+  onToggle: (id: string) => void;
 }) {
   return (
     <button
       type="button"
       className={bubbleCls(status, selected)}
-      onClick={() => onClick(id)}
+      onClick={() => onToggle(id)}
       title="Terminal punctuation suggestion"
     >
-      <span className="select-none">^</span>
-      <span className="mx-1 select-none">.</span>
-      <span className="select-none">^</span>
+      {/* make inner glyphs non-clickable & inherit color from parent */}
+      <span className="pointer-events-none select-none">^</span>
+      <span className="mx-1 pointer-events-none select-none">.</span>
+      <span className="pointer-events-none select-none">^</span>
     </button>
   );
 }

@@ -61,11 +61,15 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 
 ## Recent Improvements
 
-### State Management Refactoring
-- **Immutable State Updates**: Replaced mutation-based state with immutable patterns using `setUi(prev => ({ ...prev, ... }))`
-- **Derived KPIs**: KPIs now automatically recalculate using `useMemo` when UI state changes
-- **Centralized Status Classes**: All status colors defined as static string literals with Tailwind safelist protection
-- **Single Clickable Terminal Groups**: Terminal groups (^ . ^) are now single buttons that toggle the entire group together
+### Terminal Group System Overhaul (v8.1)
+- **Single Clickable Units**: Terminal groups (^ . ^) are now single buttons that toggle the entire group together
+- **Non-Interactive Glyphs**: Inner glyphs use `pointer-events-none` to prevent individual clicks on carets/dots
+- **Unified State Management**: Single click handler cycles entire terminal groups while maintaining individual token control
+- **Deduplication Logic**: New `buildTerminalGroups` function eliminates duplicate "^ . ^ . ^" triples at paragraph breaks
+- **Boundary-Based Grouping**: Groups are deduplicated by boundary index to prevent overlapping suggestions
+- **Source Tracking**: Terminal groups track their source ('GB' for GrammarBot, 'PARA' for paragraph fallback)
+- **Clean Word Coloring**: Words before terminal groups are no longer colored by PUNC edits
+- **Enhanced UX**: Single-click interaction model with proper visual feedback and state cycling
 
 ### Paragraph-Aware Terminal Insertion
 - **Respects Paragraph Boundaries**: Terminal punctuation only added at paragraph ends, not arbitrary positions
