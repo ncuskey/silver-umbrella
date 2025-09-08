@@ -93,14 +93,14 @@
   padding: .1rem .35rem;
 }
 
-/* insertion pill (the suggested '.'/ '!' / '?') */
-.pill-insert {
-  background: #e0f2fe;         /* light blue */
-  color: #075985;              /* slate blue text */
-  border-radius: 9999px;
-  padding: .05rem .35rem;
-  line-height: 1.1;
-  font-weight: 600;
+/* insertion dot (the suggested '.'/ '!' / '?') */
+.insert-dot {
+  color: #f59e0b;             /* match caret-active */
+  font-weight: 700;
+  line-height: 1;
+  /* keep it compact like a token but with no pill background */
+  padding: 0;
+  margin: 0 2px;
 }
 
 .tokens .dot {
@@ -120,4 +120,11 @@
   display: inline-flex;
   align-items: center;
   flex: 0 0 auto;     /* don't grow or shrink */
+}
+
+/* Visible focus ring for a11y */
+.is-focused {
+  outline: 2px solid #f59e0b;      /* yellow ring */
+  outline-offset: 2px;
+  border-radius: 6px;
 }

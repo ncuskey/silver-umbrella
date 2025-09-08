@@ -217,6 +217,27 @@ function WritingScorer() {
   const [pairOverrides, setPairOverrides] = useState<PairOverrides>({});
   // Always-on flags (since the toggle is gone)
   const showInfractions = true;
+  
+  // Focus state for clickable elements
+  const [focus, setFocus] = useState<{type:"caret"|"token"; index:number} | null>(null);
+
+  // Click and keyboard handlers
+  const onCaretClick = (i: number) => setFocus({ type: "caret", index: i });
+  const onTokenClick = (i: number) => setFocus({ type: "token", index: i });
+
+  const onKey = (e: React.KeyboardEvent, type: "caret" | "token", i: number) => {
+    if (e.key === "Enter" || e.key === " ") { 
+      e.preventDefault(); 
+      setFocus({ type, index: i }); 
+    }
+    if (e.key === "ArrowLeft" && focus) {
+      setFocus({ ...focus, index: Math.max(0, focus.index - 1) });
+    }
+    if (e.key === "ArrowRight" && focus) {
+      const max = type === "caret" ? displayTokens.length : displayTokens.length - 1;
+      setFocus({ ...focus, index: Math.min(max, focus.index + 1) });
+    }
+  };
 
   // If code referenced custom lexicon, freeze it empty:
   const customLexicon = useMemo(() => new Set<string>(), []);
@@ -314,6 +335,7 @@ function WritingScorer() {
       }
 
       // 3) token after boundary b (for b < N)
+      // Don't alter token styles for terminal groups - leave t.ui as-is (spell/other only)
       if (b < N) {
         const t = displayTokens[b];
         cells.push({ kind: "token", text: t.overlay ?? t.raw, ui: t.ui, i: b });
@@ -497,24 +519,32 @@ function WritingScorer() {
                 c.kind === "caret" ? (
                   <span
                     key={`c-${idx}`}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => onCaretClick(c.i)}
+                    onKeyDown={(e) => onKey(e, "caret", c.i)}
                     className={`cbm-cell ${c.caret === "active" ? "caret-active" : "caret-ghost"} ${
                       c.synthetic ? "caret-sibling" : ""
-                    }`}
-                    aria-label={`boundary-${c.i}${c.synthetic ? "-after-insert" : ""}`}
+                    } ${focus?.type === "caret" && focus.index === c.i ? "is-focused" : ""}`}
+                    aria-label={`boundary ${c.i}`}
                   >
                     ^
                   </span>
                 ) : c.kind === "insert" ? (
-                  <span key={`i-${idx}`} className="cbm-cell pill-insert" aria-label="inserted-punctuation">
+                  <span key={`i-${idx}`} className="cbm-cell insert-dot" aria-label="inserted-punctuation">
                     {c.text}
                   </span>
                 ) : (
                   <span
                     key={`t-${idx}`}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => onTokenClick(c.i)}
+                    onKeyDown={(e) => onKey(e, "token", c.i)}
                     className={`cbm-cell ${
                       c.ui === "incorrect" ? "pill-incorrect" :
                       c.ui === "possible"  ? "pill-possible"  : "pill-correct"
-                    }`}
+                    } ${focus?.type === "token" && focus.index === c.i ? "is-focused" : ""}`}
                   >
                     {c.text}
                   </span>

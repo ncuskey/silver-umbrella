@@ -498,7 +498,19 @@ The tool implements scoring methods aligned with educational research:
 - **Type Safety**: Added proper TypeScript types for `CaretState` and `Cell` union types
 - **Debug Enhancement**: Console logging now shows correct caret count (N+1) and final boundary index for end-of-text insertions
 
-#### Recent Improvements (v6.3) - GB Insertion Display System
+#### Latest Improvements (v6.4) - Enhanced Punctuation Handling & Interactive UI
+- **Terminal Punctuation Filtering**: Added filter in `gbToVT.ts` to exclude punctuation insertions at the very end of text (`e.start === text.length`)
+- **Clean Visual Hierarchy**: Removed word highlighting for terminal groups - tokens maintain their original styling (spell/other only)
+- **Yellow Dot Styling**: Replaced blue pill insertion styling with minimal yellow dots (`.insert-dot`) matching active caret color (`#f59e0b`)
+- **Interactive Elements**: Made all carets and tokens clickable with full keyboard navigation support
+- **Focus Management**: Added focus state system with visual feedback (yellow outline ring) for accessibility
+- **Keyboard Navigation**: Arrow keys for navigation, Enter/Space for selection, proper ARIA labels and roles
+- **Enhanced Accessibility**: Added `role="button"`, `tabIndex={0}`, and comprehensive keyboard event handling
+- **CSS Improvements**: Added `.is-focused` class for accessibility focus indicators and updated insertion styling
+- **User Experience**: Clickable interface allows users to interact with and navigate through carets and tokens
+- **Visual Consistency**: Yellow insertion dots now match the active caret color for cohesive design
+
+#### Previous Improvements (v6.3) - GB Insertion Display System
 - **GB Insertion Pills**: New blue pill system displays suggested punctuation insertions from GrammarBot
 - **Synthetic Caret System**: Additional carets after each insertion create proper visual grouping (`^ . ^` pattern)
 - **Boundary Grouping**: `groupInsertionsByBoundary()` function in `src/lib/gbAnnotate.ts` organizes insertions by boundary index

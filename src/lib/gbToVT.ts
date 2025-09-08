@@ -39,6 +39,9 @@ export function gbEditsToInsertions(
     const term = termFromReplace(original, e.replace ?? "");
     if (!term) continue;             // only act on terminal punctuation proposals
 
+    // Filter out punctuation insertions at the very end of the text
+    if (e.start === text.length) continue;
+
     // tokens after the edit end → next sentence start region
     const nextIdx = tokens.findIndex(t => t.start >= e.end);
     const anchor = nextIdx >= 0 ? nextIdx : tokens.length;
