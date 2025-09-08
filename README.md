@@ -15,6 +15,10 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 - Aligned target and attempt word lists
 
 ### Advanced Features
+- **Terminal Group System**: Unified (^ . ^) groups as single, clickable units with synchronized state management
+- **Group State Management**: Separate state tracking for individual tokens and terminal groups with independent cycling
+- **Unified Group Cycling**: Single click handler cycles entire terminal groups while maintaining individual token control
+- **Visual Synchronization**: All members of terminal groups share colors, selection state, and visual feedback
 - **GrammarBot API**: Professional spell checking and grammar analysis via GrammarBot's neural API
 - **GrammarBot Integration**: Professional spell checking and grammar checking via GrammarBot API
 - **Spell Engine Status**: Visual indicator showing GrammarBot spell checking mode
@@ -450,7 +454,20 @@ The tool is designed for easy extension:
 
 ## Recent Updates
 
-### Latest Improvements (v6.3) - GB Insertion Display System
+### Latest Improvements (v7.0) - Terminal Group Functionality & KPI Calculations
+- **Terminal Group System**: Implemented unified terminal group functionality treating (^ . ^) as single, clickable units
+- **Group ID Assignment**: Added `groupByBoundary` mapping to assign unique group IDs to terminal groups
+- **Unified State Management**: Added `tokenUi` and `groupUi` state hooks for separate token and group state management
+- **Group Cycling**: Single click handler cycles entire terminal groups while maintaining individual token control
+- **Visual Synchronization**: All members of a terminal group (carets and dots) share the same visual state and selection ring
+- **KPI Integration**: Wired TWW, WSC, and CWS calculations directly to GrammarBot issues for real-time accuracy
+- **CWS Rule Implementation**: Proper CWS scoring with capitalization rules, terminal punctuation handling, and comma exclusion
+- **Enhanced Accessibility**: Full keyboard navigation and ARIA support for terminal groups
+- **CSS Terminal Group Styles**: Added comprehensive styling for `.cbm.token`, `.cbm.caret`, and `.cbm.insert-dot` states
+- **Selection Indicators**: Visual selection rings (`.is-selected`) for both tokens and groups
+- **Real-time Metrics**: Automatic KPI updates based on GrammarBot analysis with proper error handling
+
+### Previous Improvements (v6.3) - GB Insertion Display System
 - **GB Insertion Pills**: New blue pill system displays suggested punctuation insertions from GrammarBot
 - **Synthetic Caret System**: Additional carets after each insertion create proper visual grouping (`^ . ^` pattern)
 - **Boundary Grouping**: `groupInsertionsByBoundary()` function organizes insertions by boundary index

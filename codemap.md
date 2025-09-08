@@ -70,10 +70,12 @@
 
 **Key Features**:
 - **Written Expression Scoring**: TWW, WSC, CWS calculations with derived metrics
+- **Terminal Group Functionality**: Unified (^ . ^) groups as single, clickable units with synchronized state
 - **Spelling Assessment**: CLS (Correct Letter Sequences) scoring
 - **GrammarBot Integration**: Professional spell checking and grammar analysis via GrammarBot API
-- **Interactive UI**: Clickable carets and tokens with keyboard navigation
-- **Focus Management**: Visual focus indicators for accessibility
+- **Interactive UI**: Clickable carets, tokens, and terminal groups with keyboard navigation
+- **Group State Management**: Separate state tracking for individual tokens and terminal groups
+- **Focus Management**: Visual focus indicators and selection rings for accessibility
 - **Export Functionality**: CSV audit export and PDF report generation
 - **Responsive Design**: Mobile-friendly interface with flex layout
 
@@ -95,14 +97,14 @@
 
 2. **WSC (Words Spelled Correctly)**
    - Uses GrammarBot API for professional spell checking
-   - Supports manual overrides
-   - Implementation: `computeWSC()`
+   - Supports manual overrides via terminal group cycling
+   - Implementation: `calcWSC()` with `spellErrorSetFromGB()`
 
 3. **CWS (Correct Writing Sequences)**
    - Adjacent unit pairs across words and punctuation
-   - Excludes commas
-   - Rule-based validation (capitalization, terminals)
-   - Implementation: `computeCWS()`
+   - Excludes commas from CWS calculations
+   - Rule-based validation (capitalization after terminals, spelling accuracy)
+   - Implementation: `calcCWS()` with `capitalizationFixWordSet()` and `terminalBoundarySet()`
 
 #### Spelling Metrics
 
@@ -176,6 +178,8 @@ interface DisplayToken extends Token {
 - **Caret Styles**: Ghost (25% opacity) and active (yellow) caret states
 - **Token Styles**: Correct (green), possible (amber), incorrect (red) pill styles
 - **Insertion Styles**: Yellow dot styling for punctuation insertions
+- **Terminal Group Styles**: Unified styling for `.cbm.token`, `.cbm.caret`, and `.cbm.insert-dot` states
+- **Selection Indicators**: Visual selection rings (`.is-selected`) for both tokens and groups
 
 #### Utility Functions (`src/lib/utils.ts`)
 - `cn()`: Combines clsx and tailwind-merge for conditional classes
@@ -188,10 +192,21 @@ interface DisplayToken extends Token {
 
 ### Interactive Scoring
 - **Word Overrides**: Click words to toggle WSC scoring
+- **Terminal Group Cycling**: Click any member of (^ . ^) groups to cycle entire group state
+- **Unified Group State**: All members of terminal groups maintain synchronized visual state
 - **Caret Navigation**: Click carets (^) to cycle CWS states
 - **Visual Feedback**: Color-coded indicators for correct/incorrect/advisory
 - **Keyboard Navigation**: Arrow keys, Enter/Space for accessibility
 - **Focus Management**: Visual focus indicators with yellow outline rings
+- **Selection Rings**: Visual selection indicators for both tokens and groups
+
+### Terminal Group System
+- **Group ID Assignment**: Unique group IDs assigned to terminal groups (^ . ^)
+- **State Management**: Separate `tokenUi` and `groupUi` state hooks for independent control
+- **Unified Cycling**: Single click handler cycles entire groups while maintaining token control
+- **Visual Synchronization**: All group members share colors and selection state
+- **Accessibility**: Full keyboard navigation and ARIA support for groups
+- **CSS Integration**: Comprehensive styling for group states and selection indicators
 
 ### Automated Validation
 - **Spelling Detection**: GrammarBot-based spell checking
@@ -334,7 +349,20 @@ The tool implements scoring methods aligned with educational research:
 
 ## Recent Updates
 
-### Latest Improvements (v6.4) - Enhanced Punctuation Handling & Interactive UI
+### Latest Improvements (v7.0) - Terminal Group Functionality & KPI Calculations
+- **Terminal Group System**: Implemented unified terminal group functionality treating (^ . ^) as single, clickable units
+- **Group ID Assignment**: Added `groupByBoundary` mapping to assign unique group IDs to terminal groups
+- **Unified State Management**: Added `tokenUi` and `groupUi` state hooks for separate token and group state management
+- **Group Cycling**: Single click handler cycles entire terminal groups while maintaining individual token control
+- **Visual Synchronization**: All members of a terminal group (carets and dots) share the same visual state and selection ring
+- **KPI Integration**: Wired TWW, WSC, and CWS calculations directly to GrammarBot issues for real-time accuracy
+- **CWS Rule Implementation**: Proper CWS scoring with capitalization rules, terminal punctuation handling, and comma exclusion
+- **Enhanced Accessibility**: Full keyboard navigation and ARIA support for terminal groups
+- **CSS Terminal Group Styles**: Added comprehensive styling for `.cbm.token`, `.cbm.caret`, and `.cbm.insert-dot` states
+- **Selection Indicators**: Visual selection rings (`.is-selected`) for both tokens and groups
+- **Real-time Metrics**: Automatic KPI updates based on GrammarBot analysis with proper error handling
+
+### Previous Improvements (v6.4) - Enhanced Punctuation Handling & Interactive UI
 - **Terminal Punctuation Filtering**: Added filter in `gbToVT.ts` to exclude punctuation insertions at the very end of text (`e.start === text.length`)
 - **Clean Visual Hierarchy**: Removed word highlighting for terminal groups - tokens maintain their original styling (spell/other only)
 - **Yellow Dot Styling**: Replaced blue pill insertion styling with minimal yellow dots (`.insert-dot`) matching active caret color (`#f59e0b`)
