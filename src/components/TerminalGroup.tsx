@@ -1,32 +1,32 @@
 import React from 'react';
 
-export type State = 'ok' | 'maybe' | 'bad';
+export type TGState = 'ok' | 'maybe' | 'bad';
+
+export interface TerminalGroupModel {
+  id: string;
+  state: TGState;
+  leftIdx: number;
+  dotIdx: number;
+  rightIdx: number;
+}
 
 export function TerminalGroup({
-  id,
-  state,
+  group,
   onToggle,
-  leftIdx, 
-  dotIdx, 
-  rightIdx,
   children,
 }: {
-  id: string; 
-  state: State;
+  group: TerminalGroupModel;
   onToggle: (id: string) => void;
-  leftIdx: number; 
-  dotIdx: number; 
-  rightIdx: number;
-  children: React.ReactNode;
+  children: React.ReactNode; // renders ^ . ^
 }) {
   return (
     <span
-      className={`tg tg--${state}`}
-      data-group-id={id}
-      onClick={() => onToggle(id)}
+      className={`tg state-${group.state}`}
+      data-group-id={group.id}
+      data-state={group.state}
+      onClick={() => onToggle(group.id)}
       title="Terminal punctuation suggestion"
     >
-      {/* make the inner tokens visually styled but not clickable */}
       <span className="tg__inner" aria-hidden>{children}</span>
     </span>
   );

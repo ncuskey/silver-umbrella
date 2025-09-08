@@ -454,18 +454,18 @@ The tool is designed for easy extension:
 
 ## Recent Updates
 
-### Latest Improvements (v7.0) - Terminal Group Functionality & KPI Calculations
-- **Terminal Group System**: Implemented unified terminal group functionality treating (^ . ^) as single, clickable units
-- **Group ID Assignment**: Added `groupByBoundary` mapping to assign unique group IDs to terminal groups
-- **Unified State Management**: Added `tokenUi` and `groupUi` state hooks for separate token and group state management
-- **Group Cycling**: Single click handler cycles entire terminal groups while maintaining individual token control
-- **Visual Synchronization**: All members of a terminal group (carets and dots) share the same visual state and selection ring
-- **KPI Integration**: Wired TWW, WSC, and CWS calculations directly to GrammarBot issues for real-time accuracy
-- **CWS Rule Implementation**: Proper CWS scoring with capitalization rules, terminal punctuation handling, and comma exclusion
-- **Enhanced Accessibility**: Full keyboard navigation and ARIA support for terminal groups
-- **CSS Terminal Group Styles**: Added comprehensive styling for `.cbm.token`, `.cbm.caret`, and `.cbm.insert-dot` states
-- **Selection Indicators**: Visual selection rings (`.is-selected`) for both tokens and groups
-- **Real-time Metrics**: Automatic KPI updates based on GrammarBot analysis with proper error handling
+### Latest Improvements (v8.0) - Comprehensive State Management System
+- **Token Component**: Created `src/components/Token.tsx` with proper state classes (`state-ok`, `state-maybe`, `state-bad`) and data attributes
+- **TerminalGroup Component**: Updated `src/components/TerminalGroup.tsx` to use new state management structure with proper CSS classes
+- **State CSS Variables**: Added comprehensive state CSS with CSS custom properties (`--c`, `--bg`, `--fg`) as single source of truth for colors
+- **Immutable State Management**: Implemented `useTokensAndGroups` hook with `useCallback` for immutable state updates using `map()` instead of mutations
+- **Automatic KPI Recomputation**: Added `useKPIs` hook with `useEffect` that automatically recomputes KPIs when token or group states change
+- **Initial State Application**: Enhanced `bootstrapStatesFromGB` to properly apply initial states from GB edits to tokens and groups
+- **Debug Logging**: Added temporary debug console.log statements to verify state application and track changes
+- **State Cycling**: Implemented proper cycling order: green → yellow → red → green (ok → maybe → bad → ok) for both words and terminal groups
+- **CSS Integration**: Comprehensive styling system with state-specific colors and proper inheritance for terminal group children
+- **Component Architecture**: Clean separation between Token and TerminalGroup components with proper interfaces and type safety
+- **Real-time Updates**: All state changes trigger automatic KPI recalculation and UI updates without manual intervention
 
 ### Previous Improvements (v6.3) - GB Insertion Display System
 - **GB Insertion Pills**: New blue pill system displays suggested punctuation insertions from GrammarBot
