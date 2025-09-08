@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**CBM Writing & Spelling Tool** is a comprehensive TypeScript React web application for Curriculum-Based Measurement (CBM) writing and spelling assessment. Built with Next.js 15, it provides automated scoring for educational assessments with interactive override capabilities and professional spell checking via LanguageTool API.
+**CBM Writing & Spelling Tool** is a comprehensive TypeScript React web application for Curriculum-Based Measurement (CBM) writing and spelling assessment. Built with Next.js 15, it provides automated scoring for educational assessments with interactive override capabilities and professional spell checking via GrammarBot API.
 
 ## Architecture
 
@@ -13,7 +13,7 @@
 - **Animations**: Framer Motion
 - **Icons**: Lucide React
 - **Build Tools**: PostCSS, Autoprefixer
-- **Spell Checking**: LanguageTool API
+- **Spell Checking**: GrammarBot API
 - **Bundle Analysis**: @next/bundle-analyzer
 
 ### Project Structure
@@ -23,8 +23,8 @@
 ├── src/
 │   ├── app/                    # Next.js App Router
 │   │   ├── api/               # API routes
-│   │   │   └── languagetool/  # LanguageTool proxy endpoint
-│   │   │       └── route.ts   # Proxy route for grammar checking
+│   │   │   └── grammarbot/    # GrammarBot proxy endpoint
+│   │   │       └── v1/check/route.ts # Proxy route for grammar checking
 │   │   ├── globals.css        # Global styles with CSS variables
 │   │   ├── layout.tsx         # Root layout component
 │   │   ├── page.tsx           # Main application component
