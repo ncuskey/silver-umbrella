@@ -18,6 +18,14 @@
 
 ### Recent Architectural Improvements
 
+#### Terminal Group System Overhaul (v8.1)
+- **Single Clickable Units**: Terminal groups (^ . ^) implemented as single buttons with non-interactive inner glyphs
+- **Deduplication Logic**: New `buildTerminalGroups` function eliminates duplicate "^ . ^ . ^" triples at paragraph breaks
+- **Boundary-Based Grouping**: Groups deduplicated by boundary index using `Map<number, TerminalGroupModel>`
+- **Source Tracking**: Terminal groups track their source ('GB' for GrammarBot, 'PARA' for paragraph fallback)
+- **Clean Word Coloring**: Words before terminal groups no longer colored by PUNC edits
+- **Enhanced UX**: Single-click interaction model with proper visual feedback and state cycling
+
 #### State Management Refactoring
 - **Immutable State Pattern**: All state updates use immutable patterns with `setUi(prev => ({ ...prev, ... }))`
 - **Derived KPIs**: KPIs automatically recalculate using `useMemo` when UI state changes
@@ -26,7 +34,7 @@
 
 #### Component Architecture
 - **Centralized Status Classes**: Static string literals for Tailwind classes with safelist protection
-- **Single Clickable Terminal Groups**: Terminal groups (^ . ^) implemented as single buttons
+- **Non-Interactive Glyphs**: Inner glyphs use `pointer-events-none` to prevent individual clicks
 - **Consistent Styling**: `bubbleCls()` function provides uniform styling across all token types
 - **Paragraph-Aware Logic**: Terminal insertion respects paragraph boundaries and suppresses end-of-text terminals
 

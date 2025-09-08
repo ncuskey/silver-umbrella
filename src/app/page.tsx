@@ -378,29 +378,29 @@ function WritingScorer() {
       setSelected({ type: "token", id: c.ti });
     }
     if (c.kind === "insert" || (c.kind === "caret" && c.groupId)) {
-      onTerminalGroupClick(c.groupId!.toString());
+      onTerminalGroupToggle(c.groupId!.toString());
       setSelected({ type: "group", id: c.groupId!.toString() });
     }
     // plain caret (no group) does nothing
   }
 
   // Helper function to cycle through statuses
-  const cycleStatus = (s: 'ok'|'maybe'|'bad'): 'ok'|'maybe'|'bad' =>
+  const cycle = (s: 'ok'|'maybe'|'bad'): 'ok'|'maybe'|'bad' =>
     s === 'ok' ? 'maybe' : s === 'maybe' ? 'bad' : 'ok';
 
   // Click handlers for tokens and groups
   const onTokenClick = (idx: number) => {
     setUi(prev => ({
       ...prev,
-      tokens: prev.tokens.map((t, i) => i === idx ? { ...t, state: cycleStatus(t.state), selected: !t.selected } : t)
+      tokens: prev.tokens.map((t, i) => i === idx ? { ...t, state: cycle(t.state), selected: !t.selected } : t)
     }));
   };
 
-  const onTerminalGroupClick = (id: string) => {
+  const onTerminalGroupToggle = (id: string) => {
     setUi(prev => ({
       ...prev,
       terminalGroups: prev.terminalGroups.map(g =>
-        g.id === id ? { ...g, state: cycleStatus(g.state), selected: !g.selected } : g
+        g.id === id ? { ...g, status: cycle(g.status), selected: !g.selected } : g
       ),
     }));
   };
@@ -417,13 +417,13 @@ function WritingScorer() {
     }
     if (c.kind === "insert") {
       const group = ui.terminalGroups.find(g => g.id === c.groupId?.toString());
-      const state = group?.state ?? "maybe";
+      const state = group?.status ?? "maybe";
       const selected = isSel("group", c.groupId?.toString() ?? "");
       return bubbleCls(state, selected);
     }
     if (c.kind === "caret") {
       const group = c.groupId ? ui.terminalGroups.find(g => g.id === c.groupId?.toString()) : null;
-      const state = group?.state ?? "ok";
+      const state = group?.status ?? "ok";
       const selected = Boolean(c.groupId && isSel("group", c.groupId?.toString() ?? ""));
       return bubbleCls(state, selected);
     }
@@ -650,7 +650,7 @@ function WritingScorer() {
 
     // CWS: boundaries between tokens that are part of a correct adjacent pair (word + terminal punctuation)
     // We treat terminal groups as the punctuation.
-    const terminals = new Set(ui.terminalGroups.map(g => g.leftIdx)); // leftIdx: where group attaches
+    const terminals = new Set(ui.terminalGroups.map(g => g.anchorIndex)); // anchorIndex: where group attaches
     let cws = 0, eligible = 0;
 
     for (let i = 0; i < ui.tokens.length - 1; i++) {
@@ -661,7 +661,7 @@ function WritingScorer() {
         eligible++;
         const aOk = a.state === 'ok';
         const bOk = terminals.has(i+1)
-          ? ui.terminalGroups.find(g => g.leftIdx === i+1)?.state === 'ok'
+          ? ui.terminalGroups.find(g => g.anchorIndex === i+1)?.status === 'ok'
           : (b.kind === 'word' ? b.state === 'ok' : false);
         if (aOk && bOk) cws++;
       }
@@ -858,9 +858,9 @@ function WritingScorer() {
                           <TerminalGroup
                             key={`tg-${pIdx}-${idx}`}
                             id={group.id}
-                            status={group.state}
+                            status={group.status}
                             selected={selected}
-                            onClick={onTerminalGroupClick}
+                            onToggle={onTerminalGroupToggle}
                           />
                         );
                       }

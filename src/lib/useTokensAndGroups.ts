@@ -22,13 +22,13 @@ export function useTokensAndGroups() {
 
   const toggleTerminal = useCallback((id: string) => {
     setGroups(prev => prev.map(g => 
-      g.id === id ? { ...g, state: cycle[g.state] } : g
+      g.id === id ? { ...g, status: cycle[g.status] } : g
     ));
   }, []);
 
   // Debug logging
   console.log('[UI] tokens', tokens.map(t => `${t.text}:${t.state}`));
-  console.log('[UI] groups', groups.map(g => `${g.id}:${g.state}`));
+  console.log('[UI] groups', groups.map(g => `${g.id}:${g.status}`));
 
   return { 
     tokens, 
