@@ -9,7 +9,7 @@
 ### Technology Stack
 - **Framework**: Next.js 15 with App Router
 - **Language**: TypeScript (ES2022 target)
-- **Styling**: Tailwind CSS with shadcn/ui components and safelist protection
+- **Styling**: Tailwind CSS with shadcn/ui components and comprehensive safelist protection
 - **Animations**: Framer Motion
 - **Icons**: Lucide React
 - **Build Tools**: PostCSS, Autoprefixer
@@ -25,6 +25,8 @@
 - **Source Tracking**: Terminal groups track their source ('GB' for GrammarBot, 'PARA' for paragraph fallback)
 - **Clean Word Coloring**: Words before terminal groups no longer colored by PUNC edits
 - **Enhanced UX**: Single-click interaction model with proper visual feedback and state cycling
+- **Immediate KPI Updates**: Click handlers trigger instant KPI recalculation with console logging
+- **Tailwind Color Safelist**: Comprehensive safelist ensures all dynamic color classes render properly
 
 #### State Management Refactoring
 - **Immutable State Pattern**: All state updates use immutable patterns with `setUi(prev => ({ ...prev, ... }))`
@@ -37,6 +39,13 @@
 - **Non-Interactive Glyphs**: Inner glyphs use `pointer-events-none` to prevent individual clicks
 - **Consistent Styling**: `bubbleCls()` function provides uniform styling across all token types
 - **Paragraph-Aware Logic**: Terminal insertion respects paragraph boundaries and suppresses end-of-text terminals
+
+#### Tailwind Configuration (`tailwind.config.ts`)
+- **Comprehensive Safelist**: All dynamic color classes safelisted to prevent purge issues
+- **Terminal Group Colors**: Emerald, amber, and rose colors for status indicators
+- **UI Component Colors**: Slate, blue, and red variants for buttons and info boxes
+- **Hover States**: Interactive element hover effects properly safelisted
+- **Ring and Selection Styles**: Selection indicators and focus states protected
 
 ### Project Structure
 
@@ -260,6 +269,18 @@ interface DisplayToken extends Token {
 - **State Integration**: Respects current token and group state overrides
 - **Performance**: Efficient calculations with proper dependency tracking
 
+##### computeKpis (`src/lib/computeKpis.ts`)
+- **Immediate KPI Computation**: Pure function that calculates KPIs from current state
+- **Interleaved Sequence Logic**: Builds sequence of words and terminal groups for CWS calculation
+- **Status-based Scoring**: Uses current status values to determine correct/incorrect sequences
+- **Performance Optimized**: Efficient calculations with proper type safety
+
+##### UI State Management (`src/state/ui.ts`)
+- **Toggle Functions**: `toggleToken` and `toggleTerminalGroup` with immediate KPI updates
+- **State Synchronization**: Ensures UI state and KPIs stay in sync
+- **Console Logging**: Debug output for KPI changes after each toggle
+- **Type Safety**: Full TypeScript support with proper interfaces
+
 #### GB State Mapping (`src/lib/gb-map.ts`)
 - **Initial State Application**: `bootstrapStatesFromGB()` applies initial states from GB edits
 - **Category Mapping**: Maps GB error categories to initial UI states
@@ -268,6 +289,13 @@ interface DisplayToken extends Token {
   - `GRMR` → yellow (maybe) on word tokens
 - **Token Model Creation**: Creates proper `TokenModel` objects with state information
 - **Terminal Group Creation**: Creates `TerminalGroupModel` objects for punctuation suggestions
+
+#### Terminal Group Building (`src/lib/buildTerminalGroups.ts`)
+- **Deduplication Logic**: Prevents duplicate "^ . ^ . ^" patterns at paragraph breaks
+- **Boundary-based Grouping**: Uses `Set<number>` to track seen anchor indices
+- **Source Tracking**: Terminal groups track their source ('GB' for GrammarBot, 'PARA' for paragraph fallback)
+- **Paragraph Filtering**: Skips last paragraphs and empty paragraphs as specified
+- **Console Logging**: Debug output shows all terminal groups with their IDs and statuses
 
 
 ### Automated Validation

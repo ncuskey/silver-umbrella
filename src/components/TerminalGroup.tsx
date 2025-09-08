@@ -1,53 +1,56 @@
-import React from 'react';
+import clsx from "clsx";
 
-export type TGState = 'ok' | 'maybe' | 'bad';
+export type Status = "ok" | "maybe" | "bad";
+
+export function cycle(s: Status): Status {
+  return s === "ok" ? "maybe" : s === "maybe" ? "bad" : "ok";
+}
 
 export interface TerminalGroupModel {
   id: string;              // "tg-<anchorIndex>"
   anchorIndex: number;     // boundary index *after* the word
-  status: TGState;         // 'ok' | 'maybe' | 'bad'
+  status: Status;          // 'ok' | 'maybe' | 'bad'
   selected: boolean;
   source: 'GB' | 'PARA';
 }
 
-// keep these as plain string literals so Tailwind can see them (and we safelist them anyway)
-const STATUS_CLS: Record<'ok'|'maybe'|'bad', string> = {
-  ok:    'bg-green-50 text-green-800 ring-green-300',
-  maybe: 'bg-amber-50 text-amber-800 ring-amber-300',
-  bad:   'bg-red-50 text-red-800 ring-red-300',
-};
-
-function bubbleCls(status: 'ok'|'maybe'|'bad', selected: boolean) {
-  return [
-    'inline-flex items-center rounded-xl px-2 py-0.5 leading-6',
-    'ring-1 ring-offset-1 ring-offset-white',  // or ring-offset-background
-    STATUS_CLS[status],
-    selected ? 'ring-2' : ''
-  ].join(' ');
-}
-
-export function TerminalGroup({
+export default function TerminalGroup({
   id,
   status,
   selected,
   onToggle,
 }: {
   id: string;
-  status: 'ok'|'maybe'|'bad';
+  status: Status;
   selected: boolean;
   onToggle: (id: string) => void;
 }) {
   return (
     <button
       type="button"
-      className={bubbleCls(status, selected)}
-      onClick={() => onToggle(id)}
-      title="Terminal punctuation suggestion"
+      data-kind="tg"
+      data-id={id}
+      className={pillCls(status, selected)}
+      onClick={() => {
+        console.log("[CLICK] TG", id);
+        onToggle(id);
+      }}
     >
-      {/* make inner glyphs non-clickable & inherit color from parent */}
+      {/* Keep inner glyphs non-interactive so the *group* is the click target */}
       <span className="pointer-events-none select-none">^</span>
       <span className="mx-1 pointer-events-none select-none">.</span>
       <span className="pointer-events-none select-none">^</span>
     </button>
+  );
+}
+
+export function pillCls(status: Status, selected: boolean) {
+  return clsx(
+    "inline-flex items-center rounded-full border-2 px-2 py-0.5 text-[13px] leading-none transition-colors",
+    "align-middle",
+    selected && "ring-2 ring-offset-1 ring-offset-white",
+    status === "ok" && "bg-emerald-50 text-emerald-800 border-emerald-300 ring-emerald-300",
+    status === "maybe" && "bg-amber-50 text-amber-800 border-amber-300 ring-amber-300",
+    status === "bad" && "bg-rose-50 text-rose-800 border-rose-300 ring-rose-300"
   );
 }

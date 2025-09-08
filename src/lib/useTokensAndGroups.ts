@@ -1,10 +1,16 @@
 import { useState, useCallback } from 'react';
 import type { TokenModel } from '@/components/Token';
-import type { TerminalGroupModel } from '@/components/TerminalGroup';
+import type { TerminalGroupModel, Status } from '@/components/TerminalGroup';
 
 export type TokState = 'ok' | 'maybe' | 'bad';
 
 const cycle: Record<TokState, TokState> = { 
+  ok: 'maybe', 
+  maybe: 'bad', 
+  bad: 'ok' 
+};
+
+const statusCycle: Record<Status, Status> = { 
   ok: 'maybe', 
   maybe: 'bad', 
   bad: 'ok' 
@@ -22,7 +28,7 @@ export function useTokensAndGroups() {
 
   const toggleTerminal = useCallback((id: string) => {
     setGroups(prev => prev.map(g => 
-      g.id === id ? { ...g, status: cycle[g.status] } : g
+      g.id === id ? { ...g, status: statusCycle[g.status] } : g
     ));
   }, []);
 
