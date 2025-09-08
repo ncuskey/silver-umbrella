@@ -488,7 +488,17 @@ The tool implements scoring methods aligned with educational research:
 
 ### Recent Updates
 
-#### Latest Improvements (v5.2) - API Proxy Rule Filtering Fix
+#### Latest Improvements (v5.3) - N+1 Caret Boundary System
+- **N+1 Caret Architecture**: Implemented proper boundary-based caret system with N+1 carets (one for each boundary including end-of-text)
+- **Interleaved Grid Layout**: Carets now render as real grid cells between tokens instead of overlays, eliminating transform/positioning issues
+- **Enhanced Boundary Mapping**: Updated `buildCaretRow()` to return `Array(tokens.length + 1)` for complete boundary coverage
+- **End-of-Text Support**: Fixed `gbToVT.ts` to properly map end-of-text insertions to `tokens.length` boundary index
+- **Visual Improvements**: Carets now sit in gaps between words with proper CSS styling (ghost: 25% opacity, active: yellow)
+- **Grid-Based Rendering**: Single CSS grid with `gridAutoFlow: "column"` alternates caret/token cells for clean visual layout
+- **Type Safety**: Added proper TypeScript types for `CaretState` and `Cell` union types
+- **Debug Enhancement**: Console logging now shows correct caret count (N+1) and final boundary index for end-of-text insertions
+
+#### Previous Improvements (v5.2) - API Proxy Rule Filtering Fix
 - **Fixed Rule Filtering**: Updated API proxy to properly handle form data and prevent artificial rule restrictions
 - **Full Grammar Checking**: Client now explicitly requests comprehensive checks with `level=default` and `enabledOnly=false`
 - **Enhanced Debug Logging**: Added detailed request parameter logging and match count tracking

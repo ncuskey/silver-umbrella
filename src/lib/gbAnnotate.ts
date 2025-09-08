@@ -56,15 +56,31 @@ export function annotateFromGb(
 }
 
 /** Build caret states from VT insertions derived from GB */
-export type CaretState = "ghost" | "active";  // ghost = default faint caret, active = GB proposed terminal before this boundary
+export type CaretState = "ghost" | "active";
 
+/** Return N+1 carets, one for each boundary:
+ *  [^] T0 [^] T1 [^] ... TN-1 [^]  (last ^ is end-of-text)
+ */
 export function buildCaretRow(tokens: Token[], insertions: VirtualTerminalInsertion[]) {
-  // One caret "before" each token boundary; default ghost
-  const carets: CaretState[] = tokens.map(() => "ghost");
+  const carets: CaretState[] = Array(tokens.length + 1).fill("ghost");
 
   for (const ins of insertions ?? []) {
-    const idx = typeof ins.beforeBIndex === "number" ? ins.beforeBIndex : -1;
-    if (idx >= 0 && idx < carets.length) carets[idx] = "active";
+    // beforeBIndex is a *boundary* index (0..N). If undefined, infer it.
+    let b = typeof ins.beforeBIndex === "number" ? ins.beforeBIndex : -1;
+
+    if (b < 0) {
+      // Fallback: if we only have a character offset or token index,
+      // put caret after the last token that ends at 'ins.at'
+      // and map end-of-text to boundary N.
+      if (typeof (ins as any).at === "number") {
+        const off = (ins as any).at as number;
+        const i = tokens.findIndex(t => t.end > off);
+        b = i >= 0 ? i : tokens.length; // end-of-text insertion
+      } else {
+        b = tokens.length; // safest default = end boundary
+      }
+    }
+    if (b >= 0 && b <= tokens.length) carets[b] = "active";
   }
   return carets;
 }
