@@ -15,6 +15,8 @@ import { gbToVtInsertions, withParagraphFallbackDots, newlineBoundarySet } from 
 import { tokenize } from "@/lib/tokenize";
 import { cn, DEBUG, dgroup, dtable, dlog } from "@/lib/utils";
 import { toCSV, download } from "@/lib/export";
+import { TerminalGroup, type State } from "@/components/TerminalGroup";
+import { bootstrapStatesFromGB, type TokState, type TerminalGroupModel } from "@/lib/gb-map";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 
@@ -193,12 +195,13 @@ function calcTWW(tokens: DisplayToken[]) {
 }
 
 // WSC (Words Spelled Correctly)
-function calcWSC(tokens: DisplayToken[], gb: any) {
+function calcWSC(tokens: DisplayToken[], gb: any, tokenStates: Record<number, TokState>) {
   const spellErr = spellErrorSetFromGB(gb, tokens);
   let wsc = 0;
   tokens.forEach((t, i) => {
     if (isWordToken(t) && !isNumberToken(t)) {
-      if (!spellErr.has(i)) wsc++;
+      const currentState = tokenStates[i] ?? (spellErr.has(i) ? "bad" : "ok");
+      if (currentState !== "bad") wsc++;
     }
   });
   return wsc;
@@ -217,7 +220,7 @@ function capitalizationFixWordSet(gb: any, tokens: DisplayToken[]) {
   return set;
 }
 
-function calcCWS(tokens: DisplayToken[], gb: any, vtInsertions: VirtualTerminalInsertion[]) {
+function calcCWS(tokens: DisplayToken[], gb: any, vtInsertions: VirtualTerminalInsertion[], tokenStates: Record<number, TokState>, groupStates: Record<string, TokState>) {
   const spellErr = spellErrorSetFromGB(gb, tokens);
   const capFix   = capitalizationFixWordSet(gb, tokens);
   const terminals = terminalBoundarySet(vtInsertions);
@@ -238,7 +241,10 @@ function calcCWS(tokens: DisplayToken[], gb: any, vtInsertions: VirtualTerminalI
     const startsSentence = terminals.has(boundaryIdx);
     const capitalOk = !startsSentence || !capFix.has(i+1);
 
-    const spellOk = !spellErr.has(i) && !spellErr.has(i+1);
+    // Check current state overrides
+    const aState = tokenStates[i] ?? (spellErr.has(i) ? "bad" : "ok");
+    const bState = tokenStates[i+1] ?? (spellErr.has(i+1) ? "bad" : "ok");
+    const spellOk = aState !== "bad" && bState !== "bad";
 
     if (spellOk && capitalOk) cws++;
   }
@@ -329,22 +335,23 @@ function WritingScorer() {
   const showInfractions = true;
   
   // Terminal group state management
-  const CYCLE: Record<UIState, UIState> = { correct: "possible", possible: "incorrect", incorrect: "correct" };
-  const [tokenUi, setTokenUi] = useState<Record<number, UIState>>({});   // key: token index
-  const [groupUi, setGroupUi] = useState<Record<number, UIState>>({});   // key: groupId
-  const [selected, setSelected] = useState<{type:"token"|"group"; id:number} | null>(null);
+  const CYCLE: Record<TokState, TokState> = { ok: "maybe", maybe: "bad", bad: "ok" };
+  const [tokenStates, setTokenStates] = useState<Record<number, TokState>>({});   // key: token index
+  const [groupStates, setGroupStates] = useState<Record<string, TokState>>({});   // key: groupId
+  const [terminalGroups, setTerminalGroups] = useState<TerminalGroupModel[]>([]);
+  const [selected, setSelected] = useState<{type:"token"|"group"; id:number|string} | null>(null);
 
   function cycleToken(ti: number) {
-    setTokenUi(m => {
-      const cur = m[ti] ?? "correct";
+    setTokenStates(m => {
+      const cur = m[ti] ?? "ok";
       return { ...m, [ti]: CYCLE[cur] };
     });
     setSelected({ type: "token", id: ti });
   }
 
-  function cycleGroup(groupId: number) {
-    setGroupUi(m => {
-      const cur = m[groupId] ?? "possible";
+  function cycleGroup(groupId: string) {
+    setGroupStates(m => {
+      const cur = m[groupId] ?? "maybe";
       return { ...m, [groupId]: CYCLE[cur] };
     });
     setSelected({ type: "group", id: groupId });
@@ -353,19 +360,19 @@ function WritingScorer() {
   // click routing from a cell
   function onCellActivate(c: UICell) {
     if (c.kind === "token") return cycleToken(c.ti);
-    if (c.kind === "insert" || (c.kind === "caret" && c.groupId)) return cycleGroup(c.groupId!);
+    if (c.kind === "insert" || (c.kind === "caret" && c.groupId)) return cycleGroup(c.groupId!.toString());
     // plain caret (no group) does nothing
   }
 
   // Render helpers
-  const isSel = (t:"token"|"group", id:number) => selected?.type===t && selected.id===id;
+  const isSel = (t:"token"|"group", id:number|string) => selected?.type===t && selected.id===id;
 
   function clsForCell(c: UICell) {
-    if (c.kind === "token")      return `cbm token ${tokenUi[c.ti] ?? "correct"} ${isSel("token", c.ti) ? "is-selected":""}`;
-    if (c.kind === "insert")     return `cbm insert-dot ${groupUi[c.groupId] ?? "possible"} ${isSel("group", c.groupId) ? "is-selected":""}`;
+    if (c.kind === "token")      return `cbm token ${tokenStates[c.ti] ?? "ok"} ${isSel("token", c.ti) ? "is-selected":""}`;
+    if (c.kind === "insert")     return `cbm insert-dot ${groupStates[c.groupId?.toString() ?? ""] ?? "maybe"} ${isSel("group", c.groupId?.toString() ?? "") ? "is-selected":""}`;
     if (c.kind === "caret") {
-      const ui = c.groupId ? (groupUi[c.groupId] ?? "possible") : "correct";
-      return `cbm caret ${ui} ${c.groupId && isSel("group", c.groupId) ? "is-selected":""}`;
+      const ui = c.groupId ? (groupStates[c.groupId.toString()] ?? "maybe") : "ok";
+      return `cbm caret ${ui} ${c.groupId && isSel("group", c.groupId.toString()) ? "is-selected":""}`;
     }
     return "";
   }
@@ -441,15 +448,6 @@ function WritingScorer() {
   const durationSec = useMemo(() => parseMMSS(timeMMSS), [timeMMSS]);
   const durationMin = durationSec ? durationSec / 60 : 0;
 
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      const resp = await checkWithGrammarBot(text);
-      if (alive) setGb(resp);
-    })();
-    return () => { alive = false; };
-  }, [text]);
-
 // Complex functions removed - using LT-only approach
 
   // Complex WSC/CWS computation removed - using LT-only approach
@@ -457,6 +455,22 @@ function WritingScorer() {
   const lexicon = useMemo(() => buildLexicon(selectedPacks, ""), [selectedPacks]);
   
   const tokens = useMemo<Token[]>(() => tokenize(text), [text]);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const resp = await checkWithGrammarBot(text);
+      if (alive) {
+        setGb(resp);
+        // Initialize terminal groups from GB data
+        if (resp?.edits) {
+          const groups = bootstrapStatesFromGB(text, tokens, resp.edits);
+          setTerminalGroups(groups);
+        }
+      }
+    })();
+    return () => { alive = false; };
+  }, [text, tokens]);
 
   const terminalInsertions = useMemo<VirtualTerminalInsertion[]>(() => {
     const edits = gb?.edits ?? [];
@@ -577,8 +591,8 @@ function WritingScorer() {
 
   // KPI calculations
   const tww = useMemo(() => calcTWW(displayTokens), [displayTokens]);
-  const wsc = useMemo(() => calcWSC(displayTokens, gb), [displayTokens, gb]);
-  const { cws, eligible } = useMemo(() => calcCWS(displayTokens, gb, vtInsertions), [displayTokens, gb, vtInsertions]);
+  const wsc = useMemo(() => calcWSC(displayTokens, gb, tokenStates), [displayTokens, gb, tokenStates]);
+  const { cws, eligible } = useMemo(() => calcCWS(displayTokens, gb, vtInsertions, tokenStates, groupStates), [displayTokens, gb, vtInsertions, tokenStates, groupStates]);
   const cwsPerMinute: number = useMemo(() => cwsPerMin(cws, timeMMSS), [cws, timeMMSS]);
 
   // Simplified CWS pairs (placeholder for now)
@@ -746,7 +760,30 @@ function WritingScorer() {
             <div className="cbm-paragraphs mt-3 p-3 rounded-2xl bg-muted/40">
               {paragraphBlocks.map((block, pIdx) => (
                 <div key={pIdx} className="cbm-paragraph">
-                  {block.map((c, idx) => cellEl(c, `${c.kind}-${pIdx}-${idx}`))}
+                  {block.map((c, idx) => {
+                    // Check if this is part of a terminal group
+                    if (c.kind === "caret" && c.groupId) {
+                      const group = terminalGroups.find(g => g.id === c.groupId?.toString());
+                      if (group) {
+                        return (
+                          <TerminalGroup
+                            key={`tg-${pIdx}-${idx}`}
+                            id={group.id}
+                            state={groupStates[group.id] ?? "maybe"}
+                            onToggle={cycleGroup}
+                            leftIdx={group.leftIdx}
+                            dotIdx={group.dotIdx}
+                            rightIdx={group.rightIdx}
+                          >
+                            <span className="token--caret">^</span>
+                            <span className="token--dot">.</span>
+                            <span className="token--caret">^</span>
+                          </TerminalGroup>
+                        );
+                      }
+                    }
+                    return cellEl(c, `${c.kind}-${pIdx}-${idx}`);
+                  })}
                 </div>
               ))}
             </div>
