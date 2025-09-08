@@ -57,3 +57,45 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* GB Annotation Styles */
+.caret-ghost {
+  opacity: 0.25;
+  margin: 0 4px;
+}
+
+.caret-active {
+  opacity: 1;
+  color: #f59e0b; /* yellow */
+}
+
+.pill-correct {
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.pill-possible {
+  background: #fffbeb;
+  color: #92400e;
+  border: 1px solid #fde68a;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.pill-incorrect {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.tokens .dot {
+  margin-left: 2px;
+}
