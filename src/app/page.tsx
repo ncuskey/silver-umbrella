@@ -15,7 +15,6 @@ import { cn, DEBUG, dgroup, dtable, dlog } from "@/lib/utils";
 import { toCSV, download } from "@/lib/export";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
-import { clearSessionData } from "@/lib/grammar/languagetool-client";
 
 /**
  * CBM Writing & Spelling – TypeScript Web Tool (with dictionary packs + rule flags)
@@ -58,10 +57,11 @@ const triForGroup = (group: any, pairOverrides: Record<number, { cws?: boolean }
 };
 
 interface Infraction {
-  kind: "definite" | "possible";
-  tag: string; // e.g., SPELLING, CAPITALIZATION, TERMINAL, PAIR
-  msg: string;
-  at: number | string; // token idx or pair key
+  source: string;
+  category: string;
+  message: string;
+  span: string;
+  replace: string;
 }
 
 const WORD_RE = /^[A-Za-z]+(?:[-'’][A-Za-z]+)*$/;
@@ -129,16 +129,6 @@ function clsForWord(target: string, attempt: string): { cls: number; max: number
   return { cls, max, correctWhole };
 }
 
-function summarizeLT(issues: any[]) {
-  const byCat = new Map<string, number>();
-  const byRule = new Map<string, number>();
-  for (const m of issues) {
-    byCat.set(m.categoryId ?? "?", (byCat.get(m.categoryId ?? "?") || 0) + 1);
-    byRule.set(m.ruleId ?? "?", (byRule.get(m.ruleId ?? "?") || 0) + 1);
-  }
-  console.table([...byCat.entries()].map(([k,v])=>({category:k,count:v})));
-  console.table([...byRule.entries()].map(([k,v])=>({rule:k,count:v})));
-}
 
 // Complex LT filtering removed - using simple filter from lib
 
@@ -201,12 +191,13 @@ function InfractionList({ items }: { items: Infraction[] }) {
       {items.map((f, i) => (
         <div
           key={i}
-          className={`text-sm p-2 rounded-xl border ${f.kind === "definite" ? "border-red-300 bg-red-50" : "border-amber-300 bg-amber-50"}`}
+          className="text-sm p-2 rounded-xl border border-amber-300 bg-amber-50"
         >
           <div className="flex items-center gap-2">
-            {f.kind === "definite" ? <AlertTriangle className="h-4 w-4" /> : <ListChecks className="h-4 w-4" />}
-            <Badge variant={f.kind === "definite" ? "destructive" : "secondary"}>{f.tag}</Badge>
-            <span>{f.msg}</span>
+            <ListChecks className="h-4 w-4" />
+            <Badge variant="secondary">{f.category}</Badge>
+            <span>{f.message}</span>
+            {f.replace && <span className="text-xs text-muted-foreground">→ {f.replace}</span>}
           </div>
         </div>
       ))}
@@ -232,10 +223,11 @@ function WritingScorer() {
   const selectedPacks: string[] = useMemo(() => ["us-k2","us-k5","general"], []);
   
 
-  const [gb, setGb] = useState<{edits: any[]} | null>(null);
+  const [gb, setGb] = useState<{edits: any[], correction?: string} | null>(null);
   
   // GrammarBot settings state
   const [showSettings, setShowSettings] = useState(false);
+  const [showCapitalizationFixes, setShowCapitalizationFixes] = useState(true);
   const lastCheckedText = useRef<string>("");    // to avoid duplicate checks
   const grammarRunId = useRef<number>(0);        // cancellation token for in-flight checks
 
@@ -295,17 +287,52 @@ function WritingScorer() {
 
   // Infractions list (pure GB)
   const infractions = useMemo(() => {
-    return (gb?.edits ?? []).map(e => ({
-      kind: "possible" as const,
+    const allInfractions = (gb?.edits ?? []).map(e => ({
       source: "GB",
-      category: e.err_cat || e.edit_type,
-      message: e.err_desc || "",
-      replace: e.replace,
+      category: e.err_cat ?? e.edit_type,
+      message: e.err_desc ?? "",
       span: text.slice(e.start, e.end),
-      tag: (e.err_cat || e.edit_type || "GRAMMAR").toUpperCase(),
-      msg: e.err_desc || e.replace || "—",
-      at: `${e.start}:${e.end}`
+      replace: e.replace,
     }));
+    
+    // Filter out capitalization fixes if toggle is off
+    if (!showCapitalizationFixes) {
+      return allInfractions.filter(inf => 
+        !inf.category?.toLowerCase().includes('capitalization') &&
+        !inf.category?.toLowerCase().includes('uppercase')
+      );
+    }
+    
+    return allInfractions;
+  }, [gb, text, showCapitalizationFixes]);
+
+  // Debug: assert parity between GB edits and correction
+  useEffect(() => {
+    if (gb?.edits && gb?.correction && DEBUG) {
+      try {
+        let reconstructed = text;
+        // Apply edits in reverse order to maintain correct offsets
+        const sortedEdits = [...gb.edits].sort((a, b) => b.start - a.start);
+        for (const edit of sortedEdits) {
+          const before = reconstructed.slice(0, edit.start);
+          const after = reconstructed.slice(edit.end);
+          reconstructed = before + edit.replace + after;
+        }
+        
+        if (reconstructed !== gb.correction) {
+          console.warn("[GB] Parity check failed:", {
+            original: text,
+            reconstructed,
+            expected: gb.correction,
+            edits: gb.edits
+          });
+        } else {
+          console.info("[GB] Parity check passed ✓");
+        }
+      } catch (error) {
+        console.error("[GB] Parity check error:", error);
+      }
+    }
   }, [gb, text]);
 
   const wsc = 0; // placeholder
@@ -333,7 +360,6 @@ function WritingScorer() {
   // Clear session data function
   const handleClearSessionData = () => {
     if (confirm("Clear all session data? This will reset settings and clear the text area.")) {
-      clearSessionData();
       setText(""); // Clear the textarea
       setGb(null); // Clear grammar issues
     }
@@ -378,15 +404,27 @@ function WritingScorer() {
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground">Grammar:</span>
                 <span className="inline-flex items-center rounded bg-slate-100 px-2 py-0.5 text-xs">
-                  {grammarModeLabel}
+                  GB-only
                 </span>
               </div>
 
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground">Infractions:</span>
                 <span className="inline-flex items-center rounded bg-blue-100 px-2 py-0.5 text-xs">
-                  GB Only
+                  GrammarBot
                 </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={showCapitalizationFixes}
+                    onChange={(e) => setShowCapitalizationFixes(e.target.checked)}
+                    className="rounded"
+                  />
+                  Show capitalization fixes
+                </label>
               </div>
             </div>
 
@@ -472,6 +510,14 @@ function WritingScorer() {
                 sub={durationSec ? `${timeMMSS} timed` : "enter time"}
               />
             </div>
+
+            {/* GB correction preview */}
+            {gb?.correction && (
+              <div className="mb-4 p-3 rounded-lg bg-blue-50 border border-blue-200">
+                <div className="text-sm font-medium text-blue-800 mb-1">GB Correction Preview</div>
+                <div className="text-sm text-blue-700">{gb.correction}</div>
+              </div>
+            )}
 
             {/* Infractions & Suggestions list — always visible now */}
             <div>
