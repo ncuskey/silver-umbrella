@@ -74,7 +74,7 @@ export function withParagraphFallbackDots(
       // Check the token before the break; if it already ends with . ! ? we skip.
       const prevIdx = b - 1;
       const endsWithTerminal =
-        prevIdx >= 0 && /[.!?]/.test(tokens[prevIdx].overlay ?? tokens[prevIdx].raw);
+        prevIdx >= 0 && /[.!?]/.test(tokens[prevIdx].raw);
 
       if (!endsWithTerminal) {
         extras.push({ 
