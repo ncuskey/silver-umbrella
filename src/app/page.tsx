@@ -10,6 +10,7 @@ import { Info, AlertTriangle, ListChecks, Settings } from "lucide-react";
 import type { Token, VirtualTerminalInsertion } from "@/lib/types";
 import { checkWithGrammarBot } from "@/lib/gbClient";
 import { gbEditsToInsertions } from "@/lib/gbToVT";
+import { annotateFromGb, buildCaretRow } from "@/lib/gbAnnotate";
 import { tokenize } from "@/lib/tokenize";
 import { cn, DEBUG, dgroup, dtable, dlog } from "@/lib/utils";
 import { toCSV, download } from "@/lib/export";
@@ -58,6 +59,7 @@ const triForGroup = (group: any, pairOverrides: Record<number, { cws?: boolean }
 
 interface Infraction {
   source: string;
+  tag?: string;
   category: string;
   message: string;
   span: string;
@@ -195,7 +197,7 @@ function InfractionList({ items }: { items: Infraction[] }) {
         >
           <div className="flex items-center gap-2">
             <ListChecks className="h-4 w-4" />
-            <Badge variant="secondary">{f.category}</Badge>
+            <Badge variant="secondary">{f.tag || f.category}</Badge>
             <span>{f.message}</span>
             {f.replace && <span className="text-xs text-muted-foreground">→ {f.replace}</span>}
           </div>
@@ -224,6 +226,7 @@ function WritingScorer() {
   
 
   const [gb, setGb] = useState<{edits: any[], correction?: string} | null>(null);
+  const [showCaps, setShowCaps] = useState(true);
   
   // GrammarBot settings state
   const [showSettings, setShowSettings] = useState(false);
@@ -269,8 +272,21 @@ function WritingScorer() {
     return ins;
   }, [text, tokens, gb]);
 
-  // Simple display tokens (just the original tokens for now)
-  const displayTokens = useMemo(() => tokens, [tokens]);
+  // Punctuation insertions from GB
+  const vtInsertions = useMemo(() => gbEditsToInsertions(text, tokens, gb?.edits ?? []), [text, tokens, gb]);
+
+  // Highlights + carets
+  const displayTokens = useMemo(
+    () => annotateFromGb(text, tokens, gb?.edits ?? [], { showCaps }),
+    [text, tokens, gb, showCaps]
+  );
+
+  const caretRow = useMemo(() => buildCaretRow(tokens, vtInsertions), [tokens, vtInsertions]);
+
+  if (typeof window !== "undefined" && (window as any).__CBM_DEBUG__) {
+    console.info("[UI] tokens", displayTokens);
+    console.info("[UI] carets", caretRow);
+  }
 
   // Simplified CWS pairs (placeholder for now)
   const cwsPairs = useMemo(() => [], []);
@@ -286,25 +302,15 @@ function WritingScorer() {
   const tww = useMemo(() => tokens.filter(t => t.type === "WORD").length, [tokens]);
 
   // Infractions list (pure GB)
-  const infractions = useMemo(() => {
-    const allInfractions = (gb?.edits ?? []).map(e => ({
+  const infractions = useMemo(() =>
+    (gb?.edits ?? []).map(e => ({
       source: "GB",
+      tag: (e.err_cat || e.edit_type || "").toUpperCase(),
       category: e.err_cat ?? e.edit_type,
       message: e.err_desc ?? "",
       span: text.slice(e.start, e.end),
       replace: e.replace,
-    }));
-    
-    // Filter out capitalization fixes if toggle is off
-    if (!showCapitalizationFixes) {
-      return allInfractions.filter(inf => 
-        !inf.category?.toLowerCase().includes('capitalization') &&
-        !inf.category?.toLowerCase().includes('uppercase')
-      );
-    }
-    
-    return allInfractions;
-  }, [gb, text, showCapitalizationFixes]);
+    })), [gb, text]);
 
   // Debug: assert parity between GB edits and correction
   useEffect(() => {
@@ -419,8 +425,8 @@ function WritingScorer() {
                 <label className="flex items-center gap-1 text-xs text-muted-foreground">
                   <input
                     type="checkbox"
-                    checked={showCapitalizationFixes}
-                    onChange={(e) => setShowCapitalizationFixes(e.target.checked)}
+                    checked={showCaps}
+                    onChange={(e) => setShowCaps(e.target.checked)}
                     className="rounded"
                   />
                   Show capitalization fixes
@@ -446,14 +452,28 @@ function WritingScorer() {
               <span className="text-slate-500">GrammarBot provides grammar suggestions</span>
             </div>
 
-            {/* Simple token display */}
+            {/* Caret row */}
+            <div className="mt-3 flex flex-wrap gap-1 p-3 rounded-2xl bg-muted/20">
+              {caretRow.map((c, i) => (
+                <span key={"c"+i} className={c === "active" ? "caret-active" : "caret-ghost"}>^</span>
+              ))}
+            </div>
+
+            {/* Token display with highlights */}
             <div className="mt-3 flex flex-wrap gap-1 p-3 rounded-2xl bg-muted/40">
-              {displayTokens.map((tok, i) => (
+              {displayTokens.map((t, i) => (
                 <span
                   key={i}
-                  className="inline-flex items-center rounded px-2 py-1 text-sm border bg-slate-50 text-slate-700 border-slate-200"
+                  className={
+                    t.ui === "incorrect" ? "pill-incorrect"
+                    : t.ui === "possible" ? "pill-possible"
+                    : "pill-correct"
+                  }
+                  title={(t.gbHits ?? []).map(e => e.err_cat || e.edit_type).join(", ")}
                 >
-                  {tok.raw}
+                  {t.overlay ?? t.raw}
+                  {/* draw dot from VT if this token was the last word before a GB period */}
+                  {vtInsertions.some(ins => ins.at === t.end) ? <span className="dot">.</span> : null}
                 </span>
               ))}
             </div>

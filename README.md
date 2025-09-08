@@ -45,6 +45,11 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 - **Rate Limiting**: Automatic backoff for GrammarBot API rate limits
 - **Golden Tests**: Comprehensive test suite for CWS rule validation
 - **License Compliance**: GrammarBot API usage compliance
+- **GB Token Annotation**: Visual token highlighting with color-coded pills (green=correct, yellow=possible, red=incorrect)
+- **Caret Row Display**: Visual caret indicators showing GB-proposed terminal punctuation positions
+- **Capitalization Overlays**: Optional display of capitalization fixes without changing source text
+- **Terminal Dots**: Visual indicators for punctuation insertions from GB analysis
+- **Enhanced Infractions**: GB-only infractions panel with proper GRMR/SPELL/PUNC tagging
 
 ## Getting Started
 
@@ -181,6 +186,20 @@ The CWS (Correct Writing Sequences) engine implements strictly mechanical, CBM-a
 - **Smart Filtering**: Only grammar issues (not spelling/punctuation) mapped to boundaries
 - **Grammar Mode Badge**: Always-visible indicator showing current grammar configuration
 - **Debug Parity Assert**: Verifies that applying all GrammarBot edits reproduces the correction
+
+### GB Token Annotation System
+- **Visual Token Highlighting**: Color-coded token pills show GB analysis results:
+  - **Green Pills**: Correct tokens with no issues
+  - **Yellow Pills**: Possible grammar suggestions from GB
+  - **Red Pills**: Incorrect spelling errors from GB
+- **Caret Row Display**: Visual caret indicators above tokens showing GB-proposed terminal punctuation:
+  - **Ghost Carets**: Faint carets for default boundaries
+  - **Active Carets**: Highlighted carets for GB-proposed terminals
+- **Capitalization Overlays**: Optional display of capitalization fixes without changing source text
+- **Terminal Dots**: Visual indicators for punctuation insertions from GB analysis
+- **Enhanced Infractions**: GB-only infractions panel with proper GRMR/SPELL/PUNC tagging
+- **Interactive Tooltips**: Hover over tokens to see error categories and suggestions
+- **Debug Logging**: Console output for development debugging with `__CBM_DEBUG__` flag
 
 ### LanguageTool Integration (Legacy)
 - **API-based Spell Checking**: Uses LanguageTool's public API for professional spell checking
@@ -403,7 +422,19 @@ The tool is designed for easy extension:
 
 ## Recent Updates
 
-### Latest Improvements (v6.1) - GrammarBot Migration Polish
+### Latest Improvements (v6.2) - GB Token Annotation & Visual Enhancement
+- **GB Token Annotation**: New visual token highlighting system with color-coded pills (green=correct, yellow=possible, red=incorrect)
+- **Caret Row Display**: Visual caret indicators above tokens showing GB-proposed terminal punctuation positions
+- **Capitalization Overlays**: Optional display of capitalization fixes without changing source text
+- **Terminal Dots**: Visual indicators for punctuation insertions from GB analysis
+- **Enhanced Infractions**: GB-only infractions panel with proper GRMR/SPELL/PUNC tagging
+- **Interactive Tooltips**: Hover over tokens to see error categories and suggestions
+- **Debug Logging**: Console output for development debugging with `__CBM_DEBUG__` flag
+- **New Annotation Module**: Created `src/lib/gbAnnotate.ts` with `annotateFromGb` and `buildCaretRow` functions
+- **CSS Styling**: Added comprehensive styles for caret states and token pill colors
+- **UI Integration**: Seamless integration with existing token display and infractions panel
+
+### Previous Improvements (v6.1) - GrammarBot Migration Polish
 - **Complete Migration**: Fully migrated from LanguageTool to GrammarBot for all grammar and spell checking
 - **Neural Network Processing**: Now uses GrammarBot's neural API for enhanced accuracy
 - **Secure API Proxy**: Server-side API key handling keeps credentials secure
