@@ -38,6 +38,12 @@ import html2canvas from "html2canvas";
 
 type UnitType = "word" | "numeral" | "comma" | "essentialPunct" | "other" | "PUNCT" | "WORD" | "HYPHEN";
 
+type UIState = "correct" | "possible" | "incorrect";
+
+type UICell =
+  | { kind: "token"; ti: number; ui: UIState }
+  | { kind: "caret"; bi: number; groupId?: number; ui: UIState }
+  | { kind: "insert"; bi: number; text: "."|"!"|"?" ; groupId: number; ui: UIState };
 
 type DisplayToken = Token & { virtual?: boolean; essential?: boolean; display?: string };
 
@@ -144,6 +150,109 @@ function isHyphen(tok: Token)   { return tok.type === "PUNCT" && tok.raw === "-"
 
 // ———————————— Writing: Spellcheck + CWS + Infractions ————————————
 
+// Helper functions for KPI calculations
+const isWordToken = (t: DisplayToken) => /^[A-Za-z][A-Za-z''-]*$/.test(t.raw) && !/^\d/.test(t.raw);
+const isNumberToken = (t: DisplayToken) => /^\d+([.,]\d+)*$/.test(t.raw);
+
+// SPELL error map: tokenIndex -> true
+function spellErrorSetFromGB(gb: any, tokens: DisplayToken[]) {
+  const set = new Set<number>();
+  if (!gb || !gb.edits) return set;
+  for (const e of gb.edits) {
+    if (e.edit_type === "MODIFY" && e.err_cat === "SPELL") {
+      const ti = charOffsetToTokenIndex(e.start, tokens);
+      if (ti != null) set.add(ti);
+    }
+  }
+  return set;
+}
+
+// boundaries that are sentence terminals (^ . ^, ^ ! ^, ^ ? ^)
+function terminalBoundarySet(vtInsertions: VirtualTerminalInsertion[]) {
+  const s = new Set<number>();
+  for (const ins of vtInsertions) if (/[.!?]/.test(ins.char)) s.add(ins.beforeBIndex);
+  return s;
+}
+
+// Helper to convert character offset to token index
+function charOffsetToTokenIndex(charOffset: number, tokens: DisplayToken[]): number | null {
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    if (token.start !== undefined && token.end !== undefined) {
+      if (charOffset >= token.start && charOffset < token.end) {
+        return i;
+      }
+    }
+  }
+  return null;
+}
+
+// TWW (Total Words Written; numerals excluded)
+function calcTWW(tokens: DisplayToken[]) {
+  return tokens.filter(t => isWordToken(t) && !isNumberToken(t)).length;
+}
+
+// WSC (Words Spelled Correctly)
+function calcWSC(tokens: DisplayToken[], gb: any) {
+  const spellErr = spellErrorSetFromGB(gb, tokens);
+  let wsc = 0;
+  tokens.forEach((t, i) => {
+    if (isWordToken(t) && !isNumberToken(t)) {
+      if (!spellErr.has(i)) wsc++;
+    }
+  });
+  return wsc;
+}
+
+// CWS (Correct Writing Sequences) & eligible boundaries
+function capitalizationFixWordSet(gb: any, tokens: DisplayToken[]) {
+  const set = new Set<number>();
+  if (!gb || !gb.edits) return set;
+  for (const e of gb.edits) {
+    if (e.err_cat === "GRMR") {
+      const ti = charOffsetToTokenIndex(e.start, tokens);
+      if (ti != null) set.add(ti);
+    }
+  }
+  return set;
+}
+
+function calcCWS(tokens: DisplayToken[], gb: any, vtInsertions: VirtualTerminalInsertion[]) {
+  const spellErr = spellErrorSetFromGB(gb, tokens);
+  const capFix   = capitalizationFixWordSet(gb, tokens);
+  const terminals = terminalBoundarySet(vtInsertions);
+
+  let eligible = 0;
+  let cws = 0;
+
+  for (let i = 0; i < tokens.length - 1; i++) {
+    const a = tokens[i], b = tokens[i+1];
+    if (!isWordToken(a) || !isWordToken(b)) continue;           // words only
+    // exclude commas (your rubric excludes commas)
+    if (a.raw === "," || b.raw === ",") continue;
+
+    eligible++;
+
+    // after a terminal boundary, capitalization must be OK
+    const boundaryIdx = i + 1;                        // caret index between a and b
+    const startsSentence = terminals.has(boundaryIdx);
+    const capitalOk = !startsSentence || !capFix.has(i+1);
+
+    const spellOk = !spellErr.has(i) && !spellErr.has(i+1);
+
+    if (spellOk && capitalOk) cws++;
+  }
+
+  return { cws, eligible };
+}
+
+// CWS/min (uses the timer mm:ss input)
+function cwsPerMin(cws: number, mmss: string): number {
+  const [mm, ss] = mmss.split(":").map(n=>parseInt(n,10) || 0);
+  const minutes = Math.max(0.5, mm + ss/60); // guard tiny values
+  return cws / minutes;
+}
+
 function computeTWW(tokens: Token[]): number {
   return tokens.filter((t) => t.type === "WORD").length;
 }
@@ -219,6 +328,67 @@ function WritingScorer() {
   // Always-on flags (since the toggle is gone)
   const showInfractions = true;
   
+  // Terminal group state management
+  const CYCLE: Record<UIState, UIState> = { correct: "possible", possible: "incorrect", incorrect: "correct" };
+  const [tokenUi, setTokenUi] = useState<Record<number, UIState>>({});   // key: token index
+  const [groupUi, setGroupUi] = useState<Record<number, UIState>>({});   // key: groupId
+  const [selected, setSelected] = useState<{type:"token"|"group"; id:number} | null>(null);
+
+  function cycleToken(ti: number) {
+    setTokenUi(m => {
+      const cur = m[ti] ?? "correct";
+      return { ...m, [ti]: CYCLE[cur] };
+    });
+    setSelected({ type: "token", id: ti });
+  }
+
+  function cycleGroup(groupId: number) {
+    setGroupUi(m => {
+      const cur = m[groupId] ?? "possible";
+      return { ...m, [groupId]: CYCLE[cur] };
+    });
+    setSelected({ type: "group", id: groupId });
+  }
+
+  // click routing from a cell
+  function onCellActivate(c: UICell) {
+    if (c.kind === "token") return cycleToken(c.ti);
+    if (c.kind === "insert" || (c.kind === "caret" && c.groupId)) return cycleGroup(c.groupId!);
+    // plain caret (no group) does nothing
+  }
+
+  // Render helpers
+  const isSel = (t:"token"|"group", id:number) => selected?.type===t && selected.id===id;
+
+  function clsForCell(c: UICell) {
+    if (c.kind === "token")      return `cbm token ${tokenUi[c.ti] ?? "correct"} ${isSel("token", c.ti) ? "is-selected":""}`;
+    if (c.kind === "insert")     return `cbm insert-dot ${groupUi[c.groupId] ?? "possible"} ${isSel("group", c.groupId) ? "is-selected":""}`;
+    if (c.kind === "caret") {
+      const ui = c.groupId ? (groupUi[c.groupId] ?? "possible") : "correct";
+      return `cbm caret ${ui} ${c.groupId && isSel("group", c.groupId) ? "is-selected":""}`;
+    }
+    return "";
+  }
+
+  // accessibility + click
+  function cellEl(c: UICell, key: React.Key) {
+    const role = (c.kind==="token" || c.kind==="insert" || (c.kind==="caret" && c.groupId)) ? "button" : undefined;
+    const tabIndex = role ? 0 : -1;
+    return (
+      <span
+        key={key}
+        role={role}
+        tabIndex={tabIndex}
+        onClick={() => onCellActivate(c)}
+        onKeyDown={(e)=>{ if (role && (e.key==="Enter"||e.key===" ")) { e.preventDefault(); onCellActivate(c); }}}
+        className={clsForCell(c)}
+        aria-pressed={role ? isSel(c.kind==="token"?"token":"group", (c as any).ti ?? (c as any).groupId) : undefined}
+      >
+        {c.kind==="insert" ? c.text : /* token text or caret glyph */ (c.kind==="caret" ? "^" : displayTokens[c.ti].overlay ?? displayTokens[c.ti].raw)}
+      </span>
+    );
+  }
+
   // Focus state for clickable elements
   const [focus, setFocus] = useState<{type:"caret"|"token"|"insert"; index:number} | null>(null);
 
@@ -310,24 +480,35 @@ function WritingScorer() {
 
   const caretRow = useMemo(() => buildCaretRow(tokens, vtInsertions), [tokens, vtInsertions]);
 
-  // Interleave caret cells between token cells for the grid
-  type Cell =
-    | { kind: "caret"; caret: CaretState; i: number; synthetic?: boolean }
-    | { kind: "token"; text: string; ui: "correct"|"possible"|"incorrect"; i: number }
-    | { kind: "insert"; text: string; i: number }; // e.g., ".", "!", "?"
+  // Group ID assignment for terminal groups
+  const groupByBoundary = useMemo(() => {
+    const map = new Map<number, number>();
+    let nextGroupId = 1;
+    for (const ins of vtInsertions) {
+      const gid = nextGroupId++;
+      map.set(ins.beforeBIndex, gid);
+    }
+    return map;
+  }, [vtInsertions]);
 
   const insertionMap = useMemo(
     () => groupInsertionsByBoundary(vtInsertions /* GB→VT array */),
     [vtInsertions]
   );
 
-  const gridCells: Cell[] = useMemo(() => {
-    const cells: Cell[] = [];
+  const gridCells: UICell[] = useMemo(() => {
+    const cells: UICell[] = [];
     const N = displayTokens.length;
 
     for (let b = 0; b <= N; b++) {
       // 1) caret at boundary b
-      cells.push({ kind: "caret", caret: caretRow[b], i: b });
+      const gid = groupByBoundary.get(b);
+      cells.push({ 
+        kind: "caret", 
+        bi: b, 
+        groupId: gid, 
+        ui: gid ? "possible" : "correct" 
+      });
 
       // 2) any GB insertions *at* boundary b: show them *after* the caret,
       //    then add a synthetic caret to close the group (^ . ^)
@@ -335,30 +516,44 @@ function WritingScorer() {
       for (let k = 0; k < insList.length; k++) {
         const ins = insList[k];
         // show the exact replacement symbol GB suggested
-        cells.push({ kind: "insert", text: ins.char ?? ".", i: b });
+        cells.push({ 
+          kind: "insert", 
+          bi: ins.beforeBIndex, 
+          text: ins.char as "."|"!"|"?", 
+          groupId: groupByBoundary.get(ins.beforeBIndex)!, 
+          ui: "possible" 
+        });
         // synthetic caret to close the group
-        cells.push({ kind: "caret", caret: "active", i: b, synthetic: true });
+        cells.push({ 
+          kind: "caret", 
+          bi: b, 
+          groupId: gid, 
+          ui: gid ? "possible" : "correct" 
+        });
       }
 
       // 3) token after boundary b (for b < N)
-      // Don't alter token styles for terminal groups - leave t.ui as-is (spell/other only)
       if (b < N) {
         const t = displayTokens[b];
-        cells.push({ kind: "token", text: t.overlay ?? t.raw, ui: t.ui, i: b });
+        cells.push({ 
+          kind: "token", 
+          ti: b, 
+          ui: t.ui 
+        });
       }
     }
     return cells;
-  }, [displayTokens, caretRow, insertionMap]);
+  }, [displayTokens, caretRow, insertionMap, groupByBoundary]);
 
   // Split grid cells into paragraph blocks
-  const paragraphBlocks: Cell[][] = useMemo(() => {
+  const paragraphBlocks: UICell[][] = useMemo(() => {
     const nlBoundaries = newlineBoundarySet(text, displayTokens);
-    const blocks: Cell[][] = [];
-    let currentBlock: Cell[] = [];
+    const blocks: UICell[][] = [];
+    let currentBlock: UICell[] = [];
 
     for (const cell of gridCells) {
       // Start a new paragraph block when we hit a caret at a newline boundary
-      if (cell.kind === "caret" && nlBoundaries.has(cell.i)) {
+      if (cell.kind === "caret" && nlBoundaries.has(cell.bi)) {
         if (currentBlock.length > 0) {
           blocks.push(currentBlock);
           currentBlock = [];
@@ -380,18 +575,23 @@ function WritingScorer() {
     console.info("[UI] carets", caretRow);
   }
 
+  // KPI calculations
+  const tww = useMemo(() => calcTWW(displayTokens), [displayTokens]);
+  const wsc = useMemo(() => calcWSC(displayTokens, gb), [displayTokens, gb]);
+  const { cws, eligible } = useMemo(() => calcCWS(displayTokens, gb, vtInsertions), [displayTokens, gb, vtInsertions]);
+  const cwsPerMinute: number = useMemo(() => cwsPerMin(cws, timeMMSS), [cws, timeMMSS]);
+
   // Simplified CWS pairs (placeholder for now)
   const cwsPairs = useMemo(() => [], []);
 
   // Simplified metrics (placeholder for now)
   const audit = useMemo(() => [], []);
-  const cwsCount = 0;
-  const eligibleBoundaries = 0;
+  const cwsCount = cws;
+  const eligibleBoundaries = eligible;
   const iws = 0;
   const ciws = 0;
-  const percentCws = 0;
-  const cwsPerMin = null;
-  const tww = useMemo(() => tokens.filter(t => t.type === "WORD").length, [tokens]);
+  const percentCws = eligible > 0 ? Math.round((cws / eligible) * 100) : 0;
+  const cwsPerMinValue: number = cwsPerMinute;
 
   // Infractions list (pure GB)
   const infractions = useMemo(() =>
@@ -433,8 +633,6 @@ function WritingScorer() {
     }
   }, [gb, text]);
 
-  const wsc = 0; // placeholder
-  const cws = 0; // placeholder
 
   // Export functions
   const exportCSV = () => {
@@ -548,49 +746,7 @@ function WritingScorer() {
             <div className="cbm-paragraphs mt-3 p-3 rounded-2xl bg-muted/40">
               {paragraphBlocks.map((block, pIdx) => (
                 <div key={pIdx} className="cbm-paragraph">
-                  {block.map((c, idx) =>
-                    c.kind === "caret" ? (
-                      <span
-                        key={`c-${pIdx}-${idx}`}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => onCaretClick(c.i)}
-                        onKeyDown={(e) => onKey(e, "caret", c.i)}
-                        className={`cbm-cell ${c.caret === "active" ? "caret-active" : "caret-ghost"} ${
-                          c.synthetic ? "caret-sibling" : ""
-                        } ${focus?.type === "caret" && focus.index === c.i ? "is-focused" : ""}`}
-                        aria-label={`boundary ${c.i}`}
-                      >
-                        ^
-                      </span>
-                    ) : c.kind === "insert" ? (
-                      <span
-                        key={`i-${pIdx}-${idx}`}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => onInsertClick(c.i)}
-                        onKeyDown={(e) => onKey(e, "insert", c.i)}
-                        className={`cbm-cell insert-dot ${focus?.type === "insert" && focus.index === c.i ? "is-focused" : ""}`}
-                        aria-label="inserted punctuation"
-                      >
-                        {c.text}
-                      </span>
-                    ) : (
-                      <span
-                        key={`t-${pIdx}-${idx}`}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => onTokenClick(c.i)}
-                        onKeyDown={(e) => onKey(e, "token", c.i)}
-                        className={`cbm-cell ${
-                          c.ui === "incorrect" ? "pill-incorrect" :
-                          c.ui === "possible"  ? "pill-possible"  : "pill-correct"
-                        } ${focus?.type === "token" && focus.index === c.i ? "is-focused" : ""}`}
-                      >
-                        {c.text}
-                      </span>
-                    )
-                  )}
+                  {block.map((c, idx) => cellEl(c, `${c.kind}-${pIdx}-${idx}`))}
                 </div>
               ))}
             </div>
@@ -643,7 +799,7 @@ function WritingScorer() {
               />
               <StatCard
                 title="CWS / min"
-                value={cwsPerMin === null ? "—" : (Math.round(cwsPerMin * 10) / 10).toFixed(1)}
+                value={cwsPerMinValue === null ? "—" : (Math.round(cwsPerMinValue * 10) / 10).toFixed(1)}
                 sub={durationSec ? `${timeMMSS} timed` : "enter time"}
               />
             </div>

@@ -144,3 +144,65 @@
   outline-offset: 2px;
   border-radius: 6px;
 }
+
+/* Terminal Group Styles */
+.cbm.token.correct { 
+  background: #e8fff0; 
+  color: #16784e; 
+  border-radius: 8px;
+  padding: .1rem .35rem;
+}
+
+.cbm.token.possible { 
+  background: #fff7e6; 
+  color: #a15a00; 
+  border-radius: 8px;
+  padding: .1rem .35rem;
+}
+
+.cbm.token.incorrect { 
+  background: #ffeaea; 
+  color: #a11; 
+  border-radius: 8px;
+  padding: .1rem .35rem;
+}
+
+.cbm.caret.correct  { 
+  color: #9ca3af; 
+  opacity: 0.25;
+}
+
+.cbm.caret.possible { 
+  color: #f59e0b;   /* yellow */
+  opacity: 1;
+}
+
+.cbm.caret.incorrect{ 
+  color: #ef4444; 
+  opacity: 1;
+}
+
+.cbm.insert-dot { 
+  font-weight: 700; 
+  line-height: 1;
+  padding: 0;
+  margin: 0 2px;
+}
+
+.cbm.insert-dot.possible { 
+  color: #f59e0b; 
+}
+
+.cbm.insert-dot.incorrect{ 
+  color: #ef4444; 
+}
+
+.cbm.insert-dot.correct  { 
+  color: #16784e; 
+}
+
+.is-selected { 
+  outline: 2px solid currentColor; 
+  outline-offset: 2px; 
+  border-radius: 6px; 
+}
