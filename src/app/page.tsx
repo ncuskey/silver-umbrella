@@ -468,15 +468,12 @@ function WritingScorer() {
             </div>
 
             {/* Token display with interleaved carets */}
-            <div
-              className="cbm-grid mt-3 p-3 rounded-2xl bg-muted/40"
-              style={{ display: "grid", gridAutoFlow: "column", gridAutoColumns: "max-content", gap: "8px" }}
-            >
+            <div className="cbm-flow mt-3 p-3 rounded-2xl bg-muted/40">
               {gridCells.map((c) =>
                 c.kind === "caret" ? (
                   <span
                     key={`c-${c.i}`}
-                    className={c.caret === "active" ? "caret-active" : "caret-ghost"}
+                    className={`cbm-cell ${c.caret === "active" ? "caret-active" : "caret-ghost"}`}
                     aria-label={`boundary-${c.i}`}
                   >
                     ^
@@ -484,13 +481,13 @@ function WritingScorer() {
                 ) : (
                   <span
                     key={`t-${c.i}`}
-                    className={
+                    className={`cbm-cell ${
                       c.token.ui === "incorrect"
                         ? "pill-incorrect"
                         : c.token.ui === "possible"
                         ? "pill-possible"
                         : "pill-correct"
-                    }
+                    }`}
                     title={(c.token.gbHits ?? []).map(e => e.err_cat || e.edit_type).join(", ")}
                   >
                     {c.token.overlay ?? c.token.raw}
