@@ -46,24 +46,28 @@ export function gbEditsToInsertions(
     const wordIdx = prevWordIndex(tokens, anchor);
     const boundaryIdx = nearestBoundaryLeftOf(tokens, anchor);
     const beforeIdx = boundaryIdx >= 0 ? boundaryIdx : wordIdx;
+    
+    // For end-of-text insertions, map to tokens.length boundary
+    const nextTokenIndex = tokens.findIndex(t => t.start >= e.end);
+    const finalBoundaryIdx = nextTokenIndex >= 0 ? nextTokenIndex : tokens.length; // end-of-text
 
     if (wordIdx < 0 || beforeIdx < 0) continue;
-    if (seen.has(beforeIdx)) continue;
+    if (seen.has(finalBoundaryIdx)) continue;
 
     out.push({ 
       at: tokens[wordIdx].end, 
       char: term, 
-      beforeBIndex: beforeIdx, 
+      beforeBIndex: finalBoundaryIdx, 
       reason: "GB" as any,
       message: e.err_desc || `Add ${term}`
     });
-    seen.add(beforeIdx);
+    seen.add(finalBoundaryIdx);
 
     if (typeof window !== "undefined" && (window as any).__CBM_DEBUG__) {
       console.info("[GB→VT] PUSH", { 
         term, 
         word: tokens[wordIdx].raw, 
-        boundaryIdx: beforeIdx, 
+        boundaryIdx: finalBoundaryIdx, 
         edit: e 
       });
     }

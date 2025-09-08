@@ -10,7 +10,7 @@ import { Info, AlertTriangle, ListChecks, Settings } from "lucide-react";
 import type { Token, VirtualTerminalInsertion } from "@/lib/types";
 import { checkWithGrammarBot } from "@/lib/gbClient";
 import { gbEditsToInsertions } from "@/lib/gbToVT";
-import { annotateFromGb, buildCaretRow } from "@/lib/gbAnnotate";
+import { annotateFromGb, buildCaretRow, type CaretState, type DisplayToken as GbDisplayToken } from "@/lib/gbAnnotate";
 import { tokenize } from "@/lib/tokenize";
 import { cn, DEBUG, dgroup, dtable, dlog } from "@/lib/utils";
 import { toCSV, download } from "@/lib/export";
@@ -283,6 +283,21 @@ function WritingScorer() {
 
   const caretRow = useMemo(() => buildCaretRow(tokens, vtInsertions), [tokens, vtInsertions]);
 
+  // Interleave caret cells between token cells for the grid
+  type Cell =
+    | { kind: "caret"; caret: CaretState; i: number }
+    | { kind: "token"; token: GbDisplayToken; i: number };
+
+  const gridCells: Cell[] = useMemo(() => {
+    const cells: Cell[] = [];
+    for (let i = 0; i < displayTokens.length; i++) {
+      cells.push({ kind: "caret", caret: caretRow[i], i });      // boundary before token i
+      cells.push({ kind: "token", token: displayTokens[i], i }); // token i
+    }
+    cells.push({ kind: "caret", caret: caretRow[displayTokens.length], i: displayTokens.length }); // final boundary
+    return cells;
+  }, [displayTokens, caretRow]);
+
   if (typeof window !== "undefined" && (window as any).__CBM_DEBUG__) {
     console.info("[UI] tokens", displayTokens);
     console.info("[UI] carets", caretRow);
@@ -452,30 +467,36 @@ function WritingScorer() {
               <span className="text-slate-500">GrammarBot provides grammar suggestions</span>
             </div>
 
-            {/* Caret row */}
-            <div className="mt-3 flex flex-wrap gap-1 p-3 rounded-2xl bg-muted/20">
-              {caretRow.map((c, i) => (
-                <span key={"c"+i} className={c === "active" ? "caret-active" : "caret-ghost"}>^</span>
-              ))}
-            </div>
-
-            {/* Token display with highlights */}
-            <div className="mt-3 flex flex-wrap gap-1 p-3 rounded-2xl bg-muted/40">
-              {displayTokens.map((t, i) => (
-                <span
-                  key={i}
-                  className={
-                    t.ui === "incorrect" ? "pill-incorrect"
-                    : t.ui === "possible" ? "pill-possible"
-                    : "pill-correct"
-                  }
-                  title={(t.gbHits ?? []).map(e => e.err_cat || e.edit_type).join(", ")}
-                >
-                  {t.overlay ?? t.raw}
-                  {/* draw dot from VT if this token was the last word before a GB period */}
-                  {vtInsertions.some(ins => ins.at === t.end) ? <span className="dot">.</span> : null}
-                </span>
-              ))}
+            {/* Token display with interleaved carets */}
+            <div
+              className="cbm-grid mt-3 p-3 rounded-2xl bg-muted/40"
+              style={{ display: "grid", gridAutoFlow: "column", gridAutoColumns: "max-content", gap: "8px" }}
+            >
+              {gridCells.map((c) =>
+                c.kind === "caret" ? (
+                  <span
+                    key={`c-${c.i}`}
+                    className={c.caret === "active" ? "caret-active" : "caret-ghost"}
+                    aria-label={`boundary-${c.i}`}
+                  >
+                    ^
+                  </span>
+                ) : (
+                  <span
+                    key={`t-${c.i}`}
+                    className={
+                      c.token.ui === "incorrect"
+                        ? "pill-incorrect"
+                        : c.token.ui === "possible"
+                        ? "pill-possible"
+                        : "pill-correct"
+                    }
+                    title={(c.token.gbHits ?? []).map(e => e.err_cat || e.edit_type).join(", ")}
+                  >
+                    {c.token.overlay ?? c.token.raw}
+                  </span>
+                )
+              )}
             </div>
           </div>
 
