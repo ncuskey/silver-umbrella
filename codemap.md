@@ -498,6 +498,15 @@ The tool implements scoring methods aligned with educational research:
 - **Type Safety**: Added proper TypeScript types for `CaretState` and `Cell` union types
 - **Debug Enhancement**: Console logging now shows correct caret count (N+1) and final boundary index for end-of-text insertions
 
+#### Recent Improvements (v5.3) - Responsive Flex Layout
+- **Flexible Container Layout**: Replaced CSS grid with flexbox layout for better responsive behavior
+- **Wrapping Support**: Added `flex-wrap: wrap` to allow content to wrap to new lines on smaller screens
+- **Improved Spacing**: Maintained 8px gap between tokens and carets with `gap: 8px`
+- **Cell Styling**: Added `.cbm-cell` class with `flex: 0 0 auto` to prevent unwanted stretching
+- **Visual Consistency**: Preserved existing pill styles (correct/possible/incorrect) and caret styling (ghost/active)
+- **Responsive Design**: Container now adapts to different screen sizes while maintaining visual hierarchy
+- **CSS Organization**: Added new flex styles to `globals.css` with clear documentation comments
+
 #### Previous Improvements (v5.2) - API Proxy Rule Filtering Fix
 - **Fixed Rule Filtering**: Updated API proxy to properly handle form data and prevent artificial rule restrictions
 - **Full Grammar Checking**: Client now explicitly requests comprehensive checks with `level=default` and `enabledOnly=false`

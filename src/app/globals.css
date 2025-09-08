@@ -92,3 +92,18 @@
 .tokens .dot {
   margin-left: 2px;
 }
+
+/* CBM Flow Container - wraps to new lines */
+.cbm-flow {
+  display: flex;
+  flex-wrap: wrap;    /* enables wrapping */
+  gap: 8px;           /* keep the pill spacing */
+  align-items: center;
+}
+
+/* Each item is an inline-sized chunk that doesn't stretch */
+.cbm-flow > .cbm-cell {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;     /* don't grow or shrink */
+}
