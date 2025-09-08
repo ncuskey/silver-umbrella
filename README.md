@@ -15,10 +15,14 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 - Aligned target and attempt word lists
 
 ### Advanced Features
+- **Centralized Status Classes**: Static string literals for Tailwind CSS classes with safelist protection
+- **Immutable State Management**: No mutations - all state updates use immutable patterns with derived KPIs
 - **Terminal Group System**: Unified (^ . ^) groups as single, clickable units with synchronized state management
 - **Group State Management**: Separate state tracking for individual tokens and terminal groups with independent cycling
 - **Unified Group Cycling**: Single click handler cycles entire terminal groups while maintaining individual token control
 - **Visual Synchronization**: All members of terminal groups share colors, selection state, and visual feedback
+- **Paragraph-Aware Terminal Insertion**: Respects paragraph boundaries and suppresses terminals at the very end of text
+- **Reactive KPI Updates**: KPIs automatically recalculate when tokens or groups are clicked
 - **GrammarBot API**: Professional spell checking and grammar analysis via GrammarBot's neural API
 - **GrammarBot Integration**: Professional spell checking and grammar checking via GrammarBot API
 - **Spell Engine Status**: Visual indicator showing GrammarBot spell checking mode
@@ -54,6 +58,24 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 - **Capitalization Overlays**: Optional display of capitalization fixes without changing source text
 - **Terminal Dots**: Visual indicators for punctuation insertions from GB analysis
 - **Enhanced Infractions**: GB-only infractions panel with proper GRMR/SPELL/PUNC tagging
+
+## Recent Improvements
+
+### State Management Refactoring
+- **Immutable State Updates**: Replaced mutation-based state with immutable patterns using `setUi(prev => ({ ...prev, ... }))`
+- **Derived KPIs**: KPIs now automatically recalculate using `useMemo` when UI state changes
+- **Centralized Status Classes**: All status colors defined as static string literals with Tailwind safelist protection
+- **Single Clickable Terminal Groups**: Terminal groups (^ . ^) are now single buttons that toggle the entire group together
+
+### Paragraph-Aware Terminal Insertion
+- **Respects Paragraph Boundaries**: Terminal punctuation only added at paragraph ends, not arbitrary positions
+- **Suppresses Last Terminal**: No terminal punctuation added at the very end of the entire text block
+- **Smart Fallback Logic**: Only adds terminals where needed, respecting existing punctuation
+
+### Visual Improvements
+- **Consistent Status Colors**: Green (ok), Amber (maybe), Red (bad) with proper Tailwind classes
+- **Reactive UI**: All KPI cards update immediately when tokens or groups are clicked
+- **Better UX**: Single-click terminal group toggling with visual feedback
 
 ## Getting Started
 

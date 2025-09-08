@@ -9,12 +9,26 @@
 ### Technology Stack
 - **Framework**: Next.js 15 with App Router
 - **Language**: TypeScript (ES2022 target)
-- **Styling**: Tailwind CSS with shadcn/ui components
+- **Styling**: Tailwind CSS with shadcn/ui components and safelist protection
 - **Animations**: Framer Motion
 - **Icons**: Lucide React
 - **Build Tools**: PostCSS, Autoprefixer
 - **Spell Checking**: GrammarBot API
 - **Bundle Analysis**: @next/bundle-analyzer
+
+### Recent Architectural Improvements
+
+#### State Management Refactoring
+- **Immutable State Pattern**: All state updates use immutable patterns with `setUi(prev => ({ ...prev, ... }))`
+- **Derived KPIs**: KPIs automatically recalculate using `useMemo` when UI state changes
+- **Single Source of Truth**: All state managed in unified `ui` object containing tokens and terminal groups
+- **Reactive Updates**: Click handlers immediately update state, triggering KPI recalculation
+
+#### Component Architecture
+- **Centralized Status Classes**: Static string literals for Tailwind classes with safelist protection
+- **Single Clickable Terminal Groups**: Terminal groups (^ . ^) implemented as single buttons
+- **Consistent Styling**: `bubbleCls()` function provides uniform styling across all token types
+- **Paragraph-Aware Logic**: Terminal insertion respects paragraph boundaries and suppresses end-of-text terminals
 
 ### Project Structure
 
@@ -37,15 +51,15 @@
 │   │   │   ├── input.tsx      # Text input
 │   │   │   ├── tabs.tsx       # Tab navigation
 │   │   │   └── textarea.tsx   # Textarea input
-│   │   ├── Token.tsx          # Token component with state management
-│   │   └── TerminalGroup.tsx  # Terminal group component for ^ . ^ units
+│   │   ├── Token.tsx          # Token component with centralized status classes and bubbleCls
+│   │   └── TerminalGroup.tsx  # Single clickable terminal group component (^ . ^) with unified state
 │   ├── lib/
 │   │   ├── gbClient.ts        # GrammarBot API client
 │   │   ├── gbToVT.ts          # GrammarBot to Virtual Terminal conversion
 │   │   ├── gbAnnotate.ts      # GrammarBot annotation and display logic
-│   │   ├── gb-map.ts          # GB state mapping and terminal group initialization
-│   │   ├── useTokensAndGroups.ts # State management hook for tokens and groups
-│   │   ├── useKPIs.ts         # KPI calculation hook with automatic recomputation
+│   │   ├── gb-map.ts          # GB state mapping with paragraph-aware terminal group initialization
+│   │   ├── useTokensAndGroups.ts # State management hook for tokens and groups (legacy support)
+│   │   ├── paragraphUtils.ts  # Paragraph-aware terminal insertion with end-of-text suppression
 │   │   ├── tokenize.ts        # Text tokenization
 │   │   ├── types.ts           # Core type definitions
 │   │   ├── export.ts          # CSV and PDF export utilities
