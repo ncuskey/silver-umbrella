@@ -498,7 +498,20 @@ The tool implements scoring methods aligned with educational research:
 - **Type Safety**: Added proper TypeScript types for `CaretState` and `Cell` union types
 - **Debug Enhancement**: Console logging now shows correct caret count (N+1) and final boundary index for end-of-text insertions
 
-#### Recent Improvements (v5.3) - Responsive Flex Layout
+#### Recent Improvements (v6.3) - GB Insertion Display System
+- **GB Insertion Pills**: New blue pill system displays suggested punctuation insertions from GrammarBot
+- **Synthetic Caret System**: Additional carets after each insertion create proper visual grouping (`^ . ^` pattern)
+- **Boundary Grouping**: `groupInsertionsByBoundary()` function in `src/lib/gbAnnotate.ts` organizes insertions by boundary index
+- **Interleaved Display**: Seamless integration with existing token and caret display system in `src/app/page.tsx`
+- **End-of-Text Support**: Proper handling of final insertions at end-of-text boundary
+- **Responsive Design**: Maintains flex-wrap behavior and accessibility features
+- **CSS Enhancement**: Added `.pill-insert` and `.caret-sibling` styles to `src/app/globals.css`
+- **Type Safety**: Full TypeScript support with proper type definitions for insertion cells
+- **Test Coverage**: Comprehensive test suite in `__tests__/gb-insertions.test.ts` for boundary grouping functionality
+- **Visual Pattern**: Shows `^ . ^` pattern for each suggested insertion with proper spacing
+- **Accessibility**: Proper ARIA labels for screen readers and keyboard navigation
+
+#### Previous Improvements (v5.3) - Responsive Flex Layout
 - **Flexible Container Layout**: Replaced CSS grid with flexbox layout for better responsive behavior
 - **Wrapping Support**: Added `flex-wrap: wrap` to allow content to wrap to new lines on smaller screens
 - **Improved Spacing**: Maintained 8px gap between tokens and carets with `gap: 8px`
