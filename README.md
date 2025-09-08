@@ -216,6 +216,19 @@ The CWS (Correct Writing Sequences) engine implements strictly mechanical, CBM-a
   - **Responsive Layout**: Maintains flex-wrap behavior for different screen sizes
 - **Accessibility**: Proper ARIA labels for screen readers and keyboard navigation
 
+### GB Enhancement Features (v3.1)
+- **Clean Punctuation Highlighting**: Words before punctuation insertions are no longer highlighted, providing cleaner visual feedback
+- **Interactive Insertion Dots**: Punctuation insertion dots (`.`, `!`, `?`) are now fully clickable and keyboard accessible:
+  - **Mouse Support**: Click to focus and interact with insertion suggestions
+  - **Keyboard Navigation**: Tab to focus, Enter/Space to activate
+  - **Visual Focus Indicators**: Yellow focus ring for accessibility compliance
+- **Paragraph-Aware Layout**: Enhanced support for multi-paragraph text:
+  - **Automatic Paragraph Detection**: Recognizes carriage returns and line breaks in source text
+  - **Separate Paragraph Rows**: Each paragraph renders on its own visual row
+  - **Smart Fallback Punctuation**: Adds periods at paragraph boundaries where GB didn't suggest punctuation
+  - **End-of-Text Filtering**: Properly excludes punctuation suggestions at the very end of text
+- **Improved Boundary Mapping**: Better character offset to boundary index conversion for accurate placement
+
 ### LanguageTool Integration (Legacy)
 - **API-based Spell Checking**: Uses LanguageTool's public API for professional spell checking
 - **Enhanced Spelling Detection**: Properly configured to detect typos (MORFOLOGIK_RULE_* patterns) alongside grammar issues

@@ -59,8 +59,8 @@ export function annotateFromGb(
       }
       tk.ui = tk.ui === "incorrect" ? "incorrect" : "possible";
     } else if (cat === "PUNC" && TERMS.has(rep)) {
-      // punctuation is shown via carets/dots; mark previous word as 'possible'
-      if (tk.ui !== "incorrect") tk.ui = "possible";
+      // punctuation is shown via carets/dots; do NOT mark previous word as 'possible'
+      // (No-op for INSERT+PUNC)
     }
   }
 

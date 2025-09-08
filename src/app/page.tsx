@@ -11,6 +11,7 @@ import type { Token, VirtualTerminalInsertion } from "@/lib/types";
 import { checkWithGrammarBot } from "@/lib/gbClient";
 import { gbEditsToInsertions } from "@/lib/gbToVT";
 import { annotateFromGb, buildCaretRow, groupInsertionsByBoundary, type CaretState, type DisplayToken as GbDisplayToken } from "@/lib/gbAnnotate";
+import { gbToVtInsertions, withParagraphFallbackDots, newlineBoundarySet } from "@/lib/paragraphUtils";
 import { tokenize } from "@/lib/tokenize";
 import { cn, DEBUG, dgroup, dtable, dlog } from "@/lib/utils";
 import { toCSV, download } from "@/lib/export";
@@ -219,13 +220,14 @@ function WritingScorer() {
   const showInfractions = true;
   
   // Focus state for clickable elements
-  const [focus, setFocus] = useState<{type:"caret"|"token"; index:number} | null>(null);
+  const [focus, setFocus] = useState<{type:"caret"|"token"|"insert"; index:number} | null>(null);
 
   // Click and keyboard handlers
   const onCaretClick = (i: number) => setFocus({ type: "caret", index: i });
   const onTokenClick = (i: number) => setFocus({ type: "token", index: i });
+  const onInsertClick = (i: number) => setFocus({ type: "insert", index: i });
 
-  const onKey = (e: React.KeyboardEvent, type: "caret" | "token", i: number) => {
+  const onKey = (e: React.KeyboardEvent, type: "caret" | "token" | "insert", i: number) => {
     if (e.key === "Enter" || e.key === " ") { 
       e.preventDefault(); 
       setFocus({ type, index: i }); 
@@ -293,8 +295,12 @@ function WritingScorer() {
     return ins;
   }, [text, tokens, gb]);
 
-  // Punctuation insertions from GB
-  const vtInsertions = useMemo(() => gbEditsToInsertions(text, tokens, gb?.edits ?? []), [text, tokens, gb]);
+  // Punctuation insertions from GB with paragraph fallback
+  const vtInsertions = useMemo(() => {
+    let inserts = gbToVtInsertions(gb ?? { edits: [] }, text, tokens);
+    inserts = withParagraphFallbackDots(inserts, text, tokens);
+    return inserts;
+  }, [text, tokens, gb]);
 
   // Highlights + carets
   const displayTokens = useMemo(
@@ -343,6 +349,31 @@ function WritingScorer() {
     }
     return cells;
   }, [displayTokens, caretRow, insertionMap]);
+
+  // Split grid cells into paragraph blocks
+  const paragraphBlocks: Cell[][] = useMemo(() => {
+    const nlBoundaries = newlineBoundarySet(text, displayTokens);
+    const blocks: Cell[][] = [];
+    let currentBlock: Cell[] = [];
+
+    for (const cell of gridCells) {
+      // Start a new paragraph block when we hit a caret at a newline boundary
+      if (cell.kind === "caret" && nlBoundaries.has(cell.i)) {
+        if (currentBlock.length > 0) {
+          blocks.push(currentBlock);
+          currentBlock = [];
+        }
+      }
+      currentBlock.push(cell);
+    }
+
+    // Add the final block if it has content
+    if (currentBlock.length > 0) {
+      blocks.push(currentBlock);
+    }
+
+    return blocks;
+  }, [gridCells, text, displayTokens]);
 
   if (typeof window !== "undefined" && (window as any).__CBM_DEBUG__) {
     console.info("[UI] tokens", displayTokens);
@@ -513,43 +544,55 @@ function WritingScorer() {
               <span className="text-slate-500">GrammarBot provides grammar suggestions</span>
             </div>
 
-            {/* Token display with interleaved carets */}
-            <div className="cbm-flow mt-3 p-3 rounded-2xl bg-muted/40">
-              {gridCells.map((c, idx) =>
-                c.kind === "caret" ? (
-                  <span
-                    key={`c-${idx}`}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => onCaretClick(c.i)}
-                    onKeyDown={(e) => onKey(e, "caret", c.i)}
-                    className={`cbm-cell ${c.caret === "active" ? "caret-active" : "caret-ghost"} ${
-                      c.synthetic ? "caret-sibling" : ""
-                    } ${focus?.type === "caret" && focus.index === c.i ? "is-focused" : ""}`}
-                    aria-label={`boundary ${c.i}`}
-                  >
-                    ^
-                  </span>
-                ) : c.kind === "insert" ? (
-                  <span key={`i-${idx}`} className="cbm-cell insert-dot" aria-label="inserted-punctuation">
-                    {c.text}
-                  </span>
-                ) : (
-                  <span
-                    key={`t-${idx}`}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => onTokenClick(c.i)}
-                    onKeyDown={(e) => onKey(e, "token", c.i)}
-                    className={`cbm-cell ${
-                      c.ui === "incorrect" ? "pill-incorrect" :
-                      c.ui === "possible"  ? "pill-possible"  : "pill-correct"
-                    } ${focus?.type === "token" && focus.index === c.i ? "is-focused" : ""}`}
-                  >
-                    {c.text}
-                  </span>
-                )
-              )}
+            {/* Token display with interleaved carets - split into paragraphs */}
+            <div className="cbm-paragraphs mt-3 p-3 rounded-2xl bg-muted/40">
+              {paragraphBlocks.map((block, pIdx) => (
+                <div key={pIdx} className="cbm-paragraph">
+                  {block.map((c, idx) =>
+                    c.kind === "caret" ? (
+                      <span
+                        key={`c-${pIdx}-${idx}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => onCaretClick(c.i)}
+                        onKeyDown={(e) => onKey(e, "caret", c.i)}
+                        className={`cbm-cell ${c.caret === "active" ? "caret-active" : "caret-ghost"} ${
+                          c.synthetic ? "caret-sibling" : ""
+                        } ${focus?.type === "caret" && focus.index === c.i ? "is-focused" : ""}`}
+                        aria-label={`boundary ${c.i}`}
+                      >
+                        ^
+                      </span>
+                    ) : c.kind === "insert" ? (
+                      <span
+                        key={`i-${pIdx}-${idx}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => onInsertClick(c.i)}
+                        onKeyDown={(e) => onKey(e, "insert", c.i)}
+                        className={`cbm-cell insert-dot ${focus?.type === "insert" && focus.index === c.i ? "is-focused" : ""}`}
+                        aria-label="inserted punctuation"
+                      >
+                        {c.text}
+                      </span>
+                    ) : (
+                      <span
+                        key={`t-${pIdx}-${idx}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => onTokenClick(c.i)}
+                        onKeyDown={(e) => onKey(e, "token", c.i)}
+                        className={`cbm-cell ${
+                          c.ui === "incorrect" ? "pill-incorrect" :
+                          c.ui === "possible"  ? "pill-possible"  : "pill-correct"
+                        } ${focus?.type === "token" && focus.index === c.i ? "is-focused" : ""}`}
+                      >
+                        {c.text}
+                      </span>
+                    )
+                  )}
+                </div>
+              ))}
             </div>
           </div>
 
