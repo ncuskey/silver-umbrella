@@ -54,15 +54,23 @@ export function bootstrapStatesFromGB(
     const isCapitalization = isCapRewrite || isCapOfFirstWord || /CAP|CASE|CASING|UPPER/i.test(type) || /capital/i.test(e.err_desc || '');
     const isGrammar = cat === 'GRMR' || cat === 'GRAMMAR' || /GRAMMAR/.test(type);
     if (isCapitalization || isGrammar) {
-      const t = tokenAtOffset(tokens, e.start);
-      if (t) {
-        const tokenIndex = tokens.indexOf(t);
-        if (tokenIndex !== -1 && t.type === 'WORD') {
-          const rep = e.replace || '';
-          const WORD_RE = /^[A-Za-z]+(?:[-'’][A-Za-z]+)*$/;
-          const isWordSwap = isGrammar && WORD_RE.test(rep) && rep.toLowerCase() !== (t.raw || '').toLowerCase();
-          tokenModels[tokenIndex].state = (isCapitalization || isWordSwap) ? 'bad' : 'maybe';
+      const WORD_RE = /^[A-Za-z]+(?:[-'’][A-Za-z]+)*(?:\s+[A-Za-z]+(?:[-'’][A-Za-z]+)*)*$/; // allow multi-word reps
+      const rep = e.replace || '';
+      const wordSwapLike = isGrammar && /[A-Za-z]/.test(rep);
+
+      // Prefer all words within span; if none, fall back to token at offset
+      const spanTokens = tokensInSpan(tokens, e.start, e.end);
+      const markWord = (idx: number) => {
+        if (idx >= 0 && idx < tokenModels.length && tokens[idx].type === 'WORD') {
+          tokenModels[idx].state = (isCapitalization || wordSwapLike) ? 'bad' : 'maybe';
         }
+      };
+
+      if (spanTokens.length) {
+        for (const t of spanTokens) markWord(tokens.indexOf(t));
+      } else {
+        const t = tokenAtOffset(tokens, e.start);
+        if (t) markWord(tokens.indexOf(t));
       }
     }
   }

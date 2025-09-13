@@ -37,9 +37,13 @@ export function annotateFromGb(
     // 1) Attach edits to overlapping tokens
     let firstTok = tokens.findIndex(t => e.end > t.start && e.start < t.end);
     if (firstTok === -1) {
-      // If it's a pure insertion at a boundary (e.g., period), attach to the previous word
-      firstTok = tokens.findIndex(t => t.start >= e.end);
-      firstTok = firstTok > 0 ? firstTok - 1 : tokens.length - 1;
+      const nextTok = tokens.findIndex(t => t.start >= e.end);
+      // For INSERTs (pure punctuation), associate with the previous word; for MODIFY, associate with the next word
+      if ((e as any).edit_type === 'INSERT') {
+        firstTok = nextTok > 0 ? nextTok - 1 : tokens.length - 1;
+      } else {
+        firstTok = nextTok >= 0 ? nextTok : tokens.length - 1;
+      }
     }
 
     if (firstTok < 0 || firstTok >= tokens.length) continue;
@@ -66,6 +70,13 @@ export function annotateFromGb(
     } else if (isGrammar) {
       // Capitalization and clear word substitutions are treated as incorrect; other grammar stays advisory
       tk.ui = (isCapitalization || isWordSwap) ? "incorrect" : (tk.ui === "incorrect" ? "incorrect" : "possible");
+      // Also mark any additional WORD tokens that fall within the edited span
+      for (let j = firstTok + 1; j < tokens.length && tokens[j].start < e.end; j++) {
+        if (isWord(tokens[j])) {
+          const t2 = out[j];
+          t2.ui = (isCapitalization || isWordSwap) ? "incorrect" : (t2.ui === "incorrect" ? "incorrect" : "possible");
+        }
+      }
     } else if (cat === "PUNC" && TERMS.has(rep)) {
       // punctuation is shown via carets/dots; do NOT mark previous word as 'possible'
       // (No-op for INSERT+PUNC)
