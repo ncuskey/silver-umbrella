@@ -1,7 +1,10 @@
+const path = require("path");
 const withBundleAnalyzer = require("@next/bundle-analyzer")({ enabled: process.env.ANALYZE === "1" });
 const nextConfig = withBundleAnalyzer({
   output: 'standalone',
   images: { unoptimized: true },
+  // Force correct workspace root to avoid Next.js mis-detecting parent lockfiles
+  outputFileTracingRoot: __dirname,
   // Memory optimization settings
   experimental: {
     // Reduce memory usage during build
