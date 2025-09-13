@@ -434,6 +434,36 @@ function WritingScorer() {
   }
 
   // accessibility + click
+  // Build simple tooltip text from GB hits
+  function tooltipForToken(i: number): string | undefined {
+    const t = displayTokens[i] as any;
+    const hits = (t?.gbHits ?? []) as Array<{ start:number; end:number; replace?:string; err_cat?:string; err_type?:string; err_desc?:string; edit_type?:string }>;
+    if (!hits.length) return undefined;
+    const labels: string[] = [];
+    for (const e of hits) {
+      const cat = (e.err_cat || "").toUpperCase();
+      const rep = e.replace || "";
+      const original = text.slice(e.start, e.end);
+      const isCap = !!(rep && original && rep.toLowerCase() === original.toLowerCase() && rep !== original);
+      if (cat === 'SPELL') {
+        labels.push(`Spelling → ${rep}`);
+      } else if (cat === 'GRMR') {
+        if (isCap) labels.push('Capitalization');
+        else if (/n't|’t/.test(rep)) labels.push(`Contraction → ${rep}`);
+        else if (/\b(was|were|is|are|has|have|do|does|did|go|went|run|running)\b/i.test(rep)) labels.push(`Grammar → ${rep}`);
+        else labels.push('Grammar');
+      } else if (cat === 'PUNC' && /[.!?]/.test(rep)) {
+        labels.push(`Add terminal: ${rep}`);
+      } else if (cat) {
+        labels.push(cat);
+      }
+    }
+    // de-dupe while preserving order
+    const seen = new Set<string>();
+    const uniq = labels.filter(l => (seen.has(l) ? false : (seen.add(l), true)));
+    return uniq.join('; ');
+  }
+
   function cellEl(c: UICell, key: React.Key) {
     const role = (c.kind==="token" || c.kind==="insert" || (c.kind==="caret" && c.groupId)) ? "button" : undefined;
     const tabIndex = role ? 0 : -1;
@@ -445,6 +475,7 @@ function WritingScorer() {
         onClick={() => onCellActivate(c)}
         onKeyDown={(e)=>{ if (role && (e.key==="Enter"||e.key===" ")) { e.preventDefault(); onCellActivate(c); }}}
         className={clsForCell(c)}
+        title={c.kind === 'token' ? tooltipForToken((c as any).ti) : undefined}
         aria-pressed={role ? isSel(c.kind==="token"?"token":"group", (c as any).ti ?? (c as any).groupId) : undefined}
       >
         {c.kind==="insert" ? c.text : /* token text or caret glyph */ (c.kind==="caret" ? "^" : displayTokens[c.ti].overlay ?? displayTokens[c.ti].raw)}
