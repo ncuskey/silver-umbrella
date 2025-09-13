@@ -645,8 +645,8 @@ function WritingScorer() {
     let currentBlock: UICell[] = [];
 
     for (const cell of gridCells) {
-      // Start a new paragraph block when we hit a caret at a newline boundary
-      if (cell.kind === "caret" && nlBoundaries.has(cell.bi)) {
+      // Split when we encounter the FIRST token of a new paragraph, not the newline caret.
+      if (cell.kind === 'token' && nlBoundaries.has((cell as any).ti)) {
         if (currentBlock.length > 0) {
           blocks.push(currentBlock);
           currentBlock = [];
@@ -655,11 +655,7 @@ function WritingScorer() {
       currentBlock.push(cell);
     }
 
-    // Add the final block if it has content
-    if (currentBlock.length > 0) {
-      blocks.push(currentBlock);
-    }
-
+    if (currentBlock.length > 0) blocks.push(currentBlock);
     return blocks;
   }, [gridCells, text, displayTokens]);
 

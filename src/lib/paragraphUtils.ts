@@ -119,6 +119,8 @@ function getParagraphEndTokenIndices(paragraphs: string[], tokens: Token[]): num
   for (let i = 0; i < paragraphs.length; i++) {
     const paragraph = paragraphs[i];
     const paragraphEndOffset = currentOffset + paragraph.length;
+    // Skip empty paragraphs created by consecutive newlines
+    const isEmpty = paragraph.length === 0;
     
     // Find the last token that ends at or before this paragraph's end
     let endTokenIdx = -1;
@@ -130,8 +132,10 @@ function getParagraphEndTokenIndices(paragraphs: string[], tokens: Token[]): num
       }
     }
     
-    if (endTokenIdx !== -1) {
-      endIndices.push(endTokenIdx);
+    if (!isEmpty && endTokenIdx !== -1) {
+      if (endIndices.length === 0 || endIndices[endIndices.length - 1] !== endTokenIdx) {
+        endIndices.push(endTokenIdx);
+      }
     }
     
     // Move to next paragraph (accounting for newline)
