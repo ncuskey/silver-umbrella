@@ -609,23 +609,6 @@ function WritingScorer() {
       if (gid && sev === 'correct') sev = 'possible';
       cells.push({ kind: 'caret', bi: b, groupId: gid, ui: sev });
 
-      // 2) any GB insertions *at* boundary b: show them *after* the caret,
-      //    then add a synthetic caret to close the group (^ . ^)
-      const insList = insertionMap.get(b) ?? [];
-      for (let k = 0; k < insList.length; k++) {
-        const ins = insList[k];
-        // show the exact replacement symbol GB suggested
-        cells.push({ 
-          kind: "insert", 
-          bi: ins.beforeBIndex, 
-          text: ins.char as "."|"!"|"?", 
-          groupId: groupByBoundary.get(ins.beforeBIndex)!, 
-          ui: "possible" 
-        });
-        // synthetic caret to close the group
-        cells.push({ kind: 'caret', bi: b, groupId: gid, ui: 'possible' });
-      }
-
       // 3) token after boundary b (for b < N)
       if (b < N) {
         const t = displayTokens[b];
