@@ -270,7 +270,8 @@ export function deriveTerminalFromLT(tokens: Token[], issues: any[]) {
     // Check for UPPERCASE_SENTENCE_START rule specifically
     if (rId === "UPPERCASE_SENTENCE_START") {
       // Find the token that the issue points to (the capitalized word)
-      const capitalizedToken = tokens.find(t => (t.start ?? 0) >= m.offset && (t.start ?? 0) < m.offset + m.length);
+      // Be tolerant to offset/length inconsistencies: pick the first WORD starting at/after offset
+      const capitalizedToken = tokens.find(t => t.type === "WORD" && (t.start ?? 0) >= m.offset);
       if (capitalizedToken && capitalizedToken.type === "WORD" && /^[A-Z]/.test(capitalizedToken.raw)) {
         // Find the previous word token
         const prevWordIdx = capitalizedToken.idx - 1;
@@ -333,11 +334,26 @@ function nearestBoundaryLeftOf(tokens: any[], j: number) {
   return -1;
 }
 
+// Support legacy call signatures: (tokens, issues) and (text, tokens, issues)
 export function convertLTTerminalsToInsertions(
-  text: string,
-  tokens: Token[],
-  ltIssues: any[]
+  textOrTokens: string | Token[],
+  maybeTokens?: Token[] | any[],
+  maybeIssues?: any[]
 ): VirtualTerminalInsertion[] {
+  // Normalize arguments
+  let text = "";
+  let tokens: Token[] = [];
+  let ltIssues: any[] = [];
+
+  if (typeof textOrTokens === "string") {
+    text = textOrTokens as string;
+    tokens = (maybeTokens as Token[]) ?? [];
+    ltIssues = Array.isArray(maybeIssues) ? (maybeIssues as any[]) : [];
+  } else {
+    tokens = (textOrTokens as Token[]) ?? [];
+    ltIssues = Array.isArray(maybeTokens) ? (maybeTokens as any[]) : [];
+  }
+
   const out: VirtualTerminalInsertion[] = [];
   const seen = new Set<number>();
 
@@ -353,6 +369,7 @@ export function convertLTTerminalsToInsertions(
         out.push({
           at: tokens[wordIdx].end || 0,
           char: ".",
+          // Prefer caret boundary if present; otherwise fall back to left WORD index
           beforeBIndex: boundaryIdx >= 0 ? boundaryIdx : wordIdx,
           reason: "LT",
           message: "Possible missing sentence-ending punctuation (from LanguageTool)."
@@ -371,7 +388,7 @@ export function convertLTTerminalsToInsertions(
       // the **boundary caret** the VT needs (e.g., the "^" between "dark" and "nobody")
       const boundaryIdx = nearestBoundaryLeftOf(tokens, startTok.idx);
 
-      if (wordIdx < 0 || boundaryIdx < 0) {
+      if (wordIdx < 0) {
         // debug so we can see what failed
         // eslint-disable-next-line no-console
         console.info("[LT→VT] skip-uppercase", { wordIdx, boundaryIdx, startIdx: startTok.idx });
@@ -386,7 +403,8 @@ export function convertLTTerminalsToInsertions(
         out.push({
           at: tokens[wordIdx].end || 0,
           char: ".",
-          beforeBIndex: boundaryIdx,         // but ownership is the LEFT boundary caret
+          // Prefer caret boundary if present; otherwise fall back to left WORD index
+          beforeBIndex: boundaryIdx >= 0 ? boundaryIdx : wordIdx,
           reason: "LT",
           message: "Possible missing sentence-ending punctuation (from LanguageTool)."
         });
