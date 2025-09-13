@@ -405,9 +405,19 @@ function WritingScorer() {
     }
     if (c.kind === "caret") {
       const group = c.groupId ? ui.terminalGroups.find(g => g.id === c.groupId?.toString()) : null;
-      const state = group?.status ?? "ok";
-      const selected = Boolean(c.groupId && isSel("group", c.groupId?.toString() ?? ""));
-      return bubbleCls(state, selected);
+      if (group) {
+        const state = group.status;
+        const selected = Boolean(c.groupId && isSel("group", c.groupId?.toString() ?? ""));
+        return bubbleCls(state, selected);
+      }
+      // No group: map caret severity from cell UI to bubble status and highlight
+      const map: Record<'correct'|'possible'|'incorrect','ok'|'maybe'|'bad'> = {
+        correct: 'ok',
+        possible: 'maybe',
+        incorrect: 'bad',
+      };
+      const selected = focus?.type === 'caret' && focus.index === c.bi;
+      return bubbleCls(map[c.ui], selected);
     }
     return "";
   }
@@ -568,16 +578,26 @@ function WritingScorer() {
   const gridCells: UICell[] = useMemo(() => {
     const cells: UICell[] = [];
     const N = displayTokens.length;
+    // Helper to compute caret severity from adjacent tokens and group
+    const tokStateAt = (i: number): 'correct'|'possible'|'incorrect' => {
+      const t = ui.tokens[i];
+      if (!t) return 'correct';
+      return t.state === 'bad' ? 'incorrect' : (t.state === 'maybe' ? 'possible' : 'correct');
+    };
+    const worst = (a: 'correct'|'possible'|'incorrect', b: 'correct'|'possible'|'incorrect') => {
+      if (a === 'incorrect' || b === 'incorrect') return 'incorrect';
+      if (a === 'possible' || b === 'possible') return 'possible';
+      return 'correct';
+    };
 
     for (let b = 0; b <= N; b++) {
       // 1) caret at boundary b
       const gid = groupByBoundary.get(b);
-      cells.push({ 
-        kind: "caret", 
-        bi: b, 
-        groupId: gid, 
-        ui: gid ? "possible" : "correct" 
-      });
+      let sev: 'correct'|'possible'|'incorrect' = 'correct';
+      if (b > 0) sev = worst(sev, tokStateAt(b - 1));
+      if (b < N) sev = worst(sev, tokStateAt(b));
+      if (gid && sev === 'correct') sev = 'possible';
+      cells.push({ kind: 'caret', bi: b, groupId: gid, ui: sev });
 
       // 2) any GB insertions *at* boundary b: show them *after* the caret,
       //    then add a synthetic caret to close the group (^ . ^)
@@ -593,12 +613,7 @@ function WritingScorer() {
           ui: "possible" 
         });
         // synthetic caret to close the group
-        cells.push({ 
-          kind: "caret", 
-          bi: b, 
-          groupId: gid, 
-          ui: gid ? "possible" : "correct" 
-        });
+        cells.push({ kind: 'caret', bi: b, groupId: gid, ui: 'possible' });
       }
 
       // 3) token after boundary b (for b < N)
@@ -612,7 +627,7 @@ function WritingScorer() {
       }
     }
     return cells;
-  }, [displayTokens, caretRow, insertionMap, groupByBoundary]);
+  }, [displayTokens, caretRow, insertionMap, groupByBoundary, ui.tokens]);
 
   // Split grid cells into paragraph blocks
   const paragraphBlocks: UICell[][] = useMemo(() => {
