@@ -609,6 +609,22 @@ function WritingScorer() {
       if (gid && sev === 'correct') sev = 'possible';
       cells.push({ kind: 'caret', bi: b, groupId: gid, ui: sev });
 
+      // 2) any GB insertions at boundary b: show dot and the closing caret
+      const insList = insertionMap.get(b) ?? [];
+      for (let k = 0; k < insList.length; k++) {
+        const ins = insList[k];
+        // show proposed punctuation as its own pill
+        cells.push({
+          kind: 'insert',
+          bi: ins.beforeBIndex,
+          text: ins.char as '.'|'!'|'?',
+          groupId: groupByBoundary.get(ins.beforeBIndex)!,
+          ui: 'possible',
+        });
+        // closing caret for the group
+        cells.push({ kind: 'caret', bi: b, groupId: gid, ui: 'possible' });
+      }
+
       // 3) token after boundary b (for b < N)
       if (b < N) {
         const t = displayTokens[b];
@@ -822,25 +838,7 @@ function WritingScorer() {
             <div className="cbm-paragraphs mt-3 p-3 rounded-2xl bg-muted/40">
               {paragraphBlocks.map((block, pIdx) => (
                 <div key={pIdx} className="cbm-paragraph">
-                  {block.map((c, idx) => {
-                    // Check if this is part of a terminal group
-                    if (c.kind === "caret" && c.groupId) {
-                      const group = ui.terminalGroups.find(g => g.id === c.groupId?.toString());
-                      if (group) {
-                        const selected = isSel("group", c.groupId?.toString() ?? "");
-                        return (
-                          <TerminalGroup
-                            key={`tg-${pIdx}-${idx}`}
-                            id={group.id}
-                            status={group.status}
-                            selected={selected}
-                            onToggle={(id) => { onTerminalGroupToggle(id); setSelected({ type: "group", id }); }}
-                          />
-                        );
-                      }
-                    }
-                    return cellEl(c, `${c.kind}-${pIdx}-${idx}`);
-                  })}
+                  {block.map((c, idx) => cellEl(c, `${c.kind}-${pIdx}-${idx}`))}
                 </div>
               ))}
             </div>
