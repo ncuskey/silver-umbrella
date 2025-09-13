@@ -62,14 +62,19 @@ export function gbToVtInsertions(gb: { edits?: GbEdit[] }, text: string, tokens:
     }
   }
 
-  // 2) MODIFY that begins with a terminal (e.g., ". We") → insert at the boundary
+  // 2) MODIFY that contains one or more sentence terminators in the replacement
+  //    Example: ". We" (at start) or "broke. My" (internal)
   for (const e of edits) {
     if (e.edit_type !== "MODIFY") continue;
-    const m = (e.replace || "").match(/^[.!?]\s?/);
-    if (!m) continue;
-    const ch = m[0][0] as "."|"!"|"?";
-    const b = charOffsetToBoundaryIndex(e.start, tokens, text);
-    push(b, e.start, ch, e.err_desc || `Add ${ch}`);
+    const repl = e.replace || "";
+    for (let i = 0; i < repl.length; i++) {
+      const ch = repl[i] as any;
+      if (ch === "." || ch === "!" || ch === "?") {
+        const at = e.start + i; // approximate insertion offset within span
+        const b = charOffsetToBoundaryIndex(at, tokens, text);
+        push(b, at, ch, e.err_desc || `Add ${ch}`);
+      }
+    }
   }
 
   return out.sort((a, b) => a.beforeBIndex - b.beforeBIndex);
