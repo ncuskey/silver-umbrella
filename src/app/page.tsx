@@ -64,8 +64,8 @@ type UIState = "correct" | "possible" | "incorrect";
 
 type UICell =
   | { kind: "token"; ti: number; ui: UIState }
-  | { kind: "caret"; bi: number; groupId?: number; ui: UIState }
-  | { kind: "insert"; bi: number; text: "."|"!"|"?" ; groupId: number; ui: UIState };
+  | { kind: "caret"; bi: number; groupId?: number | string; ui: UIState }
+  | { kind: "insert"; bi: number; text: "."|"!"|"?" ; groupId: number | string; ui: UIState };
 
 type DisplayToken = LibToken & { virtual?: boolean; essential?: boolean; display?: string };
 
@@ -571,10 +571,10 @@ function WritingScorer() {
 
   // Group ID assignment for terminal groups
   const groupByBoundary = useMemo(() => {
-    const map = new Map<number, number>();
-    let nextGroupId = 1;
+    // Use stable IDs matching TerminalGroupModel (tg-<anchorIndex>)
+    const map = new Map<number, string>();
     for (const ins of vtInsertions) {
-      const gid = nextGroupId++;
+      const gid = `tg-${ins.beforeBIndex}`;
       map.set(ins.beforeBIndex, gid);
     }
     return map;
@@ -851,7 +851,7 @@ function WritingScorer() {
                             id={group.id}
                             status={group.status}
                             selected={selected}
-                            onToggle={onTerminalGroupToggle}
+                            onToggle={(id) => { onTerminalGroupToggle(id); setSelected({ type: "group", id }); }}
                           />
                         );
                       }
