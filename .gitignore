@@ -15,3 +15,5 @@ build
 *.log
 src/app/.!*
 *.backup
+.env.local
+.env

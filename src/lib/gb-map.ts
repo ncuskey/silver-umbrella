@@ -43,13 +43,14 @@ export function bootstrapStatesFromGB(
         }
       }
     }
-    const isGrammar = cat === 'GRMR' || cat === 'GRAMMAR' || /CAP|CASE|CASING|GRAMMAR/.test(type);
-    if (isGrammar) {
+    const isCapitalization = /CAP|CASE|CASING|UPPER/i.test(type) || /capital/i.test(e.err_desc || '');
+    const isGrammar = cat === 'GRMR' || cat === 'GRAMMAR' || /GRAMMAR/.test(type);
+    if (isCapitalization || isGrammar) {
       const t = tokenAtOffset(tokens, e.start);
       if (t) {
         const tokenIndex = tokens.indexOf(t);
         if (tokenIndex !== -1 && t.type === 'WORD') {
-          tokenModels[tokenIndex].state = 'maybe';
+          tokenModels[tokenIndex].state = isCapitalization ? 'bad' : 'maybe';
         }
       }
     }
