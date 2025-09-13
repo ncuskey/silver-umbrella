@@ -29,7 +29,7 @@ export async function checkWithGrammarBot(text: string): Promise<GbResponse> {
     return checkWithGrammarBot(text);
   }
   
-  const json = await res.json();
+  const json = await res.json().catch(() => ({}));
   if (typeof window !== "undefined" && (window as any).__CBM_DEBUG__) {
     console.info("[GB] raw", json);
     console.table((json.edits ?? []).map((e: GbEdit) => ({
@@ -40,5 +40,6 @@ export async function checkWithGrammarBot(text: string): Promise<GbResponse> {
       err_cat: e.err_cat
     })));
   }
-  return json;
+  // Always surface HTTP status back to the caller so UI can react
+  return { status: res.status, ...(json as any) } as GbResponse;
 }

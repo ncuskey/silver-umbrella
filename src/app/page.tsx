@@ -558,6 +558,16 @@ function WritingScorer() {
   );
 
   const caretRow = useMemo(() => buildCaretRow(tokens, vtInsertions), [tokens, vtInsertions]);
+  // Detect GrammarBot availability/error from client response
+  const gbError: string | null = useMemo(() => {
+    const anyGb = gb as any;
+    if (!anyGb) return null;
+    if (typeof anyGb.status === 'number' && anyGb.status >= 400) {
+      return anyGb.error || `GrammarBot error (${anyGb.status})`;
+    }
+    if (!Array.isArray(anyGb.edits)) return 'GrammarBot unavailable (no edits)';
+    return null;
+  }, [gb]);
 
   // Group ID assignment for terminal groups
   const groupByBoundary = useMemo(() => {
@@ -753,6 +763,12 @@ function WritingScorer() {
               <label className="text-sm font-medium">Paste student writing</label>
               <Textarea className="min-h-[160px] mt-1" value={text} onChange={(e) => setText(e.target.value)} />
             </div>
+
+            {gbError && (
+              <div className="mt-2 p-2 rounded-lg bg-amber-50 border border-amber-300 text-xs text-amber-900">
+                GrammarBot unavailable: {gbError}. Set GRAMMARBOT_API_KEY in .env.local and restart the dev server.
+              </div>
+            )}
 
             {/* Control strip: time + annunciators */}
             <div className="mt-2 flex flex-wrap items-center gap-3">
