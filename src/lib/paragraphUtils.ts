@@ -55,7 +55,8 @@ export function gbToVtInsertions(gb: { edits?: GbEdit[] }, text: string, tokens:
         message: e.err_desc || `Add ${e.replace}`
       };
     })
-    .filter(x => x.beforeBIndex !== N);
+    // Allow end-of-text insertions (boundary N) so missing final punctuation renders as a terminal group
+    .filter(x => x.beforeBIndex != null);
 }
 
 /**
@@ -81,14 +82,10 @@ export function withParagraphFallbackDots(
     const isLastParagraph = i === paragraphEndTokenIndices.length - 1;
     const isLastTokenOverall = endTokenIdx === N - 1;
     
-    // Skip if this is the last paragraph and its end token is also the last token overall
-    if (isLastParagraph && isLastTokenOverall) {
-      continue;
-    }
-    
     const boundaryIdx = endTokenIdx + 1;
     
-    if (boundaryIdx !== N && !byBoundary.has(boundaryIdx)) {
+    // Permit last boundary (N) as well; dedupe via byBoundary set
+    if (!byBoundary.has(boundaryIdx)) {
       // Check the token before the break; if it already ends with . ! ? we skip.
       const prevIdx = boundaryIdx - 1;
       const endsWithTerminal =

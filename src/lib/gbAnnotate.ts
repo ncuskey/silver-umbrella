@@ -51,15 +51,21 @@ export function annotateFromGb(
     const type = (e.err_type || "").toUpperCase();
     const original = text.slice(e.start, e.end);
     const isCapRewrite = !!(e.replace && original && e.replace.toLowerCase() === original.toLowerCase() && e.replace !== original);
-    const isCapitalization = isCapRewrite || /CAP|CASE|CASING|UPPER/i.test(type) || /capital/i.test(e.err_desc || "");
+    // Handle wide GRMR edits that include multiple tokens but start by capitalizing the first word
+    const firstWordInReplace = (e.replace || "").match(/[A-Za-z]+(?:[-'’][A-Za-z]+)*/)?.[0] || "";
+    const firstTokRaw = tk.raw || "";
+    const isCapOfFirstWord = !!firstWordInReplace && firstWordInReplace.toLowerCase() === firstTokRaw.toLowerCase() && firstWordInReplace !== firstTokRaw;
+    const isCapitalization = isCapRewrite || isCapOfFirstWord || /CAP|CASE|CASING|UPPER/i.test(type) || /capital/i.test(e.err_desc || "");
     const isGrammar = cat === "GRMR" || cat === "GRAMMAR" || /GRAMMAR/.test(type);
     const rep = e.replace || "";
+    const WORD_RE = /^[A-Za-z]+(?:[-'’][A-Za-z]+)*$/;
+    const isWordSwap = isGrammar && WORD_RE.test(rep) && rep.toLowerCase() !== (firstTokRaw || original).toLowerCase();
 
     if (cat === "SPELL") {
       tk.ui = "incorrect";
     } else if (isGrammar) {
-      // Keep original casing in the bubble; do not overlay capitalization suggestions.
-      tk.ui = isCapitalization ? "incorrect" : (tk.ui === "incorrect" ? "incorrect" : "possible");
+      // Capitalization and clear word substitutions are treated as incorrect; other grammar stays advisory
+      tk.ui = (isCapitalization || isWordSwap) ? "incorrect" : (tk.ui === "incorrect" ? "incorrect" : "possible");
     } else if (cat === "PUNC" && TERMS.has(rep)) {
       // punctuation is shown via carets/dots; do NOT mark previous word as 'possible'
       // (No-op for INSERT+PUNC)

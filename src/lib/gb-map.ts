@@ -46,14 +46,21 @@ export function bootstrapStatesFromGB(
     }
     const original = text.slice(e.start, e.end);
     const isCapRewrite = !!(e.replace && original && e.replace.toLowerCase() === original.toLowerCase() && e.replace !== original);
-    const isCapitalization = isCapRewrite || /CAP|CASE|CASING|UPPER/i.test(type) || /capital/i.test(e.err_desc || '');
+    // Also detect capitalization when GB returns a wide GRMR edit starting at this token
+    const firstTok = tokenAtOffset(tokens, e.start);
+    const firstWordInReplace = (e.replace || '').match(/[A-Za-z]+(?:[-'’][A-Za-z]+)*/)?.[0] || '';
+    const isCapOfFirstWord = !!(firstTok && firstTok.type === 'WORD' && firstWordInReplace && firstWordInReplace.toLowerCase() === (firstTok.raw || '').toLowerCase() && firstWordInReplace !== (firstTok.raw || ''));
+    const isCapitalization = isCapRewrite || isCapOfFirstWord || /CAP|CASE|CASING|UPPER/i.test(type) || /capital/i.test(e.err_desc || '');
     const isGrammar = cat === 'GRMR' || cat === 'GRAMMAR' || /GRAMMAR/.test(type);
     if (isCapitalization || isGrammar) {
       const t = tokenAtOffset(tokens, e.start);
       if (t) {
         const tokenIndex = tokens.indexOf(t);
         if (tokenIndex !== -1 && t.type === 'WORD') {
-          tokenModels[tokenIndex].state = isCapitalization ? 'bad' : 'maybe';
+          const rep = e.replace || '';
+          const WORD_RE = /^[A-Za-z]+(?:[-'’][A-Za-z]+)*$/;
+          const isWordSwap = isGrammar && WORD_RE.test(rep) && rep.toLowerCase() !== (t.raw || '').toLowerCase();
+          tokenModels[tokenIndex].state = (isCapitalization || isWordSwap) ? 'bad' : 'maybe';
         }
       }
     }
@@ -61,7 +68,7 @@ export function bootstrapStatesFromGB(
 
   // 3) Build terminal groups using the new deduplication logic
   const gbInserts = edits
-    .filter(e => e.err_cat === 'PUNC' && e.edit_type === 'INSERT' && e.replace === '.')
+    .filter(e => e.err_cat === 'PUNC' && e.edit_type === 'INSERT' && (e.replace === '.' || e.replace === '!' || e.replace === '?'))
     .map(e => ({ anchorIndex: mapOffsetToBoundaryIndex(e.start, tokens) }));
 
   const paragraphs = getParagraphs(text, tokens);
