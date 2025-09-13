@@ -28,7 +28,7 @@
 - **Immediate KPI Updates**: Click handlers trigger instant KPI recalculation with console logging
 - **Tailwind Color Safelist**: Comprehensive safelist ensures all dynamic color classes render properly
 - **UI Trio Rendering**: VT groups render as three individual pills `^ . ^`, grouped via a stable ID `tg-<boundary>`; clicking any toggles the group
-- **Paragraph Placement**: End-of-paragraph VT groups remain attached to the preceding paragraph; not inserted into blank lines; final paragraph is exempt
+- **Paragraph Placement**: End-of-paragraph VT groups remain attached to the preceding paragraph; not inserted into blank lines; final paragraph is included when missing a terminal
 
 #### State Management Refactoring
 - **Immutable State Pattern**: All state updates use immutable patterns with `setUi(prev => ({ ...prev, ... }))`
@@ -40,7 +40,7 @@
 - **Centralized Status Classes**: Static string literals for Tailwind classes with safelist protection
 - **Non-Interactive Glyphs**: Inner glyphs use `pointer-events-none` to prevent individual clicks
 - **Consistent Styling**: `bubbleCls()` function provides uniform styling across all token types
-- **Paragraph-Aware Logic**: Terminal insertion respects paragraph boundaries and suppresses end-of-text terminals
+- **Paragraph-Aware Logic**: Terminal insertion respects paragraph boundaries and includes end-of-text terminals when missing
 
 #### Tailwind Configuration (`tailwind.config.ts`)
 - **Comprehensive Safelist**: All dynamic color classes safelisted to prevent purge issues
@@ -76,9 +76,9 @@
 │   │   ├── gbClient.ts        # GrammarBot API client
 │   │   ├── gbToVT.ts          # GrammarBot to Virtual Terminal conversion
 │   │   ├── gbAnnotate.ts      # GrammarBot annotation and display logic (status mapping; preserves original casing)
-│   │   ├── gb-map.ts          # GB state mapping with paragraph-aware terminal group initialization
+│   │   ├── gb-map.ts          # GB state mapping; builds clickable TerminalGroups from VT insertions
 │   │   ├── useTokensAndGroups.ts # State management hook for tokens and groups (legacy support)
-│   │   ├── paragraphUtils.ts  # Paragraph-aware terminal insertion with end-of-text suppression; ignores empty paragraphs and dedupes paragraph ends
+│   │   ├── paragraphUtils.ts  # Paragraph-aware terminal insertion with end-of-text support; ignores empty paragraphs and dedupes paragraph ends
 │   │   ├── tokenize.ts        # Text tokenization
 │   │   ├── types.ts           # Core type definitions
 │   │   ├── export.ts          # CSV and PDF export utilities
@@ -297,7 +297,7 @@ interface DisplayToken extends Token {
 - **Deduplication Logic**: Prevents duplicate "^ . ^ . ^" patterns at paragraph breaks
 - **Boundary-based Grouping**: Uses `Set<number>` to track seen anchor indices
 - **Source Tracking**: Terminal groups track their source ('GB' for GrammarBot, 'PARA' for paragraph fallback)
-- **Paragraph Filtering**: Skips last paragraphs and empty paragraphs as specified
+- **Paragraph Filtering**: Skips empty paragraphs; includes final paragraph when missing a terminal
 - **Console Logging**: Debug output shows all terminal groups with their IDs and statuses
 
 
@@ -317,9 +317,9 @@ interface DisplayToken extends Token {
 
 #### Virtual Terminal System (`src/lib/gbToVT.ts`)
 - `gbEditsToInsertions()`: Converts GrammarBot edits to virtual terminal insertions
-- **Terminal Punctuation Filtering**: Excludes punctuation insertions at end of text
-- **Boundary Mapping**: Maps insertions to proper boundary indices
-- **Smart Detection**: Identifies terminal punctuation suggestions (., !, ?)
+- **Terminal Punctuation Detection**: Accepts INSERT PUNC and also sentence terminators found in MODIFY replacements
+- **Boundary Mapping**: Maps insertions to proper boundary indices, including end-of-text (`tokens.length`)
+- **Smart Detection**: Identifies terminal punctuation suggestions (., !, ?) anywhere within the replacement span
 
 #### Annotation System (`src/lib/gbAnnotate.ts`)
 - `annotateFromGb()`: Annotates tokens with GrammarBot results
@@ -332,8 +332,8 @@ interface DisplayToken extends Token {
 - `charOffsetToBoundaryIndex()`: Converts character offset to boundary index
 - `charOffsetToTokenIndex()`: Converts character offset to token index
 - `newlineBoundarySet()`: Detects paragraph boundaries from newline characters
-- `gbToVtInsertions()`: Converts GB edits to VT insertions, filtering end-of-text
-- `withParagraphFallbackDots()`: Adds fallback periods at paragraph boundaries
+- `gbToVtInsertions()`: Converts GB edits to VT insertions, detecting sentence terminators in both INSERT PUNC and MODIFY replacements; includes end-of-text
+- `withParagraphFallbackDots()`: Adds fallback periods at paragraph boundaries (including final paragraph)
 - **Paragraph Detection**: Automatic recognition of carriage returns and line breaks
 - **Smart Fallback**: Adds periods where GB didn't suggest punctuation at paragraph ends
 - **Boundary Mapping**: Accurate character-to-boundary index conversion
