@@ -833,7 +833,7 @@ function WritingScorer() {
             {/* Token display with interleaved carets - split into paragraphs */}
             <div className="cbm-paragraphs mt-3 p-3 rounded-2xl bg-muted/40">
               {paragraphBlocks.map((block, pIdx) => (
-                <div key={pIdx} className="cbm-paragraph mb-2 last:mb-0">
+                <div key={pIdx} className="cbm-paragraph mb-4 last:mb-0">
                   {block.map((c, idx) => cellEl(c, `${c.kind}-${pIdx}-${idx}`))}
                 </div>
               ))}
