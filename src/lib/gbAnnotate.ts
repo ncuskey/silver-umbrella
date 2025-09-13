@@ -49,7 +49,9 @@ export function annotateFromGb(
     // 2) Decide UI severity and optional overlay
     const cat = (e.err_cat || "").toUpperCase();
     const type = (e.err_type || "").toUpperCase();
-    const isCapitalization = /CAP|CASE|CASING|UPPER/i.test(type) || /capital/i.test(e.err_desc || "");
+    const original = text.slice(e.start, e.end);
+    const isCapRewrite = !!(e.replace && original && e.replace.toLowerCase() === original.toLowerCase() && e.replace !== original);
+    const isCapitalization = isCapRewrite || /CAP|CASE|CASING|UPPER/i.test(type) || /capital/i.test(e.err_desc || "");
     const isGrammar = cat === "GRMR" || cat === "GRAMMAR" || /GRAMMAR/.test(type);
     const rep = e.replace || "";
 

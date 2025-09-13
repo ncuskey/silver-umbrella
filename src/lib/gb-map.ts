@@ -43,7 +43,9 @@ export function bootstrapStatesFromGB(
         }
       }
     }
-    const isCapitalization = /CAP|CASE|CASING|UPPER/i.test(type) || /capital/i.test(e.err_desc || '');
+    const original = text.slice(e.start, e.end);
+    const isCapRewrite = !!(e.replace && original && e.replace.toLowerCase() === original.toLowerCase() && e.replace !== original);
+    const isCapitalization = isCapRewrite || /CAP|CASE|CASING|UPPER/i.test(type) || /capital/i.test(e.err_desc || '');
     const isGrammar = cat === 'GRMR' || cat === 'GRAMMAR' || /GRAMMAR/.test(type);
     if (isCapitalization || isGrammar) {
       const t = tokenAtOffset(tokens, e.start);
