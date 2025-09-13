@@ -34,6 +34,7 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 - **Request Cancellation**: AbortSignal support for grammar checking requests
 - **Rate Limiting**: Simple backoff handling for GrammarBot 429 responses
 - **Infraction Flagging**: Automated detection of definite vs. possible issues from GrammarBot
+- **Aggregated Infractions List**: Groups identical GrammarBot infractions by type + replacement and shows a frequency count (e.g., `10× PUNC → .`), sorted by most frequent
 - **Interactive Overrides**: Click words to toggle WSC scoring, click carets to cycle CWS states
 - **CWS Engine**: Strictly mechanical, CBM-aligned engine with visual caret indicators and boundary validation
 - **Rule-based Checks**: Capitalization, terminal punctuation, and sentence structure validation
@@ -125,7 +126,7 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 3. GrammarBot provides professional spell checking and grammar analysis via API
 4. Grammar checking runs automatically as you type (debounced)
 5. Review the 6 key metrics in the right column grid
-6. Check infractions and suggestions (always visible) - driven purely by GrammarBot (no local heuristics)
+6. Review the aggregated infractions and suggestions (always visible) — driven purely by GrammarBot, grouped by type + replacement with counts, and ordered from most to fewest
 7. Use interactive overrides to adjust scoring as needed (click words for WSC, click carets for CWS)
 8. Capitalization issues are treated as errors (red) but the original word casing is preserved in the bubble; punctuation suggestions appear as grouped `^ . ^`
 9. View GrammarBot correction preview for sanity checking
@@ -254,7 +255,7 @@ The CWS (Correct Writing Sequences) engine implements strictly mechanical, CBM-a
   - **Active Carets**: Highlighted carets for GB-proposed terminals
 - **Capitalization Overlays**: Optional display of capitalization fixes without changing source text
 - **Terminal Dots**: Visual indicators for punctuation insertions from GB analysis
-- **Enhanced Infractions**: GB-only infractions panel with proper GRMR/SPELL/PUNC tagging
+- **Enhanced Infractions**: GB-only infractions panel with proper GRMR/SPELL/PUNC tagging and aggregated counts
 - **Interactive Tooltips**: Hover over tokens to see error categories and suggestions
 - **Debug Logging**: Console output for development debugging with `__CBM_DEBUG__` flag
 
@@ -272,6 +273,12 @@ The CWS (Correct Writing Sequences) engine implements strictly mechanical, CBM-a
   - **End-of-Text Support**: Handles final insertions at end-of-text boundary
   - **Responsive Layout**: Maintains flex-wrap behavior for different screen sizes
 - **Accessibility**: Proper ARIA labels for screen readers and keyboard navigation
+
+### Infractions Panel
+- **Aggregation**: Identical GB infractions are grouped by tag (e.g., `PUNC`, `SPELL`, `GRMR`) and replacement character/text (if any).
+- **Counts**: Each row shows a frequency badge like `10×` followed by the tag and optional `→ replacement`.
+- **Ordering**: Rows are sorted by count (desc), then by tag to keep the list concise and scannable.
+- **Scope**: Display is derived directly from `gb.edits` (no heuristics), ensuring parity with GrammarBot output while staying compact.
 
 ### GB Enhancement Features (v3.1)
 - **Clean Punctuation Highlighting**: Words before punctuation insertions are no longer highlighted, providing cleaner visual feedback
