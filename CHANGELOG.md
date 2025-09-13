@@ -15,3 +15,4 @@ This project aims to follow Keep a Changelog and Semantic Versioning.
 - Changed: Capitalization at sentence start and clear word substitutions (e.g., go→went) are marked incorrect (red) instead of advisory.
 - Chore: Debug log of VT boundaries behind `?debug=1`.
 - Build: Set `outputFileTracingRoot` in `next.config.js` to avoid workspace root mis-detection in multi-lockfile environments.
+- UI: Added rule tooltips on tokens (labels + replacements) and terminal tooltips on carets/dots; CSS pop‑in animation with slight hover delay for a polished feel.
