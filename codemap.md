@@ -123,7 +123,7 @@
 - `SpellingScorer`: Spelling assessment tool
 - `TerminalGroup`: Unified terminal group component for ^ . ^ units
 - `SentenceList`: Displays parsed sentences
-- `InfractionList`: Shows flagged issues
+- `InfractionList`: Shows flagged issues aggregated by tag + replacement with counts, sorted by frequency
 
 ### Scoring Algorithms
 
