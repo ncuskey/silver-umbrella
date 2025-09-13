@@ -48,11 +48,13 @@ export function annotateFromGb(
 
     // 2) Decide UI severity and optional overlay
     const cat = (e.err_cat || "").toUpperCase();
+    const type = (e.err_type || "").toUpperCase();
+    const isGrammar = cat === "GRMR" || cat === "GRAMMAR" || /CAP|CASE|CASING|GRAMMAR/.test(type);
     const rep = e.replace || "";
 
     if (cat === "SPELL") {
       tk.ui = "incorrect";
-    } else if (cat === "GRMR") {
+    } else if (isGrammar) {
       // Keep original casing in the bubble; do not overlay capitalization suggestions.
       tk.ui = tk.ui === "incorrect" ? "incorrect" : "possible";
     } else if (cat === "PUNC" && TERMS.has(rep)) {
