@@ -4,7 +4,6 @@ import React, { useMemo, useState, useRef, useEffect, useCallback } from "react"
 import { motion } from "framer-motion";
 import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Info, AlertTriangle, ListChecks, Settings } from "lucide-react";
 import type { Token as LibToken, VirtualTerminalInsertion } from "@/lib/types";
@@ -144,21 +143,7 @@ function sentenceBoundaries(text: string): { startIdx: number; endIdx: number; r
   return res;
 }
 
-// ———————————— Spelling: Correct Letter Sequences (CLS) ————————————
-
-function clsForWord(target: string, attempt: string): { cls: number; max: number; correctWhole: boolean } {
-  const t = target.trim();
-  const a = attempt.trim();
-  const max = Math.max(t.length + 1, 1);
-  let cls = 0;
-  if (a[0] && a[0].toLowerCase() === t[0]?.toLowerCase()) cls++;
-  for (let i = 0; i < t.length - 1; i++) {
-    if (a[i] && a[i + 1] && a[i].toLowerCase() === t[i].toLowerCase() && a[i + 1].toLowerCase() === t[i + 1].toLowerCase()) cls++;
-  }
-  if (a[t.length - 1] && a[t.length - 1].toLowerCase() === t[t.length - 1]?.toLowerCase()) cls++;
-  const correctWhole = a.toLowerCase() === t.toLowerCase();
-  return { cls, max, correctWhole };
-}
+// (Spelling CLS module removed)
 
 
 // Complex LT filtering removed - using simple filter from lib
@@ -960,120 +945,18 @@ function WritingScorer() {
   );
 }
 
-function SpellingScorer() {
-  const [targets, setTargets] = useState<string>("because, friend, talk, forest, terrible");
-  const [attempts, setAttempts] = useState<string>("becuse, frend, tack, forist, terribel");
-
-  const targetList = useMemo(() => targets.split(/,|;|\n/).map((w) => w.trim()).filter(Boolean), [targets]);
-  const attemptList = useMemo(() => attempts.split(/,|;|\n/).map((w) => w.trim()).filter(Boolean), [attempts]);
-
-  const rows = useMemo(() => {
-    const n = Math.max(targetList.length, attemptList.length);
-    const r: { target: string; attempt: string; cls: number; max: number; correct: boolean }[] = [];
-    for (let i = 0; i < n; i++) {
-      const t = targetList[i] ?? "";
-      const a = attemptList[i] ?? "";
-      const { cls, max, correctWhole } = clsForWord(t, a);
-      r.push({ target: t, attempt: a, cls, max, correct: correctWhole });
-    }
-    return r;
-  }, [targetList, attemptList]);
-
-  const totals = useMemo(() => rows.reduce((acc, r) => {
-    acc.cls += r.cls; acc.max += r.max; if (r.correct) acc.wordsCorrect += 1; if (r.target) acc.wordsTotal += 1; return acc;
-  }, { cls: 0, max: 0, wordsCorrect: 0, wordsTotal: 0 }), [rows]);
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Spelling (Correct Letter Sequences)</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="grid md:grid-cols-2 gap-4">
-          <div>
-            <label className="text-sm font-medium">Target words (comma/semicolon/newline separated)</label>
-            <Textarea className="min-h-[120px] mt-1" value={targets} onChange={(e) => setTargets(e.target.value)} />
-          </div>
-          <div>
-            <label className="text-sm font-medium">Student attempts (aligned order)</label>
-            <Textarea className="min-h-[120px] mt-1" value={attempts} onChange={(e) => setAttempts(e.target.value)} />
-          </div>
-        </div>
-
-        <div className="mt-4 overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead>
-              <tr className="text-left border-b">
-                <th className="py-2 pr-4">#</th>
-                <th className="py-2 pr-4">Target</th>
-                <th className="py-2 pr-4">Attempt</th>
-                <th className="py-2 pr-4">CLS</th>
-                <th className="py-2 pr-4">Max</th>
-                <th className="py-2 pr-4">Word Correct</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r, i) => (
-                <tr key={i} className="border-b last:border-0">
-                  <td className="py-1 pr-4">{i + 1}</td>
-                  <td className="py-1 pr-4 font-medium">{r.target}</td>
-                  <td className="py-1 pr-4">{r.attempt}</td>
-                  <td className="py-1 pr-4">{r.cls}</td>
-                  <td className="py-1 pr-4">{r.max}</td>
-                  <td className="py-1 pr-4">{r.correct ? "✓" : ""}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-          <div className="p-3 rounded-2xl bg-white shadow-sm">
-            <div className="text-xs text-muted-foreground">Total CLS</div>
-            <div className="text-2xl font-semibold">{totals.cls}</div>
-          </div>
-          <div className="p-3 rounded-2xl bg-white shadow-sm">
-            <div className="text-xs text-muted-foreground">Max CLS</div>
-            <div className="text-2xl font-semibold">{totals.max}</div>
-          </div>
-          <div className="p-3 rounded-2xl bg-white shadow-sm">
-            <div className="text-xs text-muted-foreground">Words Correct</div>
-            <div className="text-2xl font-semibold">{totals.wordsCorrect} / {totals.wordsTotal}</div>
-          </div>
-        </div>
-
-        <div className="mt-4 text-xs text-muted-foreground">
-          <ul className="list-disc ml-5 space-y-1">
-            <li><strong>CLS</strong> counts boundary + adjacent letter pairs per target word (partial knowledge credit).</li>
-            <li>Use aligned lists so attempt #i corresponds to target #i.</li>
-          </ul>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
+// SpellingScorer removed
 
 export default function CBMApp(): JSX.Element {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 p-4 md:p-8">
       <div className="max-w-6xl mx-auto">
         <motion.h1 initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} className="text-2xl md:text-3xl font-bold">
-          CBM Writing & Spelling – Web Tool (TS) + Dictionary Packs & Flags
+          CBM Writing – Web Tool (TS)
         </motion.h1>
 
         <div className="mt-4">
-          <Tabs defaultValue="writing">
-            <TabsList>
-              <TabsTrigger value="writing">Written Expression</TabsTrigger>
-              <TabsTrigger value="spelling">Spelling</TabsTrigger>
-            </TabsList>
-            <TabsContent value="writing" className="mt-3">
-              <WritingScorer />
-            </TabsContent>
-            <TabsContent value="spelling" className="mt-3">
-              <SpellingScorer />
-            </TabsContent>
-          </Tabs>
+          <WritingScorer />
         </div>
 
         <Card className="mt-6">
