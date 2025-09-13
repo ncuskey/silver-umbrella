@@ -32,8 +32,10 @@ export function bootstrapStatesFromGB(
 
   // 2) Apply GB-driven states to words (ignore PUNC edits for word coloring)
   for (const e of edits) {
-    if (e.err_cat === 'PUNC') continue; // don't touch words; the terminal group visual handles it
-    if (e.err_cat === 'SPELL') {
+    const cat = (e.err_cat || '').toUpperCase();
+    const type = (e.err_type || '').toUpperCase();
+    if (cat === 'PUNC') continue; // don't touch words; the terminal group visual handles it
+    if (cat === 'SPELL') {
       for (const t of tokensInSpan(tokens, e.start, e.end)) {
         const tokenIndex = tokens.indexOf(t);
         if (tokenIndex !== -1 && t.type === 'WORD') {
@@ -41,7 +43,8 @@ export function bootstrapStatesFromGB(
         }
       }
     }
-    if (e.err_cat === 'GRMR') {
+    const isGrammar = cat === 'GRMR' || cat === 'GRAMMAR' || /CAP|CASE|CASING|GRAMMAR/.test(type);
+    if (isGrammar) {
       const t = tokenAtOffset(tokens, e.start);
       if (t) {
         const tokenIndex = tokens.indexOf(t);
