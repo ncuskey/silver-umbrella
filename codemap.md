@@ -18,7 +18,7 @@
 
 ### Recent Architectural Improvements
 
-#### Terminal Group System Overhaul (v8.1)
+#### Terminal Group System Overhaul (v8.1+)
 - **Single Clickable Units**: Terminal groups (^ . ^) implemented as single buttons with non-interactive inner glyphs
 - **Deduplication Logic**: New `buildTerminalGroups` function eliminates duplicate "^ . ^ . ^" triples at paragraph breaks
 - **Boundary-Based Grouping**: Groups deduplicated by boundary index using `Map<number, TerminalGroupModel>`
@@ -27,6 +27,8 @@
 - **Enhanced UX**: Single-click interaction model with proper visual feedback and state cycling
 - **Immediate KPI Updates**: Click handlers trigger instant KPI recalculation with console logging
 - **Tailwind Color Safelist**: Comprehensive safelist ensures all dynamic color classes render properly
+- **UI Trio Rendering**: VT groups render as three individual pills `^ . ^`, grouped via a stable ID `tg-<boundary>`; clicking any toggles the group
+- **Paragraph Placement**: End-of-paragraph VT groups remain attached to the preceding paragraph; not inserted into blank lines; final paragraph is exempt
 
 #### State Management Refactoring
 - **Immutable State Pattern**: All state updates use immutable patterns with `setUi(prev => ({ ...prev, ... }))`
@@ -73,10 +75,10 @@
 │   ├── lib/
 │   │   ├── gbClient.ts        # GrammarBot API client
 │   │   ├── gbToVT.ts          # GrammarBot to Virtual Terminal conversion
-│   │   ├── gbAnnotate.ts      # GrammarBot annotation and display logic
+│   │   ├── gbAnnotate.ts      # GrammarBot annotation and display logic (status mapping; preserves original casing)
 │   │   ├── gb-map.ts          # GB state mapping with paragraph-aware terminal group initialization
 │   │   ├── useTokensAndGroups.ts # State management hook for tokens and groups (legacy support)
-│   │   ├── paragraphUtils.ts  # Paragraph-aware terminal insertion with end-of-text suppression
+│   │   ├── paragraphUtils.ts  # Paragraph-aware terminal insertion with end-of-text suppression; ignores empty paragraphs and dedupes paragraph ends
 │   │   ├── tokenize.ts        # Text tokenization
 │   │   ├── types.ts           # Core type definitions
 │   │   ├── export.ts          # CSV and PDF export utilities
@@ -142,7 +144,7 @@
    - Excludes commas from CWS calculations
    - Rule-based validation (capitalization after terminals, spelling accuracy)
    - Implementation: `calcCWS()` with `capitalizationFixWordSet()` and `terminalBoundarySet()`
-   - Testing helper: a minimal VT proposal in the scoring core flags lowercase→Capital boundaries (excluding multi‑word Title Case) to support golden tests; it does not mutate source text.
+   - Testing helper: a minimal VT proposal in the scoring core flags lowercase→Capital boundaries (excluding multi‑word Title Case) to support golden tests; it does not mutate source text (runtime uses GrammarBot only).
 
 #### Spelling Metrics
 

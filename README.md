@@ -82,7 +82,8 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 ### Visual Improvements
 - **Consistent Status Colors**: Green (ok), Amber (maybe), Red (bad) with proper Tailwind classes
 - **Reactive UI**: All KPI cards update immediately when tokens or groups are clicked
-- **Better UX**: Single-click terminal group toggling with visual feedback
+- **Terminal Groups as Trio**: Punctuation suggestions render as three separate pills `^ . ^` (caret, dot, caret) grouped as a single clickable unit
+- **Paragraph Spacing**: Paragraphs are visually separated (Tailwind `mb-4`), while end-of-paragraph terminal groups remain attached to the last word of the paragraph
 
 ## Getting Started
 
@@ -95,6 +96,8 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
    - Get your API key from [https://neural.grammarbot.io/](https://neural.grammarbot.io/)
    - Create a `.env.local` file in the project root
    - Add your API key: `GRAMMARBOT_API_KEY=your_api_key_here`
+   - Restart the dev server after adding the key
+   - If the key is missing or invalid, the app shows a small banner indicating GrammarBot is unavailable
 
 3. Start the development server:
    ```bash
@@ -122,9 +125,9 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 3. GrammarBot provides professional spell checking and grammar analysis via API
 4. Grammar checking runs automatically as you type (debounced)
 5. Review the 6 key metrics in the right column grid
-6. Check infractions and suggestions (always visible) - now pure GrammarBot
+6. Check infractions and suggestions (always visible) - driven purely by GrammarBot (no local heuristics)
 7. Use interactive overrides to adjust scoring as needed (click words for WSC, click carets for CWS)
-8. Toggle capitalization fixes display as needed
+8. Capitalization issues are treated as errors (red) but the original word casing is preserved in the bubble; punctuation suggestions appear as grouped `^ . ^`
 9. View GrammarBot correction preview for sanity checking
 
 ### Spelling Tab
@@ -136,7 +139,7 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 
 - Built with Next.js 15, React 18, and TypeScript
 - Uses Framer Motion for animations
-- Tailwind CSS for styling
+- Tailwind CSS for styling (with safelisted dynamic classes)
 - Lucide React for icons
 - Modular UI components with shadcn/ui design system
 - Optimized for production with standalone output and minimal runtime bundles
@@ -148,7 +151,22 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 
 - LT caret handling: more tolerant capitalization detection for `UPPERCASE_SENTENCE_START` with robust token anchoring when offsets vary.
 - VT insertion compatibility: `convertLTTerminalsToInsertions` now supports both `(text, tokens, issues)` and `(tokens, issues)` signatures and falls back to the previous WORD boundary when an explicit caret is absent.
-- Minimal VT heuristic for tests: the scoring core exposes a lightweight virtual-terminal proposal that flags lowercase→Capital transitions while avoiding multi‑word Title Case runs (e.g., “The Terrible Day”). This is used to stabilize golden tests and does not alter source text.
+- No local heuristics at runtime: spelling/capitalization highlighting is based solely on GrammarBot edits. A banner appears if GrammarBot is unavailable.
+
+### Punctuation Groups (VT)
+
+- Terminal suggestions from GrammarBot for sentence ends (only `.`, `!`, `?`) render as three pills: `^` (caret), the dot/exclamation/question, and the closing `^` caret.
+- Clicking any part of the trio toggles the whole group status; colors stay in sync.
+- Commas and non‑sentence punctuation do not create VT groups and are ignored for CWS.
+- End‑of‑paragraph behavior:
+  - A group is inserted for every paragraph except the final text block if it lacks terminal punctuation.
+  - The group is attached to the end of the paragraph (same line as the last word), never in the blank space.
+  - Empty paragraphs (consecutive newlines) are ignored; no spurious groups are created between paragraphs.
+
+### Capitalization Treatment
+
+- Capitalization fixes returned by GrammarBot (pure case‑change replacements) are treated as errors (red) but do not change the bubble text (original casing is shown).
+- Caret highlighting derives from adjacent token states; both carets around an error reflect the token’s severity.
 
 ## Scoring Guidelines
 
