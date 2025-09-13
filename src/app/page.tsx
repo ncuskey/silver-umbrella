@@ -347,7 +347,7 @@ function InfractionList({ items }: { items: Infraction[] }) {
 
 function WritingScorer() {
   const [text, setText] = useState<string>(
-    "It was dark. nobody could see the trees of the forest The Terrible Day\n\nI woud drink water from the ocean and I woud eat the fruit off of the trees Then I woud bilit a house out of trees and I woud gather firewood to stay warm I woud try and fix my boat in my spare time"
+    "yesterday me and my freind go to the park we was runned fast but the dog chased us and it dont stop we yell nobody hear us the grass are green the skye blue we decide climb the tree but the branch breaked my shoes was muddy my shirt have hole’s. I think i gonna climb again but then and then and then we fall.\n\nLater the teacher sayed you should of stay home insted of playing in rain. “be careful kids” she tell us and we dont listen we was to busy running their in the feild I thinked maybe we is lost. My friend smile and say its okay we gonna find are way home eventually at 5 pm but i writed 5:00 instead. I also got 1nd place in the race, lol, but my sister-inlaw laughed."
   );
   const [overrides, setOverrides] = useState<Record<string | number, WordOverride | PairOverride>>({});
   const [pairOverrides, setPairOverrides] = useState<PairOverrides>({});
