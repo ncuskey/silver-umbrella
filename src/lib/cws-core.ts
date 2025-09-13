@@ -53,6 +53,42 @@ export function tokenize(text: string): Token[] {
   return toks;
 }
 
+// Minimal VT proposal for tests: detect missing terminal before a capitalized WORD
+function proposeVirtualTerminals(text: string): Array<{
+  leftBoundaryBIndex: number;
+  rightBoundaryBIndex: number;
+  insertAfterIdx: number;
+  reason: string;
+}> {
+  const tokens = tokenizeWithOffsets(text);
+  const out: Array<{ leftBoundaryBIndex: number; rightBoundaryBIndex: number; insertAfterIdx: number; reason: string }>= [];
+
+  for (let i = 0; i < tokens.length - 1; i++) {
+    const L = tokens[i];
+    const R = tokens[i + 1];
+    if (L.type !== "WORD" || R.type !== "WORD") continue;
+
+    const capNext = /^[A-Z]/.test(R.raw);
+    if (!capNext) continue;
+
+    // Only consider when previous word is lowercase (e.g., "dark Nobody")
+    const lowerPrev = /^[a-z]/.test(L.raw);
+    if (!lowerPrev) continue;
+
+    // Titlecase run heuristic: if next two tokens are capitalized words, skip (e.g., "The Terrible Day")
+    const R2 = tokens[i + 2];
+    if (R2 && R2.type === "WORD" && /^[A-Z]/.test(R2.raw)) continue;
+
+    out.push({
+      leftBoundaryBIndex: i,
+      rightBoundaryBIndex: i + 1,
+      insertAfterIdx: i,
+      reason: "CapitalAfterSpace",
+    });
+  }
+  return out;
+}
+
 /**
  * Build CWS pairs from tokens using the existing buildCwsPairs function
  */
@@ -90,6 +126,7 @@ export function score(text: string): {
   wsc: number; 
   cws: number; 
   eligibleBoundaries: number;
+  virtualTerminals?: Array<{ leftBoundaryBIndex: number; rightBoundaryBIndex: number; insertAfterIdx: number; reason: string }>;
 } {
   const tokens = tokenize(text);
   const spellChecker = createTestSpellChecker();
@@ -106,6 +143,9 @@ export function score(text: string): {
   
   // Eligible boundaries: all boundaries that could potentially count for CWS
   const eligibleBoundaries = pairs.filter(p => p.eligible).length;
-  
-  return { tww, wsc, cws, eligibleBoundaries };
+
+  // Provide minimal VT proposals for tests
+  const virtualTerminals = proposeVirtualTerminals(text);
+
+  return { tww, wsc, cws, eligibleBoundaries, virtualTerminals };
 }

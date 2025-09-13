@@ -144,6 +144,12 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 - ESLint configuration aligned with Next.js 15
 - Bundle analyzer integration for performance monitoring
 
+### Recent Test & Parity Improvements
+
+- LT caret handling: more tolerant capitalization detection for `UPPERCASE_SENTENCE_START` with robust token anchoring when offsets vary.
+- VT insertion compatibility: `convertLTTerminalsToInsertions` now supports both `(text, tokens, issues)` and `(tokens, issues)` signatures and falls back to the previous WORD boundary when an explicit caret is absent.
+- Minimal VT heuristic for tests: the scoring core exposes a lightweight virtual-terminal proposal that flags lowercase→Capital transitions while avoiding multi‑word Title Case runs (e.g., “The Terrible Day”). This is used to stabilize golden tests and does not alter source text.
+
 ## Scoring Guidelines
 
 - **TWW**: All words written; include misspellings; exclude numerals

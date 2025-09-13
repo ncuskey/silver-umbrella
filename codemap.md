@@ -81,7 +81,7 @@
 │   │   ├── types.ts           # Core type definitions
 │   │   ├── export.ts          # CSV and PDF export utilities
 │   │   ├── utils.ts           # Utility functions
-│   │   └── [legacy files]     # Unused legacy files (cws-lt.ts, cws.ts, etc.)
+│   │   └── [LT/CWS internals] # Utilities used by tests and LT parity (cws-lt.ts, cws.ts, etc.)
 │   └── workers/               # Web Workers (currently unused)
 ├── tests/                     # Test files
 │   └── cws.spec.ts           # Golden tests for CWS rules
@@ -142,6 +142,7 @@
    - Excludes commas from CWS calculations
    - Rule-based validation (capitalization after terminals, spelling accuracy)
    - Implementation: `calcCWS()` with `capitalizationFixWordSet()` and `terminalBoundarySet()`
+   - Testing helper: a minimal VT proposal in the scoring core flags lowercase→Capital boundaries (excluding multi‑word Title Case) to support golden tests; it does not mutate source text.
 
 #### Spelling Metrics
 
