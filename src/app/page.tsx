@@ -324,18 +324,29 @@ function SentenceList({ text }: { text: string }) {
 
 function InfractionList({ items }: { items: Infraction[] }) {
   if (!items.length) return <div className="text-sm text-muted-foreground">No infractions flagged.</div>;
+
+  const groups = useMemo(() => {
+    const map = new Map<string, { count: number; tag: string; replace: string }>();
+    for (const f of items) {
+      const tag = (f.tag || f.category || "").toUpperCase();
+      const rep = (f.replace || "").trim();
+      const key = `${tag}|${rep}`;
+      const prev = map.get(key);
+      if (prev) prev.count += 1;
+      else map.set(key, { count: 1, tag, replace: rep });
+    }
+    return Array.from(map.values()).sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+  }, [items]);
+
   return (
     <div className="space-y-2">
-      {items.map((f, i) => (
-        <div
-          key={i}
-          className="text-sm p-2 rounded-xl border border-amber-300 bg-amber-50"
-        >
+      {groups.map((g, i) => (
+        <div key={i} className="text-sm p-2 rounded-xl border border-amber-300 bg-amber-50">
           <div className="flex items-center gap-2">
             <ListChecks className="h-4 w-4" />
-            <Badge variant="secondary">{f.tag || f.category}</Badge>
-            <span>{f.message}</span>
-            {f.replace && <span className="text-xs text-muted-foreground">→ {f.replace}</span>}
+            <span className="inline-flex items-center rounded bg-slate-200 px-2 py-0.5 text-xs font-medium">{g.count}×</span>
+            <Badge variant="secondary">{g.tag}</Badge>
+            {g.replace && <span className="text-xs text-muted-foreground">→ {g.replace}</span>}
           </div>
         </div>
       ))}
