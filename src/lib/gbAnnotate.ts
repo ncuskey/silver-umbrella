@@ -53,10 +53,7 @@ export function annotateFromGb(
     if (cat === "SPELL") {
       tk.ui = "incorrect";
     } else if (cat === "GRMR") {
-      // Capitalization like "Nobody": only overlay if enabled
-      if (opts?.showCaps && /^[A-Z]/.test(rep) && rep.toLowerCase() === text.slice(e.start, e.end).toLowerCase()) {
-        tk.overlay = rep;        // visual only, source text unchanged
-      }
+      // Keep original casing in the bubble; do not overlay capitalization suggestions.
       tk.ui = tk.ui === "incorrect" ? "incorrect" : "possible";
     } else if (cat === "PUNC" && TERMS.has(rep)) {
       // punctuation is shown via carets/dots; do NOT mark previous word as 'possible'
