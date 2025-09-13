@@ -2,6 +2,7 @@ import type { Token } from "./types";
 import type { TokenModel } from "@/components/Token";
 import type { TerminalGroupModel } from "@/components/TerminalGroup";
 import { buildTerminalGroups as buildTerminalGroupsNew } from "./buildTerminalGroups";
+import { gbToVtInsertions, withParagraphFallbackDots } from "./paragraphUtils";
 
 export type TokState = 'ok' | 'maybe' | 'bad';
 
@@ -66,10 +67,9 @@ export function bootstrapStatesFromGB(
     }
   }
 
-  // 3) Build terminal groups using the new deduplication logic
-  const gbInserts = edits
-    .filter(e => e.err_cat === 'PUNC' && e.edit_type === 'INSERT' && (e.replace === '.' || e.replace === '!' || e.replace === '?'))
-    .map(e => ({ anchorIndex: mapOffsetToBoundaryIndex(e.start, tokens) }));
+  // 3) Build terminal groups using VT insertions (both INSERT PUNC and MODIFY containing terminators)
+  const vt = withParagraphFallbackDots(gbToVtInsertions({ edits } as any, text, tokens), text, tokens);
+  const gbInserts = vt.map(v => ({ anchorIndex: v.beforeBIndex }));
 
   const paragraphs = getParagraphs(text, tokens);
   const terminalGroupsRaw = buildTerminalGroupsNew(tokens, gbInserts, paragraphs);
