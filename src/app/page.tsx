@@ -559,6 +559,9 @@ function WritingScorer() {
   const vtInsertions = useMemo(() => {
     let inserts = gbToVtInsertions(gb ?? { edits: [] }, text, tokens);
     inserts = withParagraphFallbackDots(inserts, text, tokens);
+    if (typeof window !== "undefined" && (window as any).__CBM_DEBUG__) {
+      console.info("[VT] boundaries", inserts.map(i => ({ b: i.beforeBIndex, ch: i.char, at: i.at })));
+    }
     return inserts;
   }, [text, tokens, gb]);
 
