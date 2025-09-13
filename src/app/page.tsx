@@ -464,6 +464,13 @@ function WritingScorer() {
     return uniq.join('; ');
   }
 
+  function tipForCaret(bi: number): string | undefined {
+    const list = insertionMap.get(bi) ?? [];
+    if (!list.length) return 'Terminal group';
+    const chars = Array.from(new Set(list.map(i => i.char))).join(', ');
+    return `Terminal → ${chars}`;
+  }
+
   function cellEl(c: UICell, key: React.Key) {
     const role = (c.kind==="token" || c.kind==="insert" || (c.kind==="caret" && c.groupId)) ? "button" : undefined;
     const tabIndex = role ? 0 : -1;
@@ -474,8 +481,12 @@ function WritingScorer() {
         tabIndex={tabIndex}
         onClick={() => onCellActivate(c)}
         onKeyDown={(e)=>{ if (role && (e.key==="Enter"||e.key===" ")) { e.preventDefault(); onCellActivate(c); }}}
-        className={clsForCell(c)}
-        title={c.kind === 'token' ? tooltipForToken((c as any).ti) : undefined}
+        className={clsForCell(c) + ' tt'}
+        data-tip={
+          c.kind === 'token' ? (tooltipForToken((c as any).ti) || undefined)
+          : c.kind === 'insert' ? (`Terminal → ${c.text}`)
+          : (c.groupId ? tipForCaret((c as any).bi) : undefined)
+        }
         aria-pressed={role ? isSel(c.kind==="token"?"token":"group", (c as any).ti ?? (c as any).groupId) : undefined}
       >
         {c.kind==="insert" ? c.text : /* token text or caret glyph */ (c.kind==="caret" ? "^" : displayTokens[c.ti].overlay ?? displayTokens[c.ti].raw)}
