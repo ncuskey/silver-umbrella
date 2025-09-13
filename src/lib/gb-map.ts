@@ -11,6 +11,7 @@ export interface GBEdit {
   err_cat?: string;
   replace: string;
   err_desc?: string;
+  err_type?: string;
   edit_type?: string;
 }
 
