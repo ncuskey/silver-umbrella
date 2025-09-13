@@ -786,9 +786,6 @@ function WritingScorer() {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Written Expression (TWW, WSC, CWS) – with Flags</CardTitle>
-      </CardHeader>
       <CardContent>
         {/* Page body */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -952,7 +949,7 @@ export default function CBMApp(): JSX.Element {
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 p-4 md:p-8">
       <div className="max-w-6xl mx-auto">
         <motion.h1 initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} className="text-2xl md:text-3xl font-bold">
-          CBM Writing – Web Tool (TS)
+          Written Expression (TWW, WSC, CWS) – with Flags
         </motion.h1>
 
         <div className="mt-4">
