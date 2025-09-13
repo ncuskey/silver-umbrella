@@ -35,6 +35,7 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 - **Rate Limiting**: Simple backoff handling for GrammarBot 429 responses
 - **Infraction Flagging**: Automated detection of definite vs. possible issues from GrammarBot
 - **Aggregated Infractions List**: Groups identical GrammarBot infractions by type + replacement and shows a frequency count (e.g., `10× PUNC → .`), sorted by most frequent
+- **Rule Tooltips**: Instant, accessible tooltips show rule labels and suggested replacements on hover for tokens; terminal dots/carets show proposed punctuation. Includes a subtle pop‑in animation.
 - **Interactive Overrides**: Click words to toggle WSC scoring, click carets to cycle CWS states
 - **CWS Engine**: Strictly mechanical, CBM-aligned engine with visual caret indicators and boundary validation
 - **Rule-based Checks**: Capitalization, terminal punctuation, and sentence structure validation
@@ -257,7 +258,7 @@ The CWS (Correct Writing Sequences) engine implements strictly mechanical, CBM-a
 - **Capitalization Overlays**: Optional display of capitalization fixes without changing source text
 - **Terminal Dots**: Visual indicators for punctuation insertions from GB analysis
 - **Enhanced Infractions**: GB-only infractions panel with proper GRMR/SPELL/PUNC tagging and aggregated counts
-- **Interactive Tooltips**: Hover over tokens to see error categories and suggestions
+- **Interactive Tooltips**: Hover over tokens to see rule labels and suggestions (e.g., Capitalization, Grammar → were, Spelling → friend). Instant display with a subtle pop‑in animation.
 - **Debug Logging**: Console output for development debugging with `__CBM_DEBUG__` flag
 
 ### GB Insertion Display System
@@ -274,6 +275,13 @@ The CWS (Correct Writing Sequences) engine implements strictly mechanical, CBM-a
   - **End-of-Text Support**: Handles final insertions at end-of-text boundary
   - **Responsive Layout**: Maintains flex-wrap behavior for different screen sizes
 - **Accessibility**: Proper ARIA labels for screen readers and keyboard navigation
+- **Tooltips for Terminals**: Carets and dots show terminal proposals (e.g., `Terminal → .`) with the same pop‑in animation.
+
+### Tooltip Implementation
+
+- **CSS‑only**: Implemented via `data-tip` attributes and styles in `src/app/globals.css` (`.tt[data-tip]`).
+- **Timing**: Slight hover delay (~80ms) with fade/scale pop‑in; also appears on keyboard focus for accessibility.
+- **Scope**: Applied to tokens, terminal dots, and carets so users can discover why items are red/amber and what punctuation is proposed.
 
 ### Infractions Panel
 - **Aggregation**: Identical GB infractions are grouped by tag (e.g., `PUNC`, `SPELL`, `GRMR`) and replacement character/text (if any).

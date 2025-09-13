@@ -41,6 +41,7 @@
 - **Non-Interactive Glyphs**: Inner glyphs use `pointer-events-none` to prevent individual clicks
 - **Consistent Styling**: `bubbleCls()` function provides uniform styling across all token types
 - **Paragraph-Aware Logic**: Terminal insertion respects paragraph boundaries and includes end-of-text terminals when missing
+- **Tooltips**: CSS `data-tip` tooltips with a slight delay and pop‑in animation provide rule/terminal hints on tokens and terminal groups
 
 #### Tailwind Configuration (`tailwind.config.ts`)
 - **Comprehensive Safelist**: All dynamic color classes safelisted to prevent purge issues
@@ -124,6 +125,7 @@
 - `TerminalGroup`: Unified terminal group component for ^ . ^ units
 - `SentenceList`: Displays parsed sentences
 - `InfractionList`: Shows flagged issues aggregated by tag + replacement with counts, sorted by frequency
+- Tooltip styling: see `src/app/globals.css` (`.tt[data-tip]`). Tokens, carets, and dots attach `data-tip` for rule and terminal labels.
 
 ### Scoring Algorithms
 
