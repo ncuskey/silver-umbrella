@@ -520,41 +520,6 @@ function WritingScorer() {
   
   const tokens = useMemo<LibToken[]>(() => tokenize(text), [text]);
 
-  // Heuristic fallback when GrammarBot is unavailable: mark misspellings and capitalization
-  function buildHeuristicEdits(text_: string, toks: LibToken[]) {
-    const edits: any[] = [];
-    // 1) Spelling: words not in demo lexicon
-    for (const t of toks) {
-      if (t.type !== 'WORD') continue;
-      const word = t.raw.toLowerCase();
-      if (!lexicon.has(word)) {
-        edits.push({
-          start: t.start ?? 0,
-          end: t.end ?? (t.start ?? 0),
-          replace: t.raw,
-          edit_type: 'MODIFY',
-          err_cat: 'SPELL',
-          err_desc: 'Possible spelling'
-        });
-      }
-    }
-    // 2) Capitalization: after sentence-ending punctuation, next word should start with capital
-    for (let i = 0; i < toks.length - 1; i++) {
-      const L = toks[i];
-      const R = toks[i + 1];
-      if (L.type === 'PUNCT' && /[.?!]/.test(L.raw) && R?.type === 'WORD' && /^[a-z]/.test(R.raw)) {
-        edits.push({
-          start: R.start ?? 0,
-          end: R.end ?? (R.start ?? 0),
-          replace: R.raw.charAt(0).toUpperCase() + R.raw.slice(1),
-          edit_type: 'MODIFY',
-          err_cat: 'GRMR',
-          err_desc: 'Expected capital after sentence-ending punctuation'
-        });
-      }
-    }
-    return edits;
-  }
 
   useEffect(() => {
     let alive = true;
@@ -563,8 +528,8 @@ function WritingScorer() {
       if (alive) {
         setGb(resp);
         // Initialize token models and terminal groups from GB data
-        const edits = (resp?.edits?.length ? resp.edits : buildHeuristicEdits(text, tokens));
-        const { tokenModels: newTokenModels, terminalGroups: newTerminalGroups } = bootstrapStatesFromGB(text, tokens, edits);
+        const gbEdits = resp?.edits ?? [];
+        const { tokenModels: newTokenModels, terminalGroups: newTerminalGroups } = bootstrapStatesFromGB(text, tokens, gbEdits);
         setTokenModels(newTokenModels);
         setTerminalGroups(newTerminalGroups);
       }
