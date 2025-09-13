@@ -821,8 +821,8 @@ function WritingScorer() {
               </div>
             )}
 
-            {/* Control strip: time + annunciators */}
-            <div className="mt-2 flex flex-wrap items-center gap-3">
+            {/* Single-line controls: time + color key */}
+            <div className="mt-2 flex flex-wrap items-center gap-4 text-xs">
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground">Time (mm:ss)</span>
                 <input
@@ -833,57 +833,20 @@ function WritingScorer() {
                   aria-label="Probe time in minutes and seconds"
                 />
               </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Spell:</span>
-                <span className="inline-flex items-center rounded bg-slate-100 px-2 py-0.5 text-xs">
-                  GrammarBot
+              <div className="flex items-center gap-3">
+                <span className="inline-flex items-center gap-1">
+                  <span className="inline-block h-3 w-3 rounded bg-emerald-200 border border-emerald-300" />
+                  correct
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="inline-block h-3 w-3 rounded bg-red-200 border border-red-300" />
+                  incorrect
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="inline-block h-3 w-3 rounded bg-amber-200 border border-amber-300" />
+                  possible
                 </span>
               </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Grammar:</span>
-                <span className="inline-flex items-center rounded bg-slate-100 px-2 py-0.5 text-xs">
-                  GB-only
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Infractions:</span>
-                <span className="inline-flex items-center rounded bg-blue-100 px-2 py-0.5 text-xs">
-                  GrammarBot
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <label className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <input
-                    type="checkbox"
-                    checked={showCaps}
-                    onChange={(e) => setShowCaps(e.target.checked)}
-                    className="rounded"
-                  />
-                  Show capitalization fixes
-                </label>
-              </div>
-            </div>
-
-
-            {/* Legend */}
-            <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
-              <span className="inline-flex items-center gap-1">
-                <span className="inline-block h-3 w-3 rounded bg-emerald-200 border border-emerald-300" />
-                correct
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <span className="inline-block h-3 w-3 rounded bg-red-200 border border-red-300" />
-                incorrect
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <span className="inline-block h-3 w-3 rounded bg-amber-200 border border-amber-300" />
-                possible (GrammarBot)
-              </span>
-              <span className="text-slate-500">GrammarBot provides grammar suggestions</span>
             </div>
 
             {/* Token display with interleaved carets - split into paragraphs */}
