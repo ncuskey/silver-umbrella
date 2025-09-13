@@ -41,22 +41,38 @@ export function newlineBoundarySet(text: string, tokens: Token[]): Set<number> {
  */
 export function gbToVtInsertions(gb: { edits?: GbEdit[] }, text: string, tokens: Token[]): VirtualTerminalInsertion[] {
   const N = tokens.length;
-  return (gb.edits ?? [])
-    .filter(e => e.edit_type === "INSERT" && e.err_cat === "PUNC")
-    // Only keep sentence terminal suggestions, ignore commas/other punctuation
-    .filter(e => e.replace === "." || e.replace === "!" || e.replace === "?")
-    .map(e => {
-      const beforeBIndex = charOffsetToBoundaryIndex(e.start, tokens, text);
-      return {
-        at: e.start,
-        char: (e.replace as "." | "!" | "?"),
-        beforeBIndex: beforeBIndex ?? N,
-        reason: "GB" as const,
-        message: e.err_desc || `Add ${e.replace}`
-      };
-    })
-    // Allow end-of-text insertions (boundary N) so missing final punctuation renders as a terminal group
-    .filter(x => x.beforeBIndex != null);
+  const out: VirtualTerminalInsertion[] = [];
+  const seen = new Set<string>(); // key = `${b}|${ch}`
+
+  const push = (b: number | null, at: number, ch: "."|"!"|"?", msg?: string) => {
+    const beforeBIndex = b == null ? N : b;
+    const key = `${beforeBIndex}|${ch}`;
+    if (beforeBIndex < 0 || beforeBIndex > N) return;
+    if (seen.has(key)) return;
+    out.push({ at, char: ch, beforeBIndex, reason: "GB", message: msg || `Add ${ch}` });
+    seen.add(key);
+  };
+
+  const edits = gb.edits ?? [];
+  // 1) Direct INSERT PUNC → terminal
+  for (const e of edits) {
+    if (e.edit_type === "INSERT" && e.err_cat === "PUNC" && (e.replace === "." || e.replace === "!" || e.replace === "?")) {
+      const b = charOffsetToBoundaryIndex(e.start, tokens, text);
+      push(b, e.start, e.replace as any, e.err_desc);
+    }
+  }
+
+  // 2) MODIFY that begins with a terminal (e.g., ". We") → insert at the boundary
+  for (const e of edits) {
+    if (e.edit_type !== "MODIFY") continue;
+    const m = (e.replace || "").match(/^[.!?]\s?/);
+    if (!m) continue;
+    const ch = m[0][0] as "."|"!"|"?";
+    const b = charOffsetToBoundaryIndex(e.start, tokens, text);
+    push(b, e.start, ch, e.err_desc || `Add ${ch}`);
+  }
+
+  return out.sort((a, b) => a.beforeBIndex - b.beforeBIndex);
 }
 
 /**
