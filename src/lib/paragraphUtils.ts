@@ -43,11 +43,13 @@ export function gbToVtInsertions(gb: { edits?: GbEdit[] }, text: string, tokens:
   const N = tokens.length;
   return (gb.edits ?? [])
     .filter(e => e.edit_type === "INSERT" && e.err_cat === "PUNC")
+    // Only keep sentence terminal suggestions, ignore commas/other punctuation
+    .filter(e => e.replace === "." || e.replace === "!" || e.replace === "?")
     .map(e => {
       const beforeBIndex = charOffsetToBoundaryIndex(e.start, tokens, text);
       return {
         at: e.start,
-        char: (e.replace as "." | "!" | "?") ?? ".",
+        char: (e.replace as "." | "!" | "?"),
         beforeBIndex: beforeBIndex ?? N,
         reason: "GB" as const,
         message: e.err_desc || `Add ${e.replace}`
