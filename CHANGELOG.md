@@ -10,3 +10,8 @@ This project aims to follow Keep a Changelog and Semantic Versioning.
 - Fixed: Netlify type error by adding optional `err_type` to `GBEdit` to align with `GbEdit`.
 - Docs: Updated README and codemap to describe the new Infractions aggregation behavior.
 
+- Added: Terminal groups now built from VT insertions derived from both INSERT PUNC and MODIFY replacements that contain sentence terminators (e.g., ". We").
+- Added: End-of-text terminal support; final boundary groups render and are clickable.
+- Changed: Capitalization at sentence start and clear word substitutions (e.g., go→went) are marked incorrect (red) instead of advisory.
+- Chore: Debug log of VT boundaries behind `?debug=1`.
+- Build: Set `outputFileTracingRoot` in `next.config.js` to avoid workspace root mis-detection in multi-lockfile environments.

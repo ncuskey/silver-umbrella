@@ -21,7 +21,7 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 - **Group State Management**: Separate state tracking for individual tokens and terminal groups with independent cycling
 - **Unified Group Cycling**: Single click handler cycles entire terminal groups while maintaining individual token control
 - **Visual Synchronization**: All members of terminal groups share colors, selection state, and visual feedback
-- **Paragraph-Aware Terminal Insertion**: Respects paragraph boundaries and suppresses terminals at the very end of text
+- **Paragraph-Aware Terminal Insertion**: Respects paragraph boundaries and inserts sentence terminals even at end-of-text when missing; handles GB MODIFY-based sentence splits (e.g., ". We") in addition to PUNC INSERTs
 - **Reactive KPI Updates**: KPIs automatically recalculate when tokens or groups are clicked
 - **Deduplication Logic**: New `buildTerminalGroups` function eliminates duplicate "^ . ^ . ^" triples at paragraph breaks
 - **Immediate KPI Computation**: Click handlers trigger instant KPI recalculation with console logging for debugging
@@ -160,7 +160,7 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 - Clicking any part of the trio toggles the whole group status; colors stay in sync.
 - Commas and non‑sentence punctuation do not create VT groups and are ignored for CWS.
 - End‑of‑paragraph behavior:
-  - A group is inserted for every paragraph except the final text block if it lacks terminal punctuation.
+  - A group is inserted for every paragraph that lacks terminal punctuation, including the final text block.
   - The group is attached to the end of the paragraph (same line as the last word), never in the blank space.
   - Empty paragraphs (consecutive newlines) are ignored; no spurious groups are created between paragraphs.
 
@@ -209,10 +209,10 @@ The CWS (Correct Writing Sequences) engine implements strictly mechanical, CBM-a
 - **Visual Indicators**: Color-coded carets (^) show boundary status:
   - Green: Valid CWS boundary
   - Red: Invalid boundary (spelling/capitalization issue)
-  - Yellow: Advisory hint from LanguageTool grammar checking
+  - Yellow: Advisory hint from GrammarBot grammar checking
   - Muted: Non-eligible boundary (comma/quote/etc.)
 - **Interactive Overrides**: Click carets to cycle through yellow (advisory)→red (incorrect)→green (correct)→yellow (default)
-- **Character Position Tracking**: Token offsets enable precise alignment of LanguageTool issues to CWS boundaries
+- **Character Position Tracking**: Token offsets enable precise alignment of GrammarBot issues to CWS boundaries
 
 ## Spell Checking & Grammar
 
@@ -250,6 +250,7 @@ The CWS (Correct Writing Sequences) engine implements strictly mechanical, CBM-a
   - **Green Pills**: Correct tokens with no issues
   - **Yellow Pills**: Possible grammar suggestions from GB
   - **Red Pills**: Incorrect spelling errors from GB
+  - **Capitalization & Word Substitutions**: Wide GRMR edits that capitalize the first word and clear word substitutions (e.g., go→went) are treated as incorrect (red)
 - **Caret Row Display**: Visual caret indicators above tokens showing GB-proposed terminal punctuation:
   - **Ghost Carets**: Faint carets for default boundaries
   - **Active Carets**: Highlighted carets for GB-proposed terminals
@@ -513,6 +514,12 @@ The tool is designed for easy extension:
 - **Privacy Extensions**: Framework for additional privacy controls and compliance features
 
 ## Recent Updates
+
+## Dev Troubleshooting
+
+- Clean dev cache: stop the server and remove `.next` before restarting (`rm -rf .next && npm run dev`).
+- Workspace root: `next.config.js` sets `outputFileTracingRoot` to this project to avoid parent lockfile mis‑detection.
+- Port in use: if `:3000` is busy, run production locally with `npm run build && npm run start -p 3010`.
 
 ### Latest Improvements (v8.0) - Comprehensive State Management System
 - **Token Component**: Created `src/components/Token.tsx` with proper state classes (`state-ok`, `state-maybe`, `state-bad`) and data attributes
