@@ -4,6 +4,13 @@
 
 This application is a TypeScript React web app for Curriculum‑Based Measurement (CBM) written expression scoring. Built with Next.js 15, it provides automated scoring for educational assessments with interactive overrides and professional spell checking via GrammarBot API.
 
+## Breaking Changes (v9.0)
+
+- Terminal groups are deprecated and no longer used in the UI or KPIs. The component `src/components/TerminalGroup.tsx` remains in the repo but is not referenced.
+- Missing punctuation is surfaced as caret flags at boundaries (from GB-derived insertions); carets are non-interactive.
+- A left-side Discard area allows dragging tokens to hide them; Undo restores the last removal.
+- CWS scoring now depends on word states and absence of a caret flag at the boundary (i+1) between two visible words.
+
 ## Architecture
 
 ### Technology Stack

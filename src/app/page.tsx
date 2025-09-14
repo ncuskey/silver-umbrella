@@ -14,12 +14,10 @@ import { gbToVtInsertions, withParagraphFallbackDots, newlineBoundarySet } from 
 import { tokenize } from "@/lib/tokenize";
 import { cn, DEBUG, dgroup, dtable, dlog } from "@/lib/utils";
 import { toCSV, download } from "@/lib/export";
-import TerminalGroup, { type TerminalGroupModel } from "@/components/TerminalGroup";
 import { Token, type TokenModel } from "@/components/Token";
 import { bootstrapStatesFromGB, type TokState } from "@/lib/gb-map";
 import { useTokensAndGroups } from "@/lib/useTokensAndGroups";
 import { computeKpis } from "@/lib/computeKpis";
-import { toggleToken, toggleTerminalGroup } from "@/state/ui";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 
@@ -63,8 +61,7 @@ type UIState = "correct" | "possible" | "incorrect";
 
 type UICell =
   | { kind: "token"; ti: number; ui: UIState }
-  | { kind: "caret"; bi: number; groupId?: number | string; ui: UIState }
-  | { kind: "insert"; bi: number; text: "."|"!"|"?" ; groupId: number | string; ui: UIState };
+  | { kind: "caret"; bi: number; ui: UIState };
 
 type DisplayToken = LibToken & { virtual?: boolean; essential?: boolean; display?: string };
 
@@ -351,8 +348,16 @@ function WritingScorer() {
   const showInfractions = true;
   
   // New state management using hooks
-  const { tokens: tokenModels, groups: terminalGroups, setTokens: setTokenModels, setGroups: setTerminalGroups } = useTokensAndGroups();
-  const [selected, setSelected] = useState<{type:"token"|"group"; id:number|string} | null>(null);
+  const { tokens: tokenModels, setTokens: setTokenModels } = useTokensAndGroups() as any;
+  const [selected, setSelected] = useState<{type:"token"; id:number|string} | null>(null);
+
+  // Drag & drop discard + undo
+  const [draggingToken, setDraggingToken] = useState<number | null>(null);
+  const [overDiscard, setOverDiscard] = useState(false);
+  type UndoAction =
+    | { type: 'remove-token'; index: number }
+    | { type: 'remove-group'; id: string };
+  const [undoStack, setUndoStack] = useState<UndoAction[]>([]);
 
   // click routing from a cell
   function onCellActivate(c: UICell) {
@@ -360,31 +365,68 @@ function WritingScorer() {
       onTokenClick(c.ti);
       setSelected({ type: "token", id: c.ti });
     }
-    if (c.kind === "insert" || (c.kind === "caret" && c.groupId)) {
-      onTerminalGroupToggle(c.groupId!.toString());
-      setSelected({ type: "group", id: c.groupId!.toString() });
-    }
-    // plain caret (no group) does nothing
+    // caret cells are informational only now (flagged when punctuation missing)
   }
 
   // Helper function to cycle through statuses
   const cycle = (s: 'ok'|'maybe'|'bad'): 'ok'|'maybe'|'bad' =>
     s === 'ok' ? 'maybe' : s === 'maybe' ? 'bad' : 'ok';
 
-  // Click handlers for tokens and groups
+  // Click handlers for tokens
   const onTokenClick = (idx: number) => {
-    const token = ui.tokens[idx];
-    if (token) {
-      toggleToken(token.id, setUi);
-    }
+    setUi(prev => {
+      const tokens = prev.tokens.slice();
+      const t = tokens[idx];
+      if (t) {
+        const next = t.state === 'ok' ? 'maybe' : (t.state === 'maybe' ? 'bad' : 'ok');
+        tokens[idx] = { ...t, state: next } as any;
+      }
+      const kpis = computeKpis(tokens, prev.minutes, prev.caretBad);
+      return { ...prev, tokens, kpis };
+    });
   };
 
-  const onTerminalGroupToggle = (id: string) => {
-    toggleTerminalGroup(id, setUi);
-  };
+  // Remove a token by index (mark as removed, keep indices stable)
+  const removeTokenByIndex = useCallback((idx: number) => {
+    setUi(prev => {
+      const tokens = prev.tokens.slice();
+      if (tokens[idx]) tokens[idx] = { ...tokens[idx], removed: true } as any;
+      return { ...prev, tokens, kpis: computeKpis(tokens, prev.minutes, prev.caretBad) };
+    });
+    setUndoStack(prev => [...prev, { type: 'remove-token', index: idx }]);
+  }, []);
+
+  // Undo last action (supports token removal)
+  const handleUndo = useCallback(() => {
+    setUndoStack(prev => {
+      const next = prev.slice();
+      const action = next.pop();
+      if (!action) return prev;
+      if (action.type === 'remove-token') {
+        setUi(prevUi => {
+          const tokens = prevUi.tokens.slice();
+          if (tokens[action.index]) tokens[action.index] = { ...tokens[action.index], removed: false } as any;
+          return { ...prevUi, tokens, kpis: computeKpis(tokens, prevUi.minutes, prevUi.caretBad) };
+        });
+      }
+      return next;
+    });
+  }, []);
+
+  // Keyboard: Cmd/Ctrl+Z to undo
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        handleUndo();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [handleUndo]);
 
   // Render helpers
-  const isSel = (t:"token"|"group", id:number|string) => selected?.type===t && selected.id===id;
+  const isSel = (t:"token", id:number|string) => selected?.type===t && selected.id===id;
 
   function clsForCell(c: UICell) {
     if (c.kind === "token") {
@@ -393,20 +435,7 @@ function WritingScorer() {
       const selected = isSel("token", c.ti);
       return bubbleCls(state, selected);
     }
-    if (c.kind === "insert") {
-      const group = ui.terminalGroups.find(g => g.id === c.groupId?.toString());
-      const state = group?.status ?? "maybe";
-      const selected = isSel("group", c.groupId?.toString() ?? "");
-      return bubbleCls(state, selected);
-    }
     if (c.kind === "caret") {
-      const group = c.groupId ? ui.terminalGroups.find(g => g.id === c.groupId?.toString()) : null;
-      if (group) {
-        const state = group.status;
-        const selected = Boolean(c.groupId && isSel("group", c.groupId?.toString() ?? ""));
-        return bubbleCls(state, selected);
-      }
-      // No group: map caret severity from cell UI to bubble status and highlight
       const map: Record<'correct'|'possible'|'incorrect','ok'|'maybe'|'bad'> = {
         correct: 'ok',
         possible: 'maybe',
@@ -451,14 +480,15 @@ function WritingScorer() {
 
   function tipForCaret(bi: number): string | undefined {
     const list = insertionMap.get(bi) ?? [];
-    if (!list.length) return 'Terminal group';
+    if (!list.length) return undefined;
     const chars = Array.from(new Set(list.map(i => i.char))).join(', ');
-    return `Terminal → ${chars}`;
+    return `Missing terminal: ${chars}`;
   }
 
   function cellEl(c: UICell, key: React.Key) {
-    const role = (c.kind==="token" || c.kind==="insert" || (c.kind==="caret" && c.groupId)) ? "button" : undefined;
+    const role = (c.kind==="token") ? "button" : undefined;
     const tabIndex = role ? 0 : -1;
+    const draggable = c.kind === 'token';
     return (
       <span
         key={key}
@@ -466,28 +496,31 @@ function WritingScorer() {
         tabIndex={tabIndex}
         onClick={() => onCellActivate(c)}
         onKeyDown={(e)=>{ if (role && (e.key==="Enter"||e.key===" ")) { e.preventDefault(); onCellActivate(c); }}}
+        draggable={draggable}
+        onDragStart={draggable ? (e) => { try { e.dataTransfer.setData('text/plain', `token:${(c as any).ti}`); } catch {} setDraggingToken((c as any).ti); e.dataTransfer.effectAllowed = 'move'; } : undefined}
+        onDragEnd={draggable ? () => { setDraggingToken(null); setOverDiscard(false); } : undefined}
         className={clsForCell(c) + ' tt'}
         data-tip={
           c.kind === 'token' ? (tooltipForToken((c as any).ti) || undefined)
-          : c.kind === 'insert' ? (`Terminal → ${c.text}`)
-          : (c.groupId ? tipForCaret((c as any).bi) : undefined)
+          : tipForCaret((c as any).bi)
         }
-        aria-pressed={role ? isSel(c.kind==="token"?"token":"group", (c as any).ti ?? (c as any).groupId) : undefined}
+        aria-pressed={role ? isSel('token', (c as any).ti) : undefined}
       >
-        {c.kind==="insert" ? c.text : /* token text or caret glyph */ (c.kind==="caret" ? "^" : displayTokens[c.ti].overlay ?? displayTokens[c.ti].raw)}
+        {/* token text or caret glyph */}
+        {c.kind==="caret" ? "^" : displayTokens[c.ti].overlay ?? displayTokens[c.ti].raw}
       </span>
     );
   }
 
   // Focus state for clickable elements
-  const [focus, setFocus] = useState<{type:"caret"|"token"|"insert"; index:number} | null>(null);
+  const [focus, setFocus] = useState<{type:"caret"|"token"; index:number} | null>(null);
 
   // Click and keyboard handlers
   const onCaretClick = (i: number) => setFocus({ type: "caret", index: i });
   const onTokenClickFocus = (i: number) => setFocus({ type: "token", index: i });
-  const onInsertClick = (i: number) => setFocus({ type: "insert", index: i });
+  // no insert cells anymore
 
-  const onKey = (e: React.KeyboardEvent, type: "caret" | "token" | "insert", i: number) => {
+  const onKey = (e: React.KeyboardEvent, type: "caret" | "token", i: number) => {
     if (e.key === "Enter" || e.key === " ") { 
       e.preventDefault(); 
       setFocus({ type, index: i }); 
@@ -532,11 +565,12 @@ function WritingScorer() {
   const durationMin = durationSec ? durationSec / 60 : 0;
 
   // Single UI state object with KPIs
+  // caretBad is derived from VT insertions; initialize empty set
   const [ui, setUi] = useState({
     tokens: tokenModels,
-    terminalGroups: terminalGroups,
     minutes: durationMin,
-    kpis: computeKpis(tokenModels, terminalGroups, durationMin)
+    caretBad: new Set<number>(),
+    kpis: computeKpis(tokenModels, durationMin, new Set<number>())
   });
 
   // Update UI state when tokenModels or terminalGroups change
@@ -544,11 +578,10 @@ function WritingScorer() {
     setUi(prev => ({
       ...prev,
       tokens: tokenModels,
-      terminalGroups: terminalGroups,
       minutes: durationMin,
-      kpis: computeKpis(tokenModels, terminalGroups, durationMin)
+      kpis: computeKpis(tokenModels, durationMin, prev.caretBad)
     }));
-  }, [tokenModels, terminalGroups, durationMin]);
+  }, [tokenModels, durationMin]);
 
 // Complex functions removed - using LT-only approach
 
@@ -567,13 +600,12 @@ function WritingScorer() {
         setGb(resp);
         // Initialize token models and terminal groups from GB data
         const gbEdits = resp?.edits ?? [];
-        const { tokenModels: newTokenModels, terminalGroups: newTerminalGroups } = bootstrapStatesFromGB(text, tokens, gbEdits);
+        const { tokenModels: newTokenModels } = bootstrapStatesFromGB(text, tokens, gbEdits) as any;
         setTokenModels(newTokenModels);
-        setTerminalGroups(newTerminalGroups);
       }
     })();
     return () => { alive = false; };
-  }, [text, tokens, setTokenModels, setTerminalGroups]);
+  }, [text, tokens, setTokenModels]);
 
   const terminalInsertions = useMemo<VirtualTerminalInsertion[]>(() => {
     const edits = gb?.edits ?? [];
@@ -611,73 +643,67 @@ function WritingScorer() {
   }, [gb]);
 
   // Group ID assignment for terminal groups
-  const groupByBoundary = useMemo(() => {
-    // Use stable IDs matching TerminalGroupModel (tg-<anchorIndex>)
-    const map = new Map<number, string>();
-    for (const ins of vtInsertions) {
-      const gid = `tg-${ins.beforeBIndex}`;
-      map.set(ins.beforeBIndex, gid);
-    }
-    return map;
-  }, [vtInsertions]);
-
   const insertionMap = useMemo(
     () => groupInsertionsByBoundary(vtInsertions /* GB→VT array */),
     [vtInsertions]
   );
 
+  // caretBad set: boundaries with missing punctuation suggestions
+  useEffect(() => {
+    const bad = new Set<number>();
+    for (const ins of vtInsertions) bad.add(ins.beforeBIndex);
+    setUi(prev => ({ ...prev, caretBad: bad, kpis: computeKpis(prev.tokens, prev.minutes, bad) }));
+  }, [vtInsertions]);
+
+  // Build final output text with user overrides (removed tokens, kept/removed terminal groups)
+  const finalOutputText = useMemo(() => {
+    // With terminal groups removed, output text = original text minus any removed tokens
+    type Edit = { start: number; end: number; replace: string };
+    const edits: Edit[] = [];
+
+    for (let i = 0; i < ui.tokens.length; i++) {
+      const tModel = ui.tokens[i] as any;
+      if (tModel?.removed) {
+        const t = tokens[i];
+        if (t) edits.push({ start: t.start, end: t.end, replace: '' });
+      }
+    }
+
+    let out = text;
+    const sorted = edits.sort((a, b) => a.start - b.start);
+    for (let k = sorted.length - 1; k >= 0; k--) {
+      const e = sorted[k];
+      out = out.slice(0, e.start) + e.replace + out.slice(e.end);
+    }
+    return out;
+  }, [text, tokens, ui.tokens]);
+
   const gridCells: UICell[] = useMemo(() => {
     const cells: UICell[] = [];
     const N = displayTokens.length;
-    // Helper to compute caret severity from adjacent tokens and group
-    const tokStateAt = (i: number): 'correct'|'possible'|'incorrect' => {
-      const t = ui.tokens[i];
-      if (!t) return 'correct';
-      return t.state === 'bad' ? 'incorrect' : (t.state === 'maybe' ? 'possible' : 'correct');
-    };
-    const worst = (a: 'correct'|'possible'|'incorrect', b: 'correct'|'possible'|'incorrect') => {
-      if (a === 'incorrect' || b === 'incorrect') return 'incorrect';
-      if (a === 'possible' || b === 'possible') return 'possible';
-      return 'correct';
-    };
+    // caret severity: 'incorrect' if GB/VT suggests a terminal at this boundary
 
     for (let b = 0; b <= N; b++) {
       // 1) caret at boundary b
-      const gid = groupByBoundary.get(b);
-      let sev: 'correct'|'possible'|'incorrect' = 'correct';
-      if (b > 0) sev = worst(sev, tokStateAt(b - 1));
-      if (b < N) sev = worst(sev, tokStateAt(b));
-      if (gid && sev === 'correct') sev = 'possible';
-      cells.push({ kind: 'caret', bi: b, groupId: gid, ui: sev });
-
-      // 2) any GB insertions at boundary b: show dot and the closing caret
-      const insList = insertionMap.get(b) ?? [];
-      for (let k = 0; k < insList.length; k++) {
-        const ins = insList[k];
-        // show proposed punctuation as its own pill
-        cells.push({
-          kind: 'insert',
-          bi: ins.beforeBIndex,
-          text: ins.char as '.'|'!'|'?',
-          groupId: groupByBoundary.get(ins.beforeBIndex)!,
-          ui: 'possible',
-        });
-        // closing caret for the group
-        cells.push({ kind: 'caret', bi: b, groupId: gid, ui: 'possible' });
-      }
+      const hasMissingPunc = (insertionMap.get(b) ?? []).length > 0;
+      const sev: 'correct'|'possible'|'incorrect' = hasMissingPunc ? 'incorrect' : 'correct';
+      cells.push({ kind: 'caret', bi: b, ui: sev });
 
       // 3) token after boundary b (for b < N)
       if (b < N) {
-        const t = displayTokens[b];
-        cells.push({ 
-          kind: "token", 
-          ti: b, 
-          ui: t.ui 
-        });
+        const removed = !!ui.tokens[b]?.removed;
+        if (!removed) {
+          const t = displayTokens[b];
+          cells.push({ 
+            kind: "token", 
+            ti: b, 
+            ui: t.ui 
+          });
+        }
       }
     }
     return cells;
-  }, [displayTokens, caretRow, insertionMap, groupByBoundary, ui.tokens]);
+  }, [displayTokens, caretRow, insertionMap, ui.tokens]);
 
   // Split grid cells into paragraph blocks
   const paragraphBlocks: UICell[][] = useMemo(() => {
@@ -787,6 +813,40 @@ function WritingScorer() {
   return (
     <Card>
       <CardContent>
+        {/* Discard area overlay on the right side */}
+        <div
+          className={cn(
+            'fixed left-4 top-1/2 -translate-y-1/2 z-30 w-40 h-40 rounded-xl border-2 border-dashed flex items-center justify-center transition-colors select-none',
+            overDiscard ? 'bg-rose-50 border-rose-400 text-rose-700 shadow-lg' : 'bg-slate-50/80 border-slate-300 text-slate-600'
+          )}
+          onDragOver={(e) => { e.preventDefault(); (e.dataTransfer as DataTransfer).dropEffect = 'move'; setOverDiscard(true); }}
+          onDragEnter={(e) => { e.preventDefault(); setOverDiscard(true); }}
+          onDragLeave={() => { setOverDiscard(false); }}
+          onDrop={(e) => {
+            e.preventDefault();
+            setOverDiscard(false);
+            let data = '';
+            try { data = (e.dataTransfer as DataTransfer).getData('text/plain'); } catch {}
+            const idxStr = data.startsWith('token:') ? data.slice('token:'.length) : data;
+            const idx = Number.isFinite(+idxStr) ? parseInt(idxStr, 10) : (draggingToken ?? -1);
+            if (Number.isFinite(idx) && idx >= 0) removeTokenByIndex(idx);
+          }}
+          aria-label="Discard Area"
+        >
+          <div className="text-sm font-medium">Discard</div>
+        </div>
+
+        {/* Undo button */}
+        {undoStack.length > 0 && (
+          <button
+            className="fixed right-4 bottom-4 z-30 px-3 py-1.5 rounded-md bg-slate-800 text-white text-sm shadow hover:bg-slate-700"
+            onClick={handleUndo}
+            aria-label="Undo last action (Cmd/Ctrl+Z)"
+            title="Undo (Cmd/Ctrl+Z)"
+          >
+            Undo
+          </button>
+        )}
         {/* Page body */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           {/* LEFT: Textbox + controls + legend + stream */}
@@ -893,13 +953,11 @@ function WritingScorer() {
               />
             </div>
 
-            {/* GB correction preview */}
-            {gb?.correction && (
-              <div className="mb-4 p-3 rounded-lg bg-blue-50 border border-blue-200">
-                <div className="text-sm font-medium text-blue-800 mb-1">GB Correction Preview</div>
-                <div className="text-sm text-blue-700">{gb.correction}</div>
-              </div>
-            )}
+            {/* Output text with removed tokens (no auto-inserted punctuation) */}
+            <div className="mb-4 p-3 rounded-lg bg-blue-50 border border-blue-200">
+              <div className="text-sm font-medium text-blue-800 mb-1">Output Text</div>
+              <div className="text-sm text-blue-700 whitespace-pre-wrap break-words">{finalOutputText}</div>
+            </div>
 
             {/* Infractions & Suggestions list — always visible now */}
             <div>
@@ -964,7 +1022,7 @@ export default function CBMApp(): JSX.Element {
             <ul className="text-sm list-disc ml-5 space-y-1">
               <li><strong>Dictionary packs</strong>: demo packs included; swap in real dictionaries or WASM spellcheckers for production.</li>
               <li><strong>Capitalization & terminals</strong>: heuristic checks flag definite/possible issues for quick review.</li>
-              <li><strong>Overrides</strong>: click words to toggle WSC; click carets to toggle CWS.</li>
+              <li><strong>Overrides</strong>: click words to toggle WSC; carets simply flag missing punctuation.</li>
               <li><strong>Extensibility</strong>: uses GrammarBot for spell checking; add POS-based rules if desired.</li>
             </ul>
           </CardContent>

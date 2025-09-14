@@ -8,6 +8,8 @@ export interface TokenModel {
   text: string;
   state: TokState;
   selected?: boolean;
+  // When true, this token is hidden/removed from UI + KPIs
+  removed?: boolean;
 }
 
 // keep these as plain string literals so Tailwind can see them (and we safelist them anyway)
