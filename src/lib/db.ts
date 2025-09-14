@@ -4,13 +4,27 @@ neonConfig.fetchConnectionCache = true
 
 let _sql: ReturnType<typeof neon> | null = null
 
+function getDbUrl(): string | null {
+  const keys = [
+    'NETLIFY_DATABASE_URL',
+    'NEON_DATABASE_URL',
+    'DATABASE_URL',
+    'NETLIFY_DATABASE_URL_UNPOOLED',
+  ] as const
+  for (const k of keys) {
+    const v = process.env[k as keyof NodeJS.ProcessEnv]
+    if (v && typeof v === 'string' && v.trim()) return v
+  }
+  return null
+}
+
 export function isDbConfigured() {
-  return !!(process.env.NEON_DATABASE_URL || process.env.DATABASE_URL)
+  return !!getDbUrl()
 }
 
 export function getSql() {
-  const url = process.env.NEON_DATABASE_URL || process.env.DATABASE_URL
-  if (!url) throw new Error('DATABASE_URL (or NEON_DATABASE_URL) is not set')
+  const url = getDbUrl()
+  if (!url) throw new Error('Database URL not set. Set NETLIFY_DATABASE_URL (or NEON_DATABASE_URL / DATABASE_URL).')
   if (_sql) return _sql
   _sql = neon(url)
   return _sql
