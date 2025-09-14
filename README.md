@@ -2,6 +2,16 @@
 
 A TypeScript React web application for Curriculum‑Based Measurement (CBM) written expression scoring.
 
+## Kiosk — Timed Writing
+
+A focused, student-facing timed writing interface is available at `/kiosk`.
+
+- Clean two-step flow: setup, then writing only
+  - Step 1 (Setup): Enter optional student name and select duration (minutes), then press Continue.
+  - Step 2 (Writing): Only the text field is shown. The timer starts automatically on the first character typed. No word or character counters, and no stop‑early control to avoid distractions.
+- Session end: When time elapses, the page beeps and switches to a completion view where the text can be copied or downloaded as `.txt`, or a new session can be started.
+- Navigation: The top nav is hidden during the writing step to keep the student focused.
+
 ## Breaking Changes (v9.0)
 
 - Removed terminal groups (^ . ^) and any group toggling UI.
@@ -18,6 +28,12 @@ A TypeScript React web application for Curriculum‑Based Measurement (CBM) writ
 - **CWS (Correct Writing Sequences)**: Mechanical, CBM-aligned scoring of adjacent unit pairs with visual caret indicators
 
 <!-- Spelling assessment (CLS) removed; app now focuses on Written Expression only -->
+
+### Navigation & Pages
+- Top navigation includes:
+  - `Scoring` — Main written expression scoring tool (home page)
+  - `Kiosk` — Student-facing timed writing interface
+
 
 ### Advanced Features
 - **Centralized Status Classes**: Static string literals for Tailwind CSS classes with safelist protection

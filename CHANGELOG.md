@@ -30,3 +30,13 @@ This project aims to follow Keep a Changelog and Semantic Versioning.
 - UI: Added rule tooltips on tokens (labels + replacements) and terminal tooltips on carets/dots; CSS pop‑in animation with slight hover delay for a polished feel.
 - UI: Removed Spelling tab/page and tabs UI; app now focuses on Written Expression. Simplified control strip to only Time and color key. Updated main header text.
  - Fix: VT now recognizes PUNC INSERT replacements that include spaces (e.g., ". ") by extracting the first sentence terminator, ensuring terminal groups render for those cases.
+
+### Added
+- Kiosk Mode: Clean, student-facing timed writing interface at `/kiosk`.
+  - Two-step flow: Setup (name + minutes) → Writing (text only).
+  - Auto-start timer on first character typed; no word/char counters; no stop-early.
+  - End-of-time completion screen with Copy and Download actions.
+  - Top navigation hides during the writing step to reduce distractions.
+
+### Changed
+- Navigation bar added across pages; includes Scoring and Kiosk.
