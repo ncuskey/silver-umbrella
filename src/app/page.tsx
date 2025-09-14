@@ -21,6 +21,30 @@ import { computeKpis } from "@/lib/computeKpis";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 
+// OCR types and helpers
+type OcrVertex = { x?: number; y?: number };
+type OcrBBox = { vertices?: OcrVertex[]; normalizedVertices?: OcrVertex[] };
+type OcrSymbol = { text?: string; property?: { detectedBreak?: { type?: string } } };
+type OcrWord = { symbols?: OcrSymbol[]; boundingBox?: OcrBBox };
+type OcrParagraph = { words?: OcrWord[] };
+type OcrBlock = { paragraphs?: OcrParagraph[] };
+type OcrPage = { blocks?: OcrBlock[] };
+type OcrFull = { fullTextAnnotation?: { text?: string; pages?: OcrPage[] } };
+
+type OcrWordSpan = {
+  text: string;
+  start: number;
+  end: number;
+  pageIndex: number;
+  bbox: { x0: number; y0: number; x1: number; y1: number };
+};
+
+type OcrData = {
+  text: string;
+  pages: { imageSrc: string | null }[];
+  words: OcrWordSpan[];
+};
+
 /**
  * CBM Writing & Spelling – TypeScript Web Tool (with dictionary packs + rule flags)
  *
@@ -348,6 +372,8 @@ function WritingScorer() {
   const [ocrBusy, setOcrBusy] = useState(false);
   const [ocrStatus, setOcrStatus] = useState<string>("");
   const [ocrError, setOcrError] = useState<string>("");
+  const [ocr, setOcr] = useState<OcrData | null>(null);
+  const ocrPageImagesRef = useRef<(HTMLImageElement|null)[]>([]);
 
   // Load recent submissions for dropdown
   useEffect(() => {
@@ -377,7 +403,48 @@ function WritingScorer() {
     });
   }
 
-  async function ocrImage(file: File): Promise<string> {
+  function buildWordText(w: OcrWord): string {
+    const syms = w?.symbols ?? [];
+    return syms.map(s => s?.text ?? '').join('');
+  }
+
+  function bboxFromWord(w: OcrWord): { x0: number; y0: number; x1: number; y1: number } {
+    const verts = (w?.boundingBox?.vertices ?? []) as OcrVertex[];
+    if (!verts.length) return { x0: 0, y0: 0, x1: 0, y1: 0 };
+    const xs = verts.map(v => v?.x ?? 0);
+    const ys = verts.map(v => v?.y ?? 0);
+    const x0 = Math.max(0, Math.min(...xs));
+    const y0 = Math.max(0, Math.min(...ys));
+    const x1 = Math.max(0, Math.max(...xs));
+    const y1 = Math.max(0, Math.max(...ys));
+    return { x0, y0, x1, y1 };
+  }
+
+  function extractOcrWords(raw: OcrFull, pageIndex: number, baseOffset: number, baseText: string): OcrWordSpan[] {
+    const pages = raw?.fullTextAnnotation?.pages ?? [];
+    const words: OcrWordSpan[] = [];
+    let cursor = baseOffset;
+    const pg = pages[pageIndex];
+    if (!pg) return words;
+    for (const block of pg.blocks ?? []) {
+      for (const para of block.paragraphs ?? []) {
+        for (const word of para.words ?? []) {
+          const wt = buildWordText(word);
+          if (!wt) continue;
+          const start = (wt ? baseText.indexOf(wt, cursor) : -1);
+          if (start < 0) continue;
+          const end = start + wt.length;
+          words.push({ text: wt, start, end, pageIndex, bbox: bboxFromWord(word) });
+          cursor = end;
+          const nextCh = baseText[cursor];
+          if (nextCh && /\s/.test(nextCh)) cursor += 1;
+        }
+      }
+    }
+    return words;
+  }
+
+  async function ocrImage(file: File): Promise<{ text: string; ocr: OcrData | null }> {
     setOcrStatus('Preparing image…');
     const dataUrl = await fileToBase64(file);
     setOcrStatus('Uploading image…');
@@ -388,7 +455,17 @@ function WritingScorer() {
     });
     if (!res.ok) throw new Error(`OCR failed (${res.status})`);
     const json = await res.json();
-    return (json?.text ?? '').trim();
+    const textResp: string = (json?.text ?? '').trim();
+    const raw: OcrFull = json?.raw ?? {};
+    const preSrc: string | null = json?.preprocessedImageBase64 ?? null;
+    let words: OcrWordSpan[] = [];
+    try {
+      if (raw?.fullTextAnnotation?.pages?.length) {
+        words = extractOcrWords(raw, 0, 0, textResp);
+      }
+    } catch {}
+    const ocr: OcrData = { text: textResp, pages: [{ imageSrc: preSrc }], words };
+    return { text: textResp, ocr };
   }
 
   async function renderPdfToCanvases(file: File): Promise<HTMLCanvasElement[]> {
@@ -420,9 +497,12 @@ function WritingScorer() {
     return canvas.toDataURL('image/png');
   }
 
-  async function ocrPdf(file: File): Promise<string> {
+  async function ocrPdf(file: File): Promise<{ text: string; ocr: OcrData | null }> {
     const canvases = await renderPdfToCanvases(file);
     const texts: string[] = [];
+    const pages: { imageSrc: string | null }[] = [];
+    const allWords: OcrWordSpan[] = [];
+    let offset = 0;
     for (let i = 0; i < canvases.length; i++) {
       setOcrStatus(`Uploading page ${i + 1}/${canvases.length}…`);
       const dataUrl = canvasToDataURL(canvases[i]);
@@ -433,9 +513,22 @@ function WritingScorer() {
       });
       if (!res.ok) throw new Error(`OCR failed on page ${i + 1} (${res.status})`);
       const json = await res.json();
-      texts.push((json?.text ?? '').trim());
+      const pageText = (json?.text ?? '').trim();
+      texts.push(pageText);
+      const raw: OcrFull = json?.raw ?? {};
+      const preSrc: string | null = json?.preprocessedImageBase64 ?? null;
+      pages.push({ imageSrc: preSrc });
+      try {
+        if (raw?.fullTextAnnotation?.pages?.length) {
+          const w = extractOcrWords(raw, 0, offset, pageText);
+          for (const it of w) allWords.push({ ...it, pageIndex: i });
+        }
+      } catch {}
+      offset += pageText.length + 2; // for the join with \n\n
     }
-    return texts.filter(Boolean).join('\n\n');
+    const combined = texts.filter(Boolean).join('\n\n');
+    const ocr: OcrData = { text: combined, pages, words: allWords };
+    return { text: combined, ocr };
   }
 
   const onSelectFileClick = useCallback(() => {
@@ -452,8 +545,21 @@ function WritingScorer() {
     setOcrStatus('Preparing…');
     try {
       const isPdf = /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name);
-      const text = isPdf ? await ocrPdf(f) : await ocrImage(f);
-      setText(text);
+      const result = isPdf ? await ocrPdf(f) : await ocrImage(f);
+      setText(result.text);
+      setOcr(result.ocr);
+      // preload OCR page images for cropping
+      ocrPageImagesRef.current = [];
+      if (result.ocr && result.ocr.pages) {
+        for (let i = 0; i < result.ocr.pages.length; i++) {
+          const src = result.ocr.pages[i].imageSrc;
+          if (!src) { ocrPageImagesRef.current[i] = null; continue; }
+          const img = new Image();
+          img.src = src;
+          await new Promise<void>((resolve) => { img.onload = () => resolve(); img.onerror = () => resolve(); });
+          ocrPageImagesRef.current[i] = img;
+        }
+      }
       setOcrStatus('Done');
     } catch (err: any) {
       setOcrError(err?.message || String(err));
@@ -683,6 +789,8 @@ function WritingScorer() {
     return `Missing terminal: ${chars}`;
   }
 
+  
+
   function cellEl(c: UICell, key: React.Key) {
     const role = "button";
     const tabIndex = role ? 0 : -1;
@@ -709,7 +817,7 @@ function WritingScorer() {
           e.dataTransfer.effectAllowed = 'move';
         } : undefined}
         onDragEnd={draggable ? () => { setDraggingToken(null); setDraggingCaret(null); setOverDiscard(false); } : undefined}
-        className={clsForCell(c) + ' tt cursor-pointer'}
+        className={clsForCell(c) + ' tt cursor-pointer relative group'}
         data-tip={
           c.kind === 'token' ? (tooltipForToken((c as any).ti) || undefined)
           : tipForCaret((c as any).bi)
@@ -719,9 +827,17 @@ function WritingScorer() {
             ? isSel('token', (c as any).ti)
             : (focus?.type === 'caret' && focus.index === (c as any).bi) || undefined
         }
+        onMouseEnter={c.kind === 'token' ? () => { ensureCropForToken((c as any).ti); } : undefined}
       >
         {/* token text or caret glyph */}
         {c.kind==="caret" ? "^" : displayTokens[c.ti].overlay ?? displayTokens[c.ti].raw}
+        {c.kind === 'token' && tokenCrops[(c as any).ti] ? (
+          <span className="pointer-events-none absolute left-0 top-[110%] z-50 hidden group-hover:block">
+            <span className="inline-block rounded-md border border-slate-200 bg-white shadow-md p-1 max-w-[260px]">
+              <img src={tokenCrops[(c as any).ti]} alt="Scanned word" className="max-w-[240px] h-auto block" />
+            </span>
+          </span>
+        ) : null}
       </button>
     );
   }
@@ -840,6 +956,48 @@ function WritingScorer() {
   );
 
   const caretRow = useMemo(() => buildCaretRow(tokens, vtInsertions), [tokens, vtInsertions]);
+  
+  // Hover image (scanned word snippet) cache and generator
+  const [tokenCrops, setTokenCrops] = useState<Record<number, string>>({});
+  const ensureCropForToken = useCallback(async (ti: number) => {
+    if (!ocr || tokenCrops[ti]) return;
+    const t = displayTokens[ti] as any;
+    if (!t) return;
+    const rawWord = String(t.raw || '');
+    if (!/^[A-Za-z][A-Za-z'’-]*$/.test(rawWord)) return; // words only
+    const start = typeof t.start === 'number' ? t.start : null;
+    const end = typeof t.end === 'number' ? t.end : null;
+    if (start == null || end == null) return;
+    // choose OCR word with max overlap
+    let best: OcrWordSpan | null = null;
+    let bestOverlap = 0;
+    for (const w of ocr.words) {
+      const overlap = Math.max(0, Math.min(end, w.end) - Math.max(start, w.start));
+      if (overlap > bestOverlap) { bestOverlap = overlap; best = w; }
+    }
+    if (!best || bestOverlap <= 0) return;
+    const pageImg = ocrPageImagesRef.current[best.pageIndex] || null;
+    if (!pageImg) return;
+    const { x0, y0, x1, y1 } = best.bbox;
+    const pad = 4;
+    const sx = Math.max(0, Math.min(pageImg.naturalWidth, Math.floor(x0 - pad)));
+    const sy = Math.max(0, Math.min(pageImg.naturalHeight, Math.floor(y0 - pad)));
+    const sw = Math.max(1, Math.min(pageImg.naturalWidth - sx, Math.ceil(x1 - x0 + pad * 2)));
+    const sh = Math.max(1, Math.min(pageImg.naturalHeight - sy, Math.ceil(y1 - y0 + pad * 2)));
+    const maxW = 240;
+    const scale = Math.min(1, maxW / sw);
+    const dw = Math.max(1, Math.round(sw * scale));
+    const dh = Math.max(1, Math.round(sh * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = dw; canvas.height = dh;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.imageSmoothingEnabled = true;
+    (ctx as any).imageSmoothingQuality = 'high';
+    ctx.drawImage(pageImg, sx, sy, sw, sh, 0, 0, dw, dh);
+    const url = canvas.toDataURL('image/png');
+    setTokenCrops(prev => ({ ...prev, [ti]: url }));
+  }, [ocr, displayTokens, tokenCrops]);
   // Detect GrammarBot availability/error from client response
   const gbError: string | null = useMemo(() => {
     const anyGb = gb as any;
@@ -935,6 +1093,13 @@ function WritingScorer() {
     }
     return cells;
   }, [displayTokens, caretRow, insertionMap, ui.tokens, ui.caretStates, ui.removedCarets]);
+
+  // Clear cached crops if text diverges from OCR baseline
+  useEffect(() => {
+    if (ocr && ocr.text !== text) {
+      setTokenCrops({});
+    }
+  }, [text, ocr]);
 
   // Split grid cells into paragraph blocks
   const paragraphBlocks: UICell[][] = useMemo(() => {

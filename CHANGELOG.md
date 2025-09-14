@@ -68,3 +68,11 @@ This project aims to follow Keep a Changelog and Semantic Versioning.
 - Added: PDF support — PDFs render client-side page-by-page to images, each page OCR’d then concatenated.
 - Infra: Serve PDF.js worker and modules from same origin to avoid module/CORS issues (`/pdfjs/*`).
 - Docs: README updated with Google Vision env setup and OCR usage.
+# Changelog
+
+## Unreleased
+
+- Add hover previews of scanned words in the scoring UI. When an image/PDF is uploaded and OCR’d, hovering a word token shows a cropped image of the corresponding handwritten/printed word from the scan. This helps compare the OCR output to the original glyphs.
+- OCR API now returns the preprocessed image used for Vision as base64 so bounding boxes align client‑side.
+
+## Previous

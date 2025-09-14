@@ -33,7 +33,9 @@ async function preprocessForOCR(input: Buffer) {
     }
   } catch {}
 
-  return img.toBuffer();
+  // Return both buffer and output info for dimensions
+  const { data, info } = await img.toBuffer({ resolveWithObject: true });
+  return { buffer: data, info } as { buffer: Buffer; info: sharp.OutputInfo };
 }
 
 function extractBase64(data: string): string {
@@ -56,16 +58,20 @@ export async function POST(req: NextRequest) {
       const b64 = extractBase64(String(imageBase64));
       const buf = Buffer.from(b64, 'base64');
       const pre = await preprocessForOCR(buf);
-      request.image = { content: pre };
+      request.image = { content: pre.buffer };
+      // Attach preprocessed image for client-side cropping alignment
+      (request as any).__preBase64 = `data:image/png;base64,${pre.buffer.toString('base64')}`;
+      (request as any).__preInfo = pre.info;
     }
 
-    const [result] = await client.documentTextDetection(request);
+    const [result] = await client.documentTextDetection(request as any);
     return NextResponse.json({
       text: result?.fullTextAnnotation?.text ?? '',
       raw: result,
+      preprocessedImageBase64: (request as any).__preBase64 ?? null,
+      preprocessedInfo: (request as any).__preInfo ?? null,
     });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message || 'OCR failed' }, { status: 500 });
   }
 }
-
