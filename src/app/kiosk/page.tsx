@@ -23,6 +23,7 @@ export default function KioskPage() {
   const [includePrompt, setIncludePrompt] = useState(false);
   const [prompts, setPrompts] = useState<Array<{ id:string; title:string; content:string; created_at:string }>>([]);
   const [promptsLoading, setPromptsLoading] = useState(false);
+  const [promptsEnabled, setPromptsEnabled] = useState(true);
   const [selectedPromptId, setSelectedPromptId] = useState<string>("");
   const [promptText, setPromptText] = useState<string>("");
   const [promptTitle, setPromptTitle] = useState<string>("");
@@ -82,7 +83,10 @@ export default function KioskPage() {
       try {
         setPromptsLoading(true);
         const res = await fetch('/api/prompts');
-        if (!res.ok) return;
+        if (!res.ok) {
+          setPromptsEnabled(false);
+          return;
+        }
         const data = await res.json();
         if (!alive) return;
         setPrompts(Array.isArray(data.items) ? data.items : []);
@@ -270,24 +274,30 @@ export default function KioskPage() {
                 </div>
                 {includePrompt && (
                   <div className="space-y-2">
-                    <div className="space-y-1">
-                      <label className="text-sm text-slate-700">Saved prompts</label>
-                      <select
-                        className="h-9 w-full rounded border px-2 text-sm"
-                        value={selectedPromptId}
-                        onChange={(e) => {
-                          const id = e.target.value;
-                          setSelectedPromptId(id);
-                          const found = prompts.find(p => p.id === id);
-                          if (found) setPromptText(found.content);
-                        }}
-                      >
-                        <option value="">{promptsLoading ? 'Loading…' : 'Select (optional)'}</option>
-                        {prompts.map(p => (
-                          <option key={p.id} value={p.id}>{p.title}</option>
-                        ))}
-                      </select>
-                    </div>
+                    {promptsEnabled ? (
+                      <div className="space-y-1">
+                        <label className="text-sm text-slate-700">Saved prompts</label>
+                        <select
+                          className="h-9 w-full rounded border px-2 text-sm"
+                          value={selectedPromptId}
+                          onChange={(e) => {
+                            const id = e.target.value;
+                            setSelectedPromptId(id);
+                            const found = prompts.find(p => p.id === id);
+                            if (found) setPromptText(found.content);
+                          }}
+                        >
+                          <option value="">{promptsLoading ? 'Loading…' : 'Select (optional)'}</option>
+                          {prompts.map(p => (
+                            <option key={p.id} value={p.id}>{p.title}</option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : (
+                      <div className="p-2 rounded border text-xs bg-amber-50 border-amber-300 text-amber-900">
+                        Saved prompts unavailable (database not configured).
+                      </div>
+                    )}
                     <div className="space-y-1">
                       <label className="text-sm text-slate-700">Prompt text</label>
                       <Textarea value={promptText} onChange={(e) => setPromptText(e.target.value)} placeholder="Enter a custom prompt or select one above" className="min-h-[80px]" />
@@ -299,6 +309,7 @@ export default function KioskPage() {
                       </div>
                       <Button
                         onClick={async () => {
+                          if (!promptsEnabled) return;
                           if (!promptTitle.trim() || !promptText.trim()) return;
                           try {
                             setPromptSaveState('saving');
@@ -323,6 +334,7 @@ export default function KioskPage() {
                           }
                         }}
                         className="min-w-[7rem]"
+                        disabled={!promptsEnabled}
                       >
                         {promptSaveState === 'saving' ? 'Saving…' : promptSaveState === 'success' ? 'Saved' : 'Save'}
                       </Button>

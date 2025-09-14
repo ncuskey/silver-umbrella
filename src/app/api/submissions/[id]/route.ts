@@ -1,7 +1,8 @@
-import { ensureSchema, getSql } from '@/lib/db'
+import { ensureSchema, getSql, isDbConfigured } from '@/lib/db'
 
 export async function GET(_req: Request, ctx: { params: { id: string } }) {
   try {
+    if (!isDbConfigured()) return new Response(JSON.stringify({ error: 'db_unconfigured' }), { status: 503 })
     await ensureSchema()
     const sql = getSql()
     const id = ctx.params.id
@@ -17,4 +18,3 @@ export async function GET(_req: Request, ctx: { params: { id: string } }) {
     return new Response(JSON.stringify({ error: e?.message || 'error' }), { status: 500 })
   }
 }
-
