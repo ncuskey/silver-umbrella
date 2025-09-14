@@ -33,6 +33,25 @@ This project aims to follow Keep a Changelog and Semantic Versioning.
 
 ### Added
 - Kiosk Mode: Clean, student-facing timed writing interface at `/kiosk`.
+  - Two-step flow: Setup (name + minutes + options) → Writing (text only) → Done.
+  - Auto-start timer on first character typed; no word/char counters; no stop-early.
+  - Optional timer overlay; paste is always blocked; browser spellcheck/autocorrect disabled.
+  - Optional prompt: select from saved prompts or enter custom and save to DB.
+  - Shows a green “Submitted” badge after successful DB save.
+- Submissions API: Save and fetch writing samples.
+  - `POST /api/submissions`, `GET /api/submissions`, `GET /api/submissions/:id`.
+  - Table `submissions` includes prompt_id and prompt_text.
+- Prompts API: Create and list prompts.
+  - `POST /api/prompts`, `GET /api/prompts`, `GET /api/prompts/:id`.
+  - Table `prompts` stores id, title, content, created_at.
+- Scoring page: Dropdown to load recent submissions by name/date; duration is taken from DB and used for CWS/min.
+
+### Infrastructure
+- DB URL detection prefers `NETLIFY_DATABASE_URL`, then `NEON_DATABASE_URL`, `DATABASE_URL`, and `NETLIFY_DATABASE_URL_UNPOOLED`.
+- API routes run on Node runtime and are dynamic to ensure env vars are available at request time.
+
+### Added
+- Kiosk Mode: Clean, student-facing timed writing interface at `/kiosk`.
   - Two-step flow: Setup (name + minutes) → Writing (text only).
   - Auto-start timer on first character typed; no word/char counters; no stop-early.
   - End-of-time completion screen with Copy and Download actions.
