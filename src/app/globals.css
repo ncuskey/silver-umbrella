@@ -49,6 +49,19 @@
   }
 }
 
+/* Discard area-sizing variables (kept in sync with component) */
+:root {
+  --discard-x: 1rem;  /* distance from window edge to discard area */
+  --discard-w: 8rem;  /* discard area width */
+}
+
+/* At xl and up, reserve horizontal space for the discard area:
+   left padding = 2×gap + discard width, so content begins with
+   the same gap on both sides of the discard. */
+@media (min-width: 1280px) {
+  .with-discard-pad { padding-left: calc(var(--discard-x) * 2 + var(--discard-w)); }
+}
+
 @layer base {
   * {
     @apply border-border;

@@ -57,6 +57,14 @@ This application is a TypeScript React web app for Curriculum‑Based Measuremen
 - **Hover States**: Interactive element hover effects properly safelisted
 - **Ring and Selection Styles**: Selection indicators and focus states protected
 
+### Layout & Responsiveness
+- **Responsive Container**: Main app wrapper uses `max-w-screen-xl 2xl:max-w-screen-2xl` to reduce excessive gutters on 1080p/1440p displays while remaining fluid on smaller screens.
+- **Discard-Aware Padding**: At `xl+`, content container gets `.with-discard-pad` which sets `padding-left: calc(var(--discard-x) * 2 + var(--discard-w))`. Variables are defined in `src/app/globals.css`:
+  - `--discard-x`: gap between the window edge and the Discard area
+  - `--discard-w`: width of the Discard area
+- **Placement**: The Discard panel reads the same variables for `left` and `width`, ensuring padding and panel stay in sync and never overlap content.
+- **Tuning**: Update the variables in `globals.css` or override them per‑breakpoint inside media queries if needed.
+
 ### Project Structure
 
 ```

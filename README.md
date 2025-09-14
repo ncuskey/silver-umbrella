@@ -47,6 +47,15 @@ A TypeScript React web application for Curriculum‑Based Measurement (CBM) writ
 - **Spell Result Caching**: Intelligent caching for GrammarBot API responses
 - **Curly Apostrophe Support**: Proper handling of smart quotes and apostrophes
 - **Token Character Offsets**: Precise character position tracking for GrammarBot issue alignment
+
+### Layout & Responsiveness
+- **Wide Container on Large Screens**: Main wrapper uses `max-w-screen-xl 2xl:max-w-screen-2xl` so the app fills more of a 1080p/1440p display while staying fluid on smaller screens.
+- **Discard-Aware Padding (Calculated)**: At `xl` and up, the body reserves exactly the space needed for the left Discard area using CSS variables and a utility class:
+  - Variables in `src/app/globals.css`:
+    - `--discard-x`: distance from window edge to discard area (gap)
+    - `--discard-w`: width of the discard area
+  - Padding applied via `.with-discard-pad` only at `xl+`: `padding-left = (2 × gap) + width`, creating equal spacing on both sides of the discard and preventing overlap.
+- **Tuning**: Adjust `--discard-x` and `--discard-w` in `globals.css` to change the discard size/offset, or override them inside media queries for per‑breakpoint sizing.
 - **CWS-GrammarBot Integration**: Grammar suggestions mapped to CWS boundaries with advisory hints
 - **3-State Caret Cycling**: Yellow (advisory) → Red (incorrect) → Green (correct) → Yellow (default)
 - **Advisory Infractions**: GrammarBot grammar suggestions shown as yellow advisory entries
@@ -142,6 +151,8 @@ A TypeScript React web application for Curriculum‑Based Measurement (CBM) writ
 - Built with Next.js 15, React 18, and TypeScript
 - Uses Framer Motion for animations
 - Tailwind CSS for styling (with safelisted dynamic classes)
+  - Responsive container sizing with `max-w-screen-xl 2xl:max-w-screen-2xl`
+  - Discard-aware body padding via `.with-discard-pad` (at `xl+`), driven by CSS variables in `src/app/globals.css`
 - Lucide React for icons
 - Modular UI components with shadcn/ui design system
 - Optimized for production with standalone output and minimal runtime bundles

@@ -10,6 +10,10 @@ This project aims to follow Keep a Changelog and Semantic Versioning.
 - Changed: KPIs compute CWS using word states plus caret flags instead of terminal groups.
 - Changed: Output pane shows original text with removed tokens omitted; no automatic punctuation insertion.
 
+- UI: Responsive main container widened (`max-w-screen-xl`, `2xl:max-w-screen-2xl`) to better utilize large displays.
+- UI: Precise, computed left padding for Discard area using CSS variables (`--discard-x`, `--discard-w`) and `.with-discard-pad` at `xl+` to prevent overlap and keep symmetric spacing.
+- Docs: Documented responsive layout and discard-aware padding in README; added tuning notes for CSS variables.
+
 - Added: Aggregated “Infractions & Suggestions” list. Identical GrammarBot infractions are grouped by tag + replacement and shown with counts (e.g., `10× PUNC → .`), sorted by most frequent.
 - Changed: Updated default sample text in the “Paste student writing” box to the provided passage.
 - Fixed: Netlify type error by adding optional `err_type` to `GBEdit` to align with `GbEdit`.
