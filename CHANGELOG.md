@@ -16,4 +16,5 @@ This project aims to follow Keep a Changelog and Semantic Versioning.
 - Chore: Debug log of VT boundaries behind `?debug=1`.
 - Build: Set `outputFileTracingRoot` in `next.config.js` to avoid workspace root mis-detection in multi-lockfile environments.
 - UI: Added rule tooltips on tokens (labels + replacements) and terminal tooltips on carets/dots; CSS pop‑in animation with slight hover delay for a polished feel.
- - UI: Removed Spelling tab/page and tabs UI; app now focuses on Written Expression. Simplified control strip to only Time and color key. Updated main header text.
+- UI: Removed Spelling tab/page and tabs UI; app now focuses on Written Expression. Simplified control strip to only Time and color key. Updated main header text.
+ - Fix: VT now recognizes PUNC INSERT replacements that include spaces (e.g., ". ") by extracting the first sentence terminator, ensuring terminal groups render for those cases.

@@ -267,6 +267,7 @@ The CWS (Correct Writing Sequences) engine implements strictly mechanical, CBM-a
   - **End-of-Text Support**: Handles final insertions at end-of-text boundary
   - **Responsive Layout**: Maintains flex-wrap behavior for different screen sizes
 - **Accessibility**: Proper ARIA labels for screen readers and keyboard navigation
+ - **Robust INSERT Parsing**: Accepts PUNC INSERT replacements that include spaces (e.g., ". ") by extracting the first sentence terminator (., !, ?).
 - **Tooltips for Terminals**: Carets and dots show terminal proposals (e.g., `Terminal → .`) with the same pop‑in animation.
 
 ### Tooltip Implementation
