@@ -342,6 +342,29 @@ function WritingScorer() {
   const [text, setText] = useState<string>(
     "yesterday me and my freind go to the park we was runned fast but the dog chased us and it dont stop we yell nobody hear us the grass are green the skye blue we decide climb the tree but the branch breaked my shoes was muddy my shirt have hole’s. I think i gonna climb again but then and then and then we fall.\n\nLater the teacher sayed you should of stay home insted of playing in rain. “be careful kids” she tell us and we dont listen we was to busy running their in the feild I thinked maybe we is lost. My friend smile and say its okay we gonna find are way home eventually at 5 pm but i writed 5:00 instead. I also got 1nd place in the race, lol, but my sister-inlaw laughed."
   );
+  const [loadedMeta, setLoadedMeta] = useState<{ id: string; student?: string|null; submitted_at?: string|null } | null>(null);
+  const loadedOnceRef = useRef(false);
+
+  // If a submission ID is present in the URL, load it and replace text
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (loadedOnceRef.current) return;
+    const params = new URLSearchParams(location.search);
+    const id = params.get('submission');
+    if (!id) return;
+    loadedOnceRef.current = true;
+    (async () => {
+      try {
+        const res = await fetch(`/api/submissions/${encodeURIComponent(id)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data?.content) {
+          setText(data.content);
+          setLoadedMeta({ id, student: data.student_name ?? null, submitted_at: data.submitted_at ?? null });
+        }
+      } catch {}
+    })();
+  }, []);
   const [overrides, setOverrides] = useState<Record<string | number, WordOverride | PairOverride>>({});
   const [pairOverrides, setPairOverrides] = useState<PairOverrides>({});
   // Always-on flags (since the toggle is gone)
@@ -898,6 +921,13 @@ function WritingScorer() {
   return (
     <Card>
       <CardContent>
+        {loadedMeta && (
+          <div className="mb-4 p-2 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm">
+            Loaded saved submission {loadedMeta.id}
+            {loadedMeta.student ? ` for ${loadedMeta.student}` : ''}
+            {loadedMeta.submitted_at ? ` · ${new Date(loadedMeta.submitted_at).toLocaleString()}` : ''}
+          </div>
+        )}
         {/* Discard area overlay on the right side */}
         <div
           className={cn(

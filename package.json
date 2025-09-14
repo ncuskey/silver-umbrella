@@ -13,6 +13,7 @@
     "analyze": "ANALYZE=1 NODE_OPTIONS='--max-old-space-size=4096' next build"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^0.10.4",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.0.0",
     "framer-motion": "^10.16.16",

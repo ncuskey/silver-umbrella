@@ -34,6 +34,15 @@ A focused, student-facing timed writing interface is available at `/kiosk`.
   - `Scoring` — Main written expression scoring tool (home page)
   - `Kiosk` — Student-facing timed writing interface
 
+### Data Persistence (Neon on Netlify)
+- Environment: Set `NEON_DATABASE_URL` (or `DATABASE_URL`) in Netlify to your Neon connection string.
+- API endpoints:
+  - `POST /api/submissions` — Save a submission. Body: `{ student?: string, text: string, durationSeconds?: number, startedAt?: string }`. Returns `{ id }`.
+  - `GET /api/submissions` — List recent submissions.
+  - `GET /api/submissions/:id` — Get a specific submission including full `content`.
+- Schema: Created on first use as table `submissions (id text primary key, student_name text, content text, duration_seconds int, started_at timestamptz, submitted_at timestamptz default now())`.
+- Kiosk auto‑saves when time expires and shows an “Open in Scoring” shortcut.
+
 
 ### Advanced Features
 - **Centralized Status Classes**: Static string literals for Tailwind CSS classes with safelist protection

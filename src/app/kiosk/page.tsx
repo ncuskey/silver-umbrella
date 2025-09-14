@@ -20,6 +20,9 @@ export default function KioskPage() {
   const [remaining, setRemaining] = useState(0);
   const [prohibitPaste, setProhibitPaste] = useState(false);
   const [stage, setStage] = useState<"setup" | "writing" | "done">("setup");
+  const [submitState, setSubmitState] = useState<"idle"|"submitting"|"success"|"error">('idle');
+  const [submissionId, setSubmissionId] = useState<string | null>(null);
+  const submittedRef = useRef(false);
   const startTimeRef = useRef<number | null>(null);
   const endTimeRef = useRef<number | null>(null);
   const timerRef = useRef<number | null>(null);
@@ -86,6 +89,35 @@ export default function KioskPage() {
       if (timerRef.current) window.clearInterval(timerRef.current);
     };
   }, [running, remaining]);
+
+  // On done, submit to DB once
+  useEffect(() => {
+    if (stage !== 'done') return;
+    if (submittedRef.current) return;
+    submittedRef.current = true;
+    (async () => {
+      try {
+        setSubmitState('submitting');
+        const res = await fetch('/api/submissions', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            student,
+            text,
+            durationSeconds: Math.max(1, Math.floor(minutes * 60)),
+            startedAt: startTimeRef.current ? new Date(startTimeRef.current).toISOString() : null,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.error || 'submit failed');
+        setSubmissionId(data.id);
+        setSubmitState('success');
+      } catch (e) {
+        console.error(e);
+        setSubmitState('error');
+      }
+    })();
+  }, [stage, minutes, student, text]);
 
   // Warn on navigation while running
   useEffect(() => {
@@ -254,9 +286,26 @@ export default function KioskPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="text-sm text-slate-600">Time has expired for {student || 'student'}.</div>
+            {submitState === 'submitting' && (
+              <div className="text-sm text-slate-700">Saving to database…</div>
+            )}
+            {submitState === 'error' && (
+              <div className="text-sm text-rose-700">Save failed. The text remains on this device.</div>
+            )}
+            {submitState === 'success' && submissionId && (
+              <div className="text-sm text-emerald-700">Saved. ID: {submissionId}</div>
+            )}
             <div className="flex items-center gap-2 flex-wrap">
               <Button onClick={copyText} variant="secondary">Copy Text</Button>
               <Button onClick={downloadText} variant="secondary">Download .txt</Button>
+              {submissionId && (
+                <a
+                  href={`/?submission=${encodeURIComponent(submissionId)}`}
+                  className="inline-flex items-center justify-center rounded-md bg-blue-600 text-white px-3 py-2 text-sm hover:bg-blue-700"
+                >
+                  Open in Scoring
+                </a>
+              )}
               <Button onClick={resetSession} className="bg-slate-900 hover:bg-slate-800">New Session</Button>
             </div>
           </CardContent>
