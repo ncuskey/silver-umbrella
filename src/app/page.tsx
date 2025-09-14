@@ -679,12 +679,21 @@ function WritingScorer() {
     [vtInsertions]
   );
 
-  // Initialize/update caret states from VT insertions, preserving manual overrides
+  // Initialize/update caret states from VT insertions and word errors, preserving manual overrides
   useEffect(() => {
     const N = displayTokens.length;
     const defaults: Record<number, 'ok'|'maybe'|'bad'> = {};
     for (let b = 0; b <= N; b++) defaults[b] = 'ok';
+    // 1) Missing punctuation proposals → bad at that boundary
     for (const ins of vtInsertions) defaults[ins.beforeBIndex] = 'bad';
+    // 2) Words marked bad → mark both adjacent carets bad (initial visual parity)
+    for (let i = 0; i < ui.tokens.length; i++) {
+      const tm = ui.tokens[i] as any;
+      if (tm && tm.kind === 'word' && !tm.removed && tm.state === 'bad') {
+        defaults[i] = 'bad';
+        defaults[i + 1] = 'bad';
+      }
+    }
 
     setUi(prev => {
       const nextStates: Record<number, 'ok'|'maybe'|'bad'> = { ...defaults };
@@ -698,7 +707,7 @@ function WritingScorer() {
         kpis: computeKpis(prev.tokens, prev.minutes, nextStates)
       };
     });
-  }, [vtInsertions, displayTokens.length]);
+  }, [vtInsertions, displayTokens.length, ui.tokens]);
 
   // Build final output text with user overrides (removed tokens, kept/removed terminal groups)
   const finalOutputText = useMemo(() => {
