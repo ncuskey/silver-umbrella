@@ -1,8 +1,8 @@
-# Code Map - CBM Writing & Spelling Tool
+# Code Map - Written Expression (TWW, WSC, CWS)
 
 ## Project Overview
 
-**CBM Writing & Spelling Tool** is a comprehensive TypeScript React web application for Curriculum-Based Measurement (CBM) writing and spelling assessment. Built with Next.js 15, it provides automated scoring for educational assessments with interactive override capabilities and professional spell checking via GrammarBot API.
+This application is a TypeScript React web app for Curriculum‑Based Measurement (CBM) written expression scoring. Built with Next.js 15, it provides automated scoring for educational assessments with interactive overrides and professional spell checking via GrammarBot API.
 
 ## Architecture
 
@@ -69,7 +69,7 @@
 │   │   │   ├── card.tsx       # Card layout components
 │   │   │   ├── checkbox.tsx   # Checkbox input
 │   │   │   ├── input.tsx      # Text input
-│   │   │   ├── tabs.tsx       # Tab navigation
+│   │   │   ├── tabs.tsx       # Tab navigation (currently unused)
 │   │   │   └── textarea.tsx   # Textarea input
 │   │   ├── Token.tsx          # Token component with centralized status classes and bubbleCls
 │   │   └── TerminalGroup.tsx  # Single clickable terminal group component (^ . ^) with unified state
@@ -105,12 +105,12 @@
 
 ### Main Application (`src/app/page.tsx`)
 
-**Purpose**: Single-page application containing both writing and spelling assessment tools.
+**Purpose**: Single-page application for Written Expression assessment.
 
 **Key Features**:
 - **Written Expression Scoring**: TWW, WSC, CWS calculations with derived metrics
 - **Terminal Group Functionality**: Unified (^ . ^) groups as single, clickable units with synchronized state
-- **Spelling Assessment**: CLS (Correct Letter Sequences) scoring
+- (Spelling page removed) 
 - **GrammarBot Integration**: Professional spell checking and grammar analysis via GrammarBot API
 - **Interactive UI**: Clickable carets, tokens, and terminal groups with keyboard navigation
 - **Group State Management**: Separate state tracking for individual tokens and terminal groups
@@ -119,9 +119,8 @@
 - **Responsive Design**: Mobile-friendly interface with flex layout
 
 **Main Components**:
-- `CBMApp`: Root component with tab navigation
+- `CBMApp`: Root component
 - `WritingScorer`: Written expression assessment tool
-- `SpellingScorer`: Spelling assessment tool
 - `TerminalGroup`: Unified terminal group component for ^ . ^ units
 - `SentenceList`: Displays parsed sentences
 - `InfractionList`: Shows flagged issues aggregated by tag + replacement with counts, sorted by frequency
@@ -148,12 +147,7 @@
    - Implementation: `calcCWS()` with `capitalizationFixWordSet()` and `terminalBoundarySet()`
    - Testing helper: a minimal VT proposal in the scoring core flags lowercase→Capital boundaries (excluding multi‑word Title Case) to support golden tests; it does not mutate source text (runtime uses GrammarBot only).
 
-#### Spelling Metrics
-
-1. **CLS (Correct Letter Sequences)**
-   - Partial credit for spelling attempts
-   - Boundary + adjacent letter pairs
-   - Implementation: `clsForWord()`
+<!-- Spelling metrics (CLS) removed -->
 
 ### Data Structures
 

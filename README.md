@@ -1,6 +1,6 @@
-# CBM Writing & Spelling Tool
+# Written Expression (TWW, WSC, CWS) – with Flags
 
-A comprehensive TypeScript React web application for Curriculum-Based Measurement (CBM) writing and spelling assessment.
+A TypeScript React web application for Curriculum‑Based Measurement (CBM) written expression scoring.
 
 ## Features
 
@@ -9,10 +9,7 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 - **WSC (Words Spelled Correctly)**: Uses GrammarBot API for professional spell checking
 - **CWS (Correct Writing Sequences)**: Mechanical, CBM-aligned scoring of adjacent unit pairs with visual caret indicators
 
-### Spelling Assessment
-- **CLS (Correct Letter Sequences)**: Provides partial credit for spelling attempts
-- Per-word breakdown and totals
-- Aligned target and attempt word lists
+<!-- Spelling assessment (CLS) removed; app now focuses on Written Expression only -->
 
 ### Advanced Features
 - **Centralized Status Classes**: Static string literals for Tailwind CSS classes with safelist protection
@@ -120,8 +117,6 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 - `npm run analyze` - Generate bundle analysis reports (requires ANALYZE=1)
 
 ## Usage
-
-### Written Expression Tab
 1. Paste student writing in the text area
 2. Set the probe time duration (mm:ss format) for fluency calculations
 3. GrammarBot provides professional spell checking and grammar analysis via API
@@ -132,10 +127,7 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 8. Capitalization issues are treated as errors (red) but the original word casing is preserved in the bubble; punctuation suggestions appear as grouped `^ . ^`
 9. View GrammarBot correction preview for sanity checking
 
-### Spelling Tab
-1. Enter target words (comma/semicolon/newline separated)
-2. Enter student attempts in the same order
-3. Review CLS scores and word-by-word breakdown
+<!-- Spelling tab removed -->
 
 ## Technical Implementation
 
@@ -175,7 +167,7 @@ A comprehensive TypeScript React web application for Curriculum-Based Measuremen
 - **TWW**: All words written; include misspellings; exclude numerals
 - **WSC**: Words spelled correctly in isolation (GrammarBot + custom lexicon)
 - **CWS**: Adjacent units (words & essential punctuation). Commas excluded. Initial valid word counts 1. Capitalize after terminals
-- **CLS**: Counts boundary + adjacent letter pairs per target word (partial knowledge credit)
+<!-- CLS removed -->
 
 ### Derived Metrics
 
