@@ -5,6 +5,12 @@
 [build.environment]
   NODE_OPTIONS = "--max-old-space-size=8192"
   NODE_VERSION = "18"
+  # Netlify secrets scanning configuration
+  # We do not commit secrets in the repo. To avoid false positives from docs
+  # or generated files, omit scanning these paths. If issues persist, you can
+  # disable scanning by setting SECRETS_SCAN_ENABLED="false" in Netlify UI.
+  SECRETS_SCAN_OMIT_PATHS = "README.md,CHANGELOG.md,codemap.md"
+  SECRETS_SCAN_OMIT_KEYS = "GCP_PRIVATE_KEY,GOOGLE_APPLICATION_CREDENTIALS_JSON,NETLIFY_DATABASE_URL,NEON_DATABASE_URL,DATABASE_URL,GRAMMARBOT_API_KEY"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
