@@ -454,6 +454,11 @@ The application is configured for optimal Netlify deployment:
      - `GCP_CLIENT_EMAIL` — service account email
      - `GCP_PRIVATE_KEY` — private key string; you may paste with real newlines or with `\n` escapes (both supported)
    - Optional fallbacks also supported: `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_SA_EMAIL`
+4. **Secrets Scanning**: Netlify blocks builds if secrets are detected in repo files or build output.
+   - We do not commit secrets in this repo; if you hit false positives (often in docs), the repo includes sane defaults in `netlify.toml`:
+     - `SECRETS_SCAN_OMIT_PATHS="README.md,CHANGELOG.md,codemap.md"`
+     - `SECRETS_SCAN_OMIT_KEYS="GCP_PRIVATE_KEY,GOOGLE_APPLICATION_CREDENTIALS_JSON,NETLIFY_DATABASE_URL,NEON_DATABASE_URL,DATABASE_URL,GRAMMARBOT_API_KEY"`
+   - If necessary, you can disable scanning from the Netlify UI by setting `SECRETS_SCAN_ENABLED=false` (not recommended long‑term).
 4. **Configuration**: Uses `netlify.toml` with Next.js plugin for proper function deployment
 
 ### Production Build
