@@ -6,7 +6,7 @@ A TypeScript React web application for Curriculum‑Based Measurement (CBM) writ
 
 - Removed terminal groups (^ . ^) and any group toggling UI.
  - Missing punctuation is flagged directly on the caret between words; carets are individually clickable to override boundary status.
-- Added left-side Discard area: drag tokens to remove them from the stream and KPIs; Undo via button or Cmd/Ctrl+Z.
+- Added left-side Discard area: drag words or individual carets to remove them from the stream and KPIs; Undo via button or Cmd/Ctrl+Z.
 - KPIs now compute CWS using word states plus caret flags (no group acceptance needed).
 - Output text shows the original text with any discarded tokens omitted; the app no longer auto-inserts punctuation.
 
@@ -47,6 +47,7 @@ A TypeScript React web application for Curriculum‑Based Measurement (CBM) writ
 - **Spell Result Caching**: Intelligent caching for GrammarBot API responses
 - **Curly Apostrophe Support**: Proper handling of smart quotes and apostrophes
 - **Token Character Offsets**: Precise character position tracking for GrammarBot issue alignment
+- **Discard Controls**: Drag words or individual carets into the Discard panel to hide them from the stream and make them non‑blocking for CWS; Undo restores the last removal (Cmd/Ctrl+Z).
 
 ### Layout & Responsiveness
 - **Wide Container on Large Screens**: Main wrapper uses `max-w-screen-xl 2xl:max-w-screen-2xl` so the app fills more of a 1080p/1440p display while staying fluid on smaller screens.
@@ -140,9 +141,10 @@ A TypeScript React web application for Curriculum‑Based Measurement (CBM) writ
 4. Grammar checking runs automatically as you type (debounced)
 5. Review the 6 key metrics in the right column grid
 6. Review the aggregated infractions and suggestions (always visible) — driven purely by GrammarBot, grouped by type + replacement with counts, and ordered from most to fewest
-7. Use interactive overrides to adjust scoring as needed (click words for WSC, click carets for CWS)
-8. Capitalization issues are treated as errors (red) but the original word casing is preserved in the bubble; punctuation suggestions appear as grouped `^ . ^`
-9. View GrammarBot correction preview for sanity checking
+7. Use interactive overrides to adjust scoring as needed (click words for WSC; clicking a word also synchronizes the two adjacent carets to match the word; click carets to cycle CWS)
+8. Drag words or individual carets into the Discard panel to remove them from the stream and KPIs; use Undo to restore
+9. Capitalization issues are treated as errors (red) but the original word casing is preserved in the bubble
+10. View GrammarBot correction preview for sanity checking
 
 <!-- Spelling tab removed -->
 
