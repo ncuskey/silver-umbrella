@@ -295,7 +295,7 @@ export default function KioskPage() {
                       </div>
                     ) : (
                       <div className="p-2 rounded border text-xs bg-amber-50 border-amber-300 text-amber-900">
-                        Saved prompts unavailable (database not configured).
+                        Saved prompts list unavailable. You can still enter a prompt below and try saving it.
                       </div>
                     )}
                     <div className="space-y-1">
@@ -309,7 +309,6 @@ export default function KioskPage() {
                       </div>
                       <Button
                         onClick={async () => {
-                          if (!promptsEnabled) return;
                           if (!promptTitle.trim() || !promptText.trim()) return;
                           try {
                             setPromptSaveState('saving');
@@ -321,10 +320,15 @@ export default function KioskPage() {
                             if (!res.ok) throw new Error(data?.error || 'save failed');
                             const newId = data.id as string;
                             // refresh list
-                            const listRes = await fetch('/api/prompts');
-                            const listData = await listRes.json();
-                            setPrompts(Array.isArray(listData.items) ? listData.items : []);
-                            setSelectedPromptId(newId);
+                            try {
+                              const listRes = await fetch('/api/prompts');
+                              if (listRes.ok) {
+                                const listData = await listRes.json();
+                                setPrompts(Array.isArray(listData.items) ? listData.items : []);
+                                setSelectedPromptId(newId);
+                                setPromptsEnabled(true);
+                              }
+                            } catch {}
                             setPromptSaveState('success');
                           } catch (e) {
                             console.error(e);
@@ -334,7 +338,6 @@ export default function KioskPage() {
                           }
                         }}
                         className="min-w-[7rem]"
-                        disabled={!promptsEnabled}
                       >
                         {promptSaveState === 'saving' ? 'Saving…' : promptSaveState === 'success' ? 'Saved' : 'Save'}
                       </Button>
