@@ -18,3 +18,5 @@ export async function GET(_req: Request, ctx: { params: { id: string } }) {
     return new Response(JSON.stringify({ error: e?.message || 'error' }), { status: 500 })
   }
 }
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'

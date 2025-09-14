@@ -42,3 +42,5 @@ export async function POST(req: NextRequest) {
     return new Response(JSON.stringify({ error: e?.message || 'error' }), { status: 500 })
   }
 }
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
