@@ -41,6 +41,7 @@ A TypeScript React web application for Curriculum‑Based Measurement (CBM) writ
 - **PDF support**: Multi‑page PDFs render client‑side and are OCR’d page‑by‑page.
 - **Preprocessing**: Server trims and enhances images (autorotate, grayscale, normalize, denoise, slight sharpen, threshold, crop/pad) for better OCR accuracy.
 - **Backend**: Google Cloud Vision `documentTextDetection` via `/api/ocr`.
+ - **Hover preview of scanned words**: After uploading a scan, hover over any word token in the UI to see an image snippet of the corresponding handwritten/printed word from the scan. This helps teachers visually compare the scanned glyphs to the OCR/typed output. Previews are generated from the exact preprocessed image sent to Vision for alignment.
 
 <!-- Spelling assessment (CLS) removed; app now focuses on Written Expression only -->
 
@@ -191,6 +192,22 @@ GCP_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...your key...\n-----END PRIVATE K
 ```
 
 Then restart the dev server. The UI uploads images/PDF pages to `/api/ocr`, which preprocesses with Sharp and calls Google Vision.
+
+#### Notes on Scanned Word Hover Previews
+- The server returns the preprocessed image alongside Vision’s word boxes so bounding boxes line up with what Vision saw.
+- The client aligns OCR words to the combined text and lazily crops the matching word region for hover popovers.
+- If you edit the text after OCR, previews are cleared (offsets no longer match the OCR baseline).
+
+### Developer tips
+
+- Clear Next.js build cache and restart dev server:
+  ```bash
+  rm -rf .next && npm run dev
+  ```
+  If port 3000 is stuck:
+  ```bash
+  lsof -ti :3000 | xargs kill -9 && rm -rf .next && npm run dev
+  ```
 
 ## Development Scripts
 
