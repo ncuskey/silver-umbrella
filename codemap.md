@@ -4,6 +4,15 @@
 
 This application is a TypeScript React web app for Curriculum‑Based Measurement (CBM) written expression scoring. Built with Next.js 15, it provides automated scoring for educational assessments with interactive overrides and professional spell checking via GrammarBot API.
 
+### Kiosk Mode (Student Writing)
+- Route: `src/app/kiosk/page.tsx`
+- Purpose: Clean, student-facing timed writing flow.
+- Behavior:
+  - Two stages: `setup` (name + minutes) → `writing` (textarea only) → `done` (completion actions).
+  - Timer starts on first character typed; no word/character counters; no early stop.
+  - On completion, provides Copy and Download actions and a “New Session” reset.
+- Nav hiding: `src/components/SiteNav.tsx` reads `document.body.dataset.kioskMode` and hides during `writing`. Kiosk page sets and clears this flag and dispatches a `kioskmodechange` event.
+
 ## Breaking Changes (v9.0)
 
 - Terminal groups are deprecated and no longer used in the UI or KPIs. The component `src/components/TerminalGroup.tsx` remains in the repo but is not referenced.
