@@ -54,11 +54,14 @@ export function gbToVtInsertions(gb: { edits?: GbEdit[] }, text: string, tokens:
   };
 
   const edits = gb.edits ?? [];
-  // 1) Direct INSERT PUNC → terminal
+  // 1) Direct INSERT PUNC → terminal (accept ".", "!", "?" even if surrounded by spaces)
   for (const e of edits) {
-    if (e.edit_type === "INSERT" && e.err_cat === "PUNC" && (e.replace === "." || e.replace === "!" || e.replace === "?")) {
+    if (e.edit_type === "INSERT" && e.err_cat === "PUNC") {
+      const m = (e.replace || "").match(/[.!?]/);
+      if (!m) continue;
+      const ch = m[0] as "."|"!"|"?";
       const b = charOffsetToBoundaryIndex(e.start, tokens, text);
-      push(b, e.start, e.replace as any, e.err_desc);
+      push(b, e.start, ch, e.err_desc || `Add ${ch}`);
     }
   }
 
