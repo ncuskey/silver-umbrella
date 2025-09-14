@@ -1,14 +1,16 @@
 import { NextRequest } from 'next/server'
 import { ensureSchema, getSql, isDbConfigured } from '@/lib/db'
 
+type PromptRow = { id: string; title: string; content: string; created_at: string }
+
 export async function GET() {
   try {
     if (!isDbConfigured()) return new Response(JSON.stringify({ error: 'db_unconfigured' }), { status: 503 })
     await ensureSchema()
     const sql = getSql()
-    const rows = await sql<{ id: string, title: string, content: string, created_at: string }[]>`
+    const rows = await (sql as any)`
       select id, title, content, created_at from prompts order by created_at desc limit 100
-    `
+    ` as PromptRow[]
     return new Response(JSON.stringify({ items: rows }), { status: 200, headers: { 'content-type': 'application/json' } })
   } catch (e: any) {
     return new Response(JSON.stringify({ error: e?.message || 'error' }), { status: 500 })
