@@ -10,20 +10,26 @@
     "test": "vitest --ui",
     "test:run": "vitest run",
     "size:report": "du -sh node_modules/* | sort -h | tail -n 30",
-    "analyze": "ANALYZE=1 NODE_OPTIONS='--max-old-space-size=4096' next build"
+    "analyze": "ANALYZE=1 NODE_OPTIONS='--max-old-space-size=4096' next build",
+    "ocr:score": "node scripts/ocr-score.js"
   },
   "dependencies": {
+    "@google-cloud/vision": "^4.3.3",
     "@neondatabase/serverless": "^0.10.4",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.0.0",
+    "dotenv": "^16.4.5",
     "framer-motion": "^10.16.16",
     "html2canvas": "^1.4.1",
     "jspdf": "^3.0.2",
     "lucide-react": "^0.294.0",
     "next": "^15.5.3",
+    "pdfjs-dist": "^4.6.82",
     "react": "^18",
     "react-dom": "^18",
-    "tailwind-merge": "^2.2.0"
+    "sharp": "^0.33.5",
+    "tailwind-merge": "^2.2.0",
+    "tesseract.js": "^5.1.0"
   },
   "devDependencies": {
     "@next/bundle-analyzer": "^15.5.2",
