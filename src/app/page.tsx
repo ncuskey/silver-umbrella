@@ -741,28 +741,25 @@ function WritingScorer() {
     });
   }, [vtInsertions, displayTokens.length, ui.tokens]);
 
-  // Build final output text with user overrides (removed tokens, kept/removed terminal groups)
+  // Build final output text from GrammarBot's full correction
   const finalOutputText = useMemo(() => {
-    // With terminal groups removed, output text = original text minus any removed tokens
-    type Edit = { start: number; end: number; replace: string };
-    const edits: Edit[] = [];
+    // Prefer `correction` from GrammarBot when available
+    if (gb?.correction && typeof gb.correction === 'string') return gb.correction;
 
-    for (let i = 0; i < ui.tokens.length; i++) {
-      const tModel = ui.tokens[i] as any;
-      if (tModel?.removed) {
-        const t = tokens[i];
-        if (t) edits.push({ start: t.start, end: t.end, replace: '' });
+    // Fallback: apply edits to original text (reverse order to preserve offsets)
+    if (Array.isArray(gb?.edits)) {
+      let out = text;
+      const edits = [...(gb?.edits ?? [])].sort((a, b) => b.start - a.start);
+      for (const e of edits) {
+        const rep = (e.replace ?? '');
+        out = out.slice(0, e.start) + rep + out.slice(e.end);
       }
+      return out;
     }
 
-    let out = text;
-    const sorted = edits.sort((a, b) => a.start - b.start);
-    for (let k = sorted.length - 1; k >= 0; k--) {
-      const e = sorted[k];
-      out = out.slice(0, e.start) + e.replace + out.slice(e.end);
-    }
-    return out;
-  }, [text, tokens, ui.tokens]);
+    // No GB data – show original text
+    return text;
+  }, [text, gb]);
 
   const gridCells: UICell[] = useMemo(() => {
     const cells: UICell[] = [];
