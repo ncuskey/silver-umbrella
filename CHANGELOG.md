@@ -5,7 +5,8 @@ This project aims to follow Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
-- Breaking: Removed terminal groups and group cycling UI. Carets now flag missing punctuation directly at boundaries and are non-interactive.
+ - Breaking: Removed terminal groups and group cycling UI. Carets now flag missing punctuation directly at boundaries and are individually clickable.
+ - UX: Clicking a word cycles its state and synchronizes both adjacent carets to the same state; clicking a caret cycles only that caret.
 - Added: Left-side Discard area to drag-remove tokens from the stream and KPIs; Undo button and Cmd/Ctrl+Z support.
 - Changed: KPIs compute CWS using word states plus caret flags instead of terminal groups.
 - Changed: Output pane shows original text with removed tokens omitted; no automatic punctuation insertion.

@@ -7,7 +7,7 @@ This application is a TypeScript React web app for Curriculum‑Based Measuremen
 ## Breaking Changes (v9.0)
 
 - Terminal groups are deprecated and no longer used in the UI or KPIs. The component `src/components/TerminalGroup.tsx` remains in the repo but is not referenced.
-- Missing punctuation is surfaced as caret flags at boundaries (from GB-derived insertions); carets are non-interactive.
+- Missing punctuation is surfaced as caret flags at boundaries (from GB-derived insertions); carets are individually clickable. Clicking a word also synchronizes both adjacent carets to the word's state.
 - A left-side Discard area allows dragging tokens to hide them; Undo restores the last removal.
 - CWS scoring now depends on word states and absence of a caret flag at the boundary (i+1) between two visible words.
 

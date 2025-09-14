@@ -5,7 +5,7 @@ A TypeScript React web application for Curriculum‑Based Measurement (CBM) writ
 ## Breaking Changes (v9.0)
 
 - Removed terminal groups (^ . ^) and any group toggling UI.
-- Missing punctuation is flagged directly on the caret between words; carets are informational and not interactive.
+ - Missing punctuation is flagged directly on the caret between words; carets are individually clickable to override boundary status.
 - Added left-side Discard area: drag tokens to remove them from the stream and KPIs; Undo via button or Cmd/Ctrl+Z.
 - KPIs now compute CWS using word states plus caret flags (no group acceptance needed).
 - Output text shows the original text with any discarded tokens omitted; the app no longer auto-inserts punctuation.
@@ -41,7 +41,7 @@ A TypeScript React web application for Curriculum‑Based Measurement (CBM) writ
 - **Infraction Flagging**: Automated detection of definite vs. possible issues from GrammarBot
 - **Aggregated Infractions List**: Groups identical GrammarBot infractions by type + replacement and shows a frequency count (e.g., `10× PUNC → .`), sorted by most frequent
 - **Rule Tooltips**: Instant, accessible tooltips show rule labels and suggested replacements on hover for tokens; terminal dots/carets show proposed punctuation. Includes a subtle pop‑in animation.
-- **Interactive Overrides**: Click words to toggle WSC scoring, click carets to cycle CWS states
+- **Interactive Overrides**: Click words to toggle WSC scoring; clicking a word also synchronizes the two adjacent carets to match the word's new state. Click carets to cycle their state individually.
 - **CWS Engine**: Strictly mechanical, CBM-aligned engine with visual caret indicators and boundary validation
 - **Rule-based Checks**: Capitalization, terminal punctuation, and sentence structure validation
 - **Spell Result Caching**: Intelligent caching for GrammarBot API responses
@@ -82,7 +82,7 @@ A TypeScript React web application for Curriculum‑Based Measurement (CBM) writ
 
 ### Terminal Group System Overhaul (v8.1)
 - **Single Clickable Units**: Terminal groups (^ . ^) are now single buttons that toggle the entire group together
-- **Non-Interactive Glyphs**: Inner glyphs use `pointer-events-none` to prevent individual clicks on carets/dots
+<!-- Legacy: terminal groups/dots were non-interactive. Current UI uses individually clickable caret buttons. -->
 - **Unified State Management**: Single click handler cycles entire terminal groups while maintaining individual token control
 - **Deduplication Logic**: New `buildTerminalGroups` function eliminates duplicate "^ . ^ . ^" triples at paragraph breaks
 - **Boundary-Based Grouping**: Groups are deduplicated by boundary index to prevent overlapping suggestions
