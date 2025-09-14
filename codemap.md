@@ -10,6 +10,7 @@ This application is a TypeScript React web app for Curriculum‑Based Measuremen
 - Missing punctuation is surfaced as caret flags at boundaries (from GB-derived insertions); carets are individually clickable. Clicking a word also synchronizes both adjacent carets to the word's state.
 - A left-side Discard area allows dragging tokens to hide them; Undo restores the last removal.
 - CWS scoring now depends on word states and absence of a caret flag at the boundary (i+1) between two visible words.
+- Output pane now renders GrammarBot's full corrected text (`correction`) when available; otherwise it reconstructs by applying GB edits. Discarded tokens do not affect this pane.
 
 ## Architecture
 
@@ -25,7 +26,7 @@ This application is a TypeScript React web app for Curriculum‑Based Measuremen
 
 ### Recent Architectural Improvements
 
-#### Terminal Group System Overhaul (v8.1+)
+#### (Deprecated) Terminal Group System (v8.1+)
 - **Single Clickable Units**: Terminal groups (^ . ^) implemented as single buttons with non-interactive inner glyphs
 - **Deduplication Logic**: New `buildTerminalGroups` function eliminates duplicate "^ . ^ . ^" triples at paragraph breaks
 - **Boundary-Based Grouping**: Groups deduplicated by boundary index using `Map<number, TerminalGroupModel>`
@@ -34,7 +35,7 @@ This application is a TypeScript React web app for Curriculum‑Based Measuremen
 - **Enhanced UX**: Single-click interaction model with proper visual feedback and state cycling
 - **Immediate KPI Updates**: Click handlers trigger instant KPI recalculation with console logging
 - **Tailwind Color Safelist**: Comprehensive safelist ensures all dynamic color classes render properly
-- **UI Trio Rendering**: VT groups render as three individual pills `^ . ^`, grouped via a stable ID `tg-<boundary>`; clicking any toggles the group
+- (Removed) UI trio rendering of `^ . ^` terminal groups in favor of caret-only flags
 - **Paragraph Placement**: End-of-paragraph VT groups remain attached to the preceding paragraph; not inserted into blank lines; final paragraph is included when missing a terminal
 
 #### State Management Refactoring
@@ -129,11 +130,11 @@ This application is a TypeScript React web app for Curriculum‑Based Measuremen
 
 **Key Features**:
 - **Written Expression Scoring**: TWW, WSC, CWS calculations with derived metrics
-- **Terminal Group Functionality**: Unified (^ . ^) groups as single, clickable units with synchronized state
+- **Caret-Only Punctuation Flags**: Missing terminals flagged on carets; no terminal groups in UI
 - (Spelling page removed) 
 - **GrammarBot Integration**: Professional spell checking and grammar analysis via GrammarBot API
 - **Interactive UI**: Clickable carets, tokens, and terminal groups with keyboard navigation
-- **Group State Management**: Separate state tracking for individual tokens and terminal groups
+- **Output Text (Corrected)**: Blue box shows GrammarBot's full corrected text, with local edit-application fallback
 - **Focus Management**: Visual focus indicators and selection rings for accessibility
 - **Export Functionality**: CSV audit export and PDF report generation
 - **Responsive Design**: Mobile-friendly interface with flex layout

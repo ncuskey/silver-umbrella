@@ -8,7 +8,7 @@ A TypeScript React web application for Curriculum‑Based Measurement (CBM) writ
  - Missing punctuation is flagged directly on the caret between words; carets are individually clickable to override boundary status.
 - Added left-side Discard area: drag words or individual carets to remove them from the stream and KPIs; Undo via button or Cmd/Ctrl+Z.
 - KPIs now compute CWS using word states plus caret flags (no group acceptance needed).
-- Output text shows the original text with any discarded tokens omitted; the app no longer auto-inserts punctuation.
+- Output text now shows GrammarBot's full corrected text when available (the `correction` field). If `correction` is missing, it reconstructs the text by applying GrammarBot's edits. Discarded tokens do not affect this pane.
 
 ## Features
 
@@ -22,9 +22,7 @@ A TypeScript React web application for Curriculum‑Based Measurement (CBM) writ
 ### Advanced Features
 - **Centralized Status Classes**: Static string literals for Tailwind CSS classes with safelist protection
 - **Immutable State Management**: No mutations - all state updates use immutable patterns with derived KPIs
-- **Terminal Group System**: Unified (^ . ^) groups as single, clickable units with synchronized state management
-- **Group State Management**: Separate state tracking for individual tokens and terminal groups with independent cycling
-- **Unified Group Cycling**: Single click handler cycles entire terminal groups while maintaining individual token control
+- (Deprecated) Terminal groups (^ . ^) were removed; caret flags now indicate missing punctuation directly at boundaries
 - **Visual Synchronization**: All members of terminal groups share colors, selection state, and visual feedback
 - **Paragraph-Aware Terminal Insertion**: Respects paragraph boundaries and inserts sentence terminals even at end-of-text when missing; handles GB MODIFY-based sentence splits (e.g., ". We") in addition to PUNC INSERTs
 - **Reactive KPI Updates**: KPIs automatically recalculate when tokens or groups are clicked
@@ -40,6 +38,7 @@ A TypeScript React web application for Curriculum‑Based Measurement (CBM) writ
 - **Rate Limiting**: Simple backoff handling for GrammarBot 429 responses
 - **Infraction Flagging**: Automated detection of definite vs. possible issues from GrammarBot
 - **Aggregated Infractions List**: Groups identical GrammarBot infractions by type + replacement and shows a frequency count (e.g., `10× PUNC → .`), sorted by most frequent
+- **Output Text (Corrected)**: Blue box shows GrammarBot's full corrected text; falls back to locally applying GB edits if needed
 - **Rule Tooltips**: Instant, accessible tooltips show rule labels and suggested replacements on hover for tokens; terminal dots/carets show proposed punctuation. Includes a subtle pop‑in animation.
 - **Interactive Overrides**: Click words to toggle WSC scoring; clicking a word also synchronizes the two adjacent carets to match the word's new state. Click carets to cycle their state individually.
 - **CWS Engine**: Strictly mechanical, CBM-aligned engine with visual caret indicators and boundary validation
@@ -144,7 +143,7 @@ A TypeScript React web application for Curriculum‑Based Measurement (CBM) writ
 7. Use interactive overrides to adjust scoring as needed (click words for WSC; clicking a word also synchronizes the two adjacent carets to match the word; click carets to cycle CWS)
 8. Drag words or individual carets into the Discard panel to remove them from the stream and KPIs; use Undo to restore
 9. Capitalization issues are treated as errors (red) but the original word casing is preserved in the bubble
-10. View GrammarBot correction preview for sanity checking
+10. The blue Output Text box shows GrammarBot's full corrected text for quick review
 
 <!-- Spelling tab removed -->
 
@@ -168,15 +167,11 @@ A TypeScript React web application for Curriculum‑Based Measurement (CBM) writ
 - VT insertion compatibility: `convertLTTerminalsToInsertions` now supports both `(text, tokens, issues)` and `(tokens, issues)` signatures and falls back to the previous WORD boundary when an explicit caret is absent.
 - No local heuristics at runtime: spelling/capitalization highlighting is based solely on GrammarBot edits. A banner appears if GrammarBot is unavailable.
 
-### Punctuation Groups (VT)
+### Punctuation Handling
 
-- Terminal suggestions from GrammarBot for sentence ends (only `.`, `!`, `?`) render as three pills: `^` (caret), the dot/exclamation/question, and the closing `^` caret.
-- Clicking any part of the trio toggles the whole group status; colors stay in sync.
-- Commas and non‑sentence punctuation do not create VT groups and are ignored for CWS.
-- End‑of‑paragraph behavior:
-  - A group is inserted for every paragraph that lacks terminal punctuation, including the final text block.
-  - The group is attached to the end of the paragraph (same line as the last word), never in the blank space.
-  - Empty paragraphs (consecutive newlines) are ignored; no spurious groups are created between paragraphs.
+- Missing terminal punctuation is indicated by caret flags at boundaries. Carets are clickable and keyboard-accessible for overrides.
+- Commas and non‑sentence punctuation do not affect CWS.
+- Paragraphs without terminal punctuation are still considered; end-of-text carets can be flagged.
 
 ### Capitalization Treatment
 

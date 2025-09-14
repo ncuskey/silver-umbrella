@@ -9,7 +9,7 @@ This project aims to follow Keep a Changelog and Semantic Versioning.
  - UX: Clicking a word cycles its state and synchronizes both adjacent carets to the same state; clicking a caret cycles only that caret.
 - Added: Left-side Discard area to drag-remove tokens from the stream and KPIs; Undo button and Cmd/Ctrl+Z support.
 - Changed: KPIs compute CWS using word states plus caret flags instead of terminal groups.
-- Changed: Output pane shows original text with removed tokens omitted; no automatic punctuation insertion.
+ - Changed: Output pane now shows GrammarBot's full corrected text (`correction`) when available; otherwise it reconstructs by applying GB edits. This pane no longer reflects discarded tokens.
 
 - UI: Responsive main container widened (`max-w-screen-xl`, `2xl:max-w-screen-2xl`) to better utilize large displays.
 - UI: Precise, computed left padding for Discard area using CSS variables (`--discard-x`, `--discard-w`) and `.with-discard-pad` at `xl+` to prevent overlap and keep symmetric spacing.
