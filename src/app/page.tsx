@@ -353,9 +353,11 @@ function WritingScorer() {
 
   // Drag & drop discard + undo
   const [draggingToken, setDraggingToken] = useState<number | null>(null);
+  const [draggingCaret, setDraggingCaret] = useState<number | null>(null);
   const [overDiscard, setOverDiscard] = useState(false);
   type UndoAction =
     | { type: 'remove-token'; index: number }
+    | { type: 'remove-caret'; index: number }
     | { type: 'remove-group'; id: string };
   const [undoStack, setUndoStack] = useState<UndoAction[]>([]);
 
@@ -415,6 +417,18 @@ function WritingScorer() {
     });
   };
 
+  // Remove a caret by boundary index (hide it and make it non-blocking)
+  const removeCaretByIndex = useCallback((bi: number) => {
+    setUi(prev => {
+      const nextStates = { ...prev.caretStates } as Record<number, 'ok'|'maybe'|'bad'>;
+      nextStates[bi] = 'ok'; // ensure it doesn't block CWS
+      const removed = new Set(prev.removedCarets ?? new Set<number>());
+      removed.add(bi);
+      return { ...prev, caretStates: nextStates, removedCarets: removed, kpis: computeKpis(prev.tokens, prev.minutes, nextStates) };
+    });
+    setUndoStack(prev => [...prev, { type: 'remove-caret', index: bi }]);
+  }, []);
+
   // Remove a token by index (mark as removed, keep indices stable)
   const removeTokenByIndex = useCallback((idx: number) => {
     setUi(prev => {
@@ -425,7 +439,7 @@ function WritingScorer() {
     setUndoStack(prev => [...prev, { type: 'remove-token', index: idx }]);
   }, []);
 
-  // Undo last action (supports token removal)
+  // Undo last action (supports token and caret removal)
   const handleUndo = useCallback(() => {
     setUndoStack(prev => {
       const next = prev.slice();
@@ -436,6 +450,12 @@ function WritingScorer() {
           const tokens = prevUi.tokens.slice();
           if (tokens[action.index]) tokens[action.index] = { ...tokens[action.index], removed: false } as any;
           return { ...prevUi, tokens, kpis: computeKpis(tokens, prevUi.minutes, prevUi.caretStates) };
+        });
+      } else if (action.type === 'remove-caret') {
+        setUi(prevUi => {
+          const removed = new Set(prevUi.removedCarets);
+          removed.delete(action.index);
+          return { ...prevUi, removedCarets: removed, kpis: computeKpis(prevUi.tokens, prevUi.minutes, prevUi.caretStates) };
         });
       }
       return next;
@@ -513,7 +533,7 @@ function WritingScorer() {
   function cellEl(c: UICell, key: React.Key) {
     const role = "button";
     const tabIndex = role ? 0 : -1;
-    const draggable = c.kind === 'token';
+    const draggable = c.kind === 'token' || c.kind === 'caret';
     return (
       <button
         type="button"
@@ -523,8 +543,19 @@ function WritingScorer() {
         onClick={() => onCellActivate(c)}
         onKeyDown={(e)=>{ if (role && (e.key==="Enter"||e.key===" ")) { e.preventDefault(); onCellActivate(c); }}}
         draggable={draggable}
-        onDragStart={draggable ? (e) => { try { e.dataTransfer.setData('text/plain', `token:${(c as any).ti}`); } catch {} setDraggingToken((c as any).ti); e.dataTransfer.effectAllowed = 'move'; } : undefined}
-        onDragEnd={draggable ? () => { setDraggingToken(null); setOverDiscard(false); } : undefined}
+        onDragStart={draggable ? (e) => {
+          try {
+            if (c.kind === 'token') {
+              e.dataTransfer.setData('text/plain', `token:${(c as any).ti}`);
+              setDraggingToken((c as any).ti);
+            } else if (c.kind === 'caret') {
+              e.dataTransfer.setData('text/plain', `caret:${(c as any).bi}`);
+              setDraggingCaret((c as any).bi);
+            }
+          } catch {}
+          e.dataTransfer.effectAllowed = 'move';
+        } : undefined}
+        onDragEnd={draggable ? () => { setDraggingToken(null); setDraggingCaret(null); setOverDiscard(false); } : undefined}
         className={clsForCell(c) + ' tt cursor-pointer'}
         data-tip={
           c.kind === 'token' ? (tooltipForToken((c as any).ti) || undefined)
@@ -601,6 +632,7 @@ function WritingScorer() {
     minutes: durationMin,
     caretStates: {} as Record<number, 'ok'|'maybe'|'bad'>,
     manualCaretOverrides: new Set<number>() as Set<number>,
+    removedCarets: new Set<number>() as Set<number>,
     kpis: computeKpis(tokenModels, durationMin, {})
   });
 
@@ -738,10 +770,12 @@ function WritingScorer() {
     // caret severity from state: map ok/maybe/bad to correct/possible/incorrect for UI
 
     for (let b = 0; b <= N; b++) {
-      // 1) caret at boundary b
-      const cState = ui.caretStates[b] ?? 'ok';
-      const sev: 'correct'|'possible'|'incorrect' = cState === 'bad' ? 'incorrect' : cState === 'maybe' ? 'possible' : 'correct';
-      cells.push({ kind: 'caret', bi: b, ui: sev });
+      // 1) caret at boundary b (skip if removed)
+      if (!ui.removedCarets?.has(b)) {
+        const cState = ui.caretStates[b] ?? 'ok';
+        const sev: 'correct'|'possible'|'incorrect' = cState === 'bad' ? 'incorrect' : cState === 'maybe' ? 'possible' : 'correct';
+        cells.push({ kind: 'caret', bi: b, ui: sev });
+      }
 
       // 3) token after boundary b (for b < N)
       if (b < N) {
@@ -757,7 +791,7 @@ function WritingScorer() {
       }
     }
     return cells;
-  }, [displayTokens, caretRow, insertionMap, ui.tokens, ui.caretStates]);
+  }, [displayTokens, caretRow, insertionMap, ui.tokens, ui.caretStates, ui.removedCarets]);
 
   // Split grid cells into paragraph blocks
   const paragraphBlocks: UICell[][] = useMemo(() => {
@@ -882,9 +916,24 @@ function WritingScorer() {
             setOverDiscard(false);
             let data = '';
             try { data = (e.dataTransfer as DataTransfer).getData('text/plain'); } catch {}
-            const idxStr = data.startsWith('token:') ? data.slice('token:'.length) : data;
-            const idx = Number.isFinite(+idxStr) ? parseInt(idxStr, 10) : (draggingToken ?? -1);
-            if (Number.isFinite(idx) && idx >= 0) removeTokenByIndex(idx);
+            if (data.startsWith('token:')) {
+              const idxStr = data.slice('token:'.length);
+              const idx = Number.isFinite(+idxStr) ? parseInt(idxStr, 10) : (draggingToken ?? -1);
+              if (Number.isFinite(idx) && idx >= 0) removeTokenByIndex(idx);
+              return;
+            }
+            if (data.startsWith('caret:')) {
+              const biStr = data.slice('caret:'.length);
+              const bi = Number.isFinite(+biStr) ? parseInt(biStr, 10) : (draggingCaret ?? -1);
+              if (Number.isFinite(bi) && bi >= 0) removeCaretByIndex(bi);
+              return;
+            }
+            // Fallbacks when dataTransfer is blocked
+            if (draggingToken != null && draggingToken >= 0) {
+              removeTokenByIndex(draggingToken);
+            } else if (draggingCaret != null && draggingCaret >= 0) {
+              removeCaretByIndex(draggingCaret);
+            }
           }}
           aria-label="Discard Area"
         >
