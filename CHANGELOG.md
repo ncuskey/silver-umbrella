@@ -15,6 +15,8 @@ This project aims to follow Keep a Changelog and Semantic Versioning.
 - UI: Precise, computed left padding for Discard area using CSS variables (`--discard-x`, `--discard-w`) and `.with-discard-pad` at `xl+` to prevent overlap and keep symmetric spacing.
 - Docs: Documented responsive layout and discard-aware padding in README; added tuning notes for CSS variables.
 
+- UX: Allow dragging individual carets to the Discard panel; removed carets are hidden and treated as non-blocking for CWS; Undo restores discarded carets.
+
 - Added: Aggregated “Infractions & Suggestions” list. Identical GrammarBot infractions are grouped by tag + replacement and shown with counts (e.g., `10× PUNC → .`), sorted by most frequent.
 - Changed: Updated default sample text in the “Paste student writing” box to the provided passage.
 - Fixed: Netlify type error by adding optional `err_type` to `GBEdit` to align with `GbEdit`.

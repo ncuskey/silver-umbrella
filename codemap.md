@@ -65,6 +65,11 @@ This application is a TypeScript React web app for Curriculum‑Based Measuremen
 - **Placement**: The Discard panel reads the same variables for `left` and `width`, ensuring padding and panel stay in sync and never overlap content.
 - **Tuning**: Update the variables in `globals.css` or override them per‑breakpoint inside media queries if needed.
 
+### Discard Mechanics
+- Words: Dragging a word marks it as removed; it no longer renders in the stream and is excluded from TWW/WSC/CWS calculations. Undo restores it.
+- Carets: Dragging a caret adds its boundary index to `removedCarets`; the caret no longer renders and is treated as `ok` for KPI purposes (non‑blocking). Undo removes the index from `removedCarets`.
+- State: `ui` stores `caretStates`, `manualCaretOverrides`, and `removedCarets`; KPI computation uses `caretStates` and ignores removed carets.
+
 ### Project Structure
 
 ```
