@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { CheckCircle } from "lucide-react";
 
 function formatMMSS(totalSeconds: number) {
   const m = Math.floor(totalSeconds / 60);
@@ -270,6 +271,12 @@ export default function KioskPage() {
             {startTimeRef.current === null ? formatMMSS(Math.max(1, Math.floor(minutes * 60))) : formatMMSS(remaining)}
           </div>
         )}
+        {submitState === 'success' && (
+          <div className="fixed top-12 right-3 z-40 flex items-center gap-1 rounded-md bg-emerald-600 text-white px-2 py-1 text-sm shadow">
+            <CheckCircle className="h-4 w-4" />
+            <span>Submitted</span>
+          </div>
+        )}
         <div className="mx-auto w-full max-w-screen-lg">
           <Textarea
             ref={textareaRef}
@@ -294,6 +301,12 @@ export default function KioskPage() {
   // Done screen (post-session actions)
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 p-4 md:p-8">
+      {submitState === 'success' && (
+        <div className="fixed top-3 right-3 z-40 flex items-center gap-1 rounded-md bg-emerald-600 text-white px-2 py-1 text-sm shadow">
+          <CheckCircle className="h-4 w-4" />
+          <span>Submitted</span>
+        </div>
+      )}
       <div className="mx-auto w-full max-w-screen-md space-y-4">
         <Card>
           <CardHeader>
