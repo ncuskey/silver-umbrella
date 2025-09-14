@@ -3,8 +3,9 @@ import type { TokenModel } from "@/components/Token";
 
 type T = TokenModel;
 
-// caretBad is the set of boundary indices with missing punctuation flags
-export function computeKpis(tokens: T[], minutes: number, caretBad: Set<number>) {
+// caretStates: record of boundary index -> ('ok' | 'maybe' | 'bad')
+// Only 'bad' blocks a CWS boundary; 'ok' and 'maybe' still count as eligible.
+export function computeKpis(tokens: T[], minutes: number, caretStates: Record<number, 'ok'|'maybe'|'bad'>) {
   // Consider only visible words (not removed)
   const words = tokens.filter(t => t.kind === "word" && !(t as any).removed);
   const tww = words.length;
@@ -25,7 +26,8 @@ export function computeKpis(tokens: T[], minutes: number, caretBad: Set<number>)
     const aOk = a.state === 'ok';
     const bOk = b.state === 'ok';
     const boundaryIdx = i + 1;
-    const caretOk = !caretBad.has(boundaryIdx);
+    const caretState = caretStates[boundaryIdx] ?? 'ok';
+    const caretOk = caretState !== 'bad';
     if (aOk && bOk && caretOk) cws++;
   }
 
