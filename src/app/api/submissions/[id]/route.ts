@@ -20,3 +20,4 @@ export async function GET(_req: Request, ctx: { params: { id: string } }) {
 }
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+export const config = { runtime: 'nodejs' } as const

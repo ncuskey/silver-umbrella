@@ -51,6 +51,12 @@ A TypeScript React web application for Curriculum‑Based Measurement (CBM) writ
 - Schema: Created on first use as table `submissions (id text primary key, student_name text, content text, duration_seconds int, started_at timestamptz, submitted_at timestamptz default now())`.
 - Kiosk auto‑saves when time expires and shows an “Open in Scoring” shortcut.
 
+Local development
+- Use one of:
+  - `netlify dev` (uses NETLIFY_* env vars automatically), or
+  - Add `DATABASE_URL` to `.env.local` with your Postgres connection string.
+- The API routes are configured to run on the Node.js runtime and dynamically (no static bundling), so server env vars are used at request time.
+
 
 ### Advanced Features
 - **Centralized Status Classes**: Static string literals for Tailwind CSS classes with safelist protection
