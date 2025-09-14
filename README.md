@@ -445,8 +445,15 @@ The CWS (Correct Writing Sequences) engine implements strictly mechanical, CBM-a
 The application is configured for optimal Netlify deployment:
 
 1. **Automatic Build**: Netlify will run `npm run build` automatically
-2. **API Functions**: GrammarBot proxy routes are deployed as Netlify Functions
-3. **Environment Variables**: Set `GRAMMARBOT_API_KEY` in Netlify environment variables
+2. **API Functions**: Server routes (GrammarBot proxy, OCR, PDF worker) run as Netlify Functions
+3. **Environment Variables**: Configure these in Netlify → Site settings → Build & deploy → Environment:
+   - `GRAMMARBOT_API_KEY` — GrammarBot cloud key
+   - Database URL — one of: `NETLIFY_DATABASE_URL` (preferred) or `NEON_DATABASE_URL` or `DATABASE_URL`
+   - Google Vision OCR (recommended names used by the app):
+     - `GCP_PROJECT_ID` — GCP project id
+     - `GCP_CLIENT_EMAIL` — service account email
+     - `GCP_PRIVATE_KEY` — private key string; you may paste with real newlines or with `\n` escapes (both supported)
+   - Optional fallbacks also supported: `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_SA_EMAIL`
 4. **Configuration**: Uses `netlify.toml` with Next.js plugin for proper function deployment
 
 ### Production Build
