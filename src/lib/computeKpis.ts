@@ -1,32 +1,32 @@
 // lib/computeKpis.ts
-import type { Status } from "@/components/TerminalGroup";
 import type { TokenModel } from "@/components/Token";
-import type { TerminalGroupModel } from "@/components/TerminalGroup";
 
 type T = TokenModel;
-type G = TerminalGroupModel;
 
-export function computeKpis(tokens: T[], groups: G[], minutes: number) {
-  const words = tokens.filter(t => t.kind === "word");
+// caretBad is the set of boundary indices with missing punctuation flags
+export function computeKpis(tokens: T[], minutes: number, caretBad: Set<number>) {
+  // Consider only visible words (not removed)
+  const words = tokens.filter(t => t.kind === "word" && !(t as any).removed);
   const tww = words.length;
 
   // Words Spelled Correctly = words not currently marked bad
   const spelledBad = words.filter(w => w.state === "bad").length;
   const wsc = tww - spelledBad;
 
-  // Build an interleaved sequence of items (word or terminal group) for CWS
-  const byAnchor = new Map(groups.map(g => [g.anchorIndex, g]));
-  const items: Status[] = [];
-  for (let i = 0; i < tokens.length; i++) {
-    if (tokens[i].kind === "word") items.push(tokens[i].state as Status);
-    const g = byAnchor.get(i + 1);
-    if (g) items.push(g.status);
-  }
-
+  // Eligible boundaries = between two visible words
   let eligible = 0, cws = 0;
-  for (let i = 0; i < items.length - 1; i++) {
+  for (let i = 0; i < tokens.length - 1; i++) {
+    const a = tokens[i];
+    const b = tokens[i + 1];
+    const aWord = a && a.kind === 'word' && !(a as any).removed;
+    const bWord = b && b.kind === 'word' && !(b as any).removed;
+    if (!aWord || !bWord) continue;
     eligible++;
-    if (items[i] === "ok" && items[i + 1] === "ok") cws++;
+    const aOk = a.state === 'ok';
+    const bOk = b.state === 'ok';
+    const boundaryIdx = i + 1;
+    const caretOk = !caretBad.has(boundaryIdx);
+    if (aOk && bOk && caretOk) cws++;
   }
 
   const pct = eligible ? Math.round((cws / eligible) * 100) : 0;

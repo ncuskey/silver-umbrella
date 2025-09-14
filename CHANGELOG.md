@@ -5,6 +5,11 @@ This project aims to follow Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
+- Breaking: Removed terminal groups and group cycling UI. Carets now flag missing punctuation directly at boundaries and are non-interactive.
+- Added: Left-side Discard area to drag-remove tokens from the stream and KPIs; Undo button and Cmd/Ctrl+Z support.
+- Changed: KPIs compute CWS using word states plus caret flags instead of terminal groups.
+- Changed: Output pane shows original text with removed tokens omitted; no automatic punctuation insertion.
+
 - Added: Aggregated “Infractions & Suggestions” list. Identical GrammarBot infractions are grouped by tag + replacement and shown with counts (e.g., `10× PUNC → .`), sorted by most frequent.
 - Changed: Updated default sample text in the “Paste student writing” box to the provided passage.
 - Fixed: Netlify type error by adding optional `err_type` to `GBEdit` to align with `GbEdit`.

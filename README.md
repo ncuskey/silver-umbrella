@@ -2,6 +2,14 @@
 
 A TypeScript React web application for Curriculum‑Based Measurement (CBM) written expression scoring.
 
+## Breaking Changes (v9.0)
+
+- Removed terminal groups (^ . ^) and any group toggling UI.
+- Missing punctuation is flagged directly on the caret between words; carets are informational and not interactive.
+- Added left-side Discard area: drag tokens to remove them from the stream and KPIs; Undo via button or Cmd/Ctrl+Z.
+- KPIs now compute CWS using word states plus caret flags (no group acceptance needed).
+- Output text shows the original text with any discarded tokens omitted; the app no longer auto-inserts punctuation.
+
 ## Features
 
 ### Written Expression Scoring

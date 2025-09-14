@@ -12,6 +12,8 @@ export interface TerminalGroupModel {
   status: Status;          // 'ok' | 'maybe' | 'bad'
   selected: boolean;
   source: 'GB' | 'PARA';
+  // When true, hide this group from UI + KPIs
+  removed?: boolean;
 }
 
 export default function TerminalGroup({
