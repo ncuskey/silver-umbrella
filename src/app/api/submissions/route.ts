@@ -26,11 +26,13 @@ export async function POST(req: NextRequest) {
     const content = (body?.text ?? body?.content ?? '').toString()
     const duration = Number.isFinite(+body?.durationSeconds) ? parseInt(body.durationSeconds, 10) : (Number.isFinite(+body?.duration) ? parseInt(body.duration, 10) : null)
     const startedAt = body?.startedAt ? new Date(body.startedAt) : null
+    const promptId = body?.promptId ? String(body.promptId) : null
+    const promptText = body?.promptText ? String(body.promptText) : null
     if (!content) return new Response(JSON.stringify({ error: 'content required' }), { status: 400 })
     const sql = getSql()
     await sql`
-      insert into submissions (id, student_name, content, duration_seconds, started_at)
-      values (${id}, ${student}, ${content}, ${duration}, ${startedAt})
+      insert into submissions (id, student_name, content, duration_seconds, started_at, prompt_id, prompt_text)
+      values (${id}, ${student}, ${content}, ${duration}, ${startedAt}, ${promptId}, ${promptText})
       on conflict (id) do nothing
     `
     return new Response(JSON.stringify({ id }), { status: 201, headers: { 'content-type': 'application/json' } })
@@ -38,4 +40,3 @@ export async function POST(req: NextRequest) {
     return new Response(JSON.stringify({ error: e?.message || 'error' }), { status: 500 })
   }
 }
-
