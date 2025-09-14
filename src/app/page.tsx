@@ -59,7 +59,7 @@ type UnitType = "word" | "numeral" | "comma" | "essentialPunct" | "other" | "PUN
 
 type UIState = "correct" | "possible" | "incorrect";
 
-type UICell =
+  type UICell =
   | { kind: "token"; ti: number; ui: UIState }
   | { kind: "caret"; bi: number; ui: UIState };
 
@@ -364,8 +364,12 @@ function WritingScorer() {
     if (c.kind === "token") {
       onTokenClick(c.ti);
       setSelected({ type: "token", id: c.ti });
+      // Also toggle the adjacent carets (boundaries: ti and ti+1)
+      toggleCaret(c.ti);
+      toggleCaret(c.ti + 1);
+    } else if (c.kind === 'caret') {
+      toggleCaret(c.bi);
     }
-    // caret cells are informational only now (flagged when punctuation missing)
   }
 
   // Helper function to cycle through statuses
@@ -381,8 +385,28 @@ function WritingScorer() {
         const next = t.state === 'ok' ? 'maybe' : (t.state === 'maybe' ? 'bad' : 'ok');
         tokens[idx] = { ...t, state: next } as any;
       }
-      const kpis = computeKpis(tokens, prev.minutes, prev.caretBad);
+      const kpis = computeKpis(tokens, prev.minutes, prev.caretStates);
       return { ...prev, tokens, kpis };
+    });
+  };
+
+  // Cycle helper for caret state
+  const cycleState = (s: 'ok'|'maybe'|'bad'): 'ok'|'maybe'|'bad' => (s === 'ok' ? 'maybe' : s === 'maybe' ? 'bad' : 'ok');
+
+  // Toggle a single caret by boundary index
+  const toggleCaret = (bi: number) => {
+    setUi(prev => {
+      const nextStates = { ...prev.caretStates } as Record<number, 'ok'|'maybe'|'bad'>;
+      const cur = nextStates[bi] ?? 'ok';
+      nextStates[bi] = cycleState(cur);
+      const nextManual = new Set(prev.manualCaretOverrides);
+      nextManual.add(bi);
+      return {
+        ...prev,
+        caretStates: nextStates,
+        manualCaretOverrides: nextManual,
+        kpis: computeKpis(prev.tokens, prev.minutes, nextStates),
+      };
     });
   };
 
@@ -391,7 +415,7 @@ function WritingScorer() {
     setUi(prev => {
       const tokens = prev.tokens.slice();
       if (tokens[idx]) tokens[idx] = { ...tokens[idx], removed: true } as any;
-      return { ...prev, tokens, kpis: computeKpis(tokens, prev.minutes, prev.caretBad) };
+      return { ...prev, tokens, kpis: computeKpis(tokens, prev.minutes, prev.caretStates) };
     });
     setUndoStack(prev => [...prev, { type: 'remove-token', index: idx }]);
   }, []);
@@ -406,7 +430,7 @@ function WritingScorer() {
         setUi(prevUi => {
           const tokens = prevUi.tokens.slice();
           if (tokens[action.index]) tokens[action.index] = { ...tokens[action.index], removed: false } as any;
-          return { ...prevUi, tokens, kpis: computeKpis(tokens, prevUi.minutes, prevUi.caretBad) };
+          return { ...prevUi, tokens, kpis: computeKpis(tokens, prevUi.minutes, prevUi.caretStates) };
         });
       }
       return next;
@@ -436,13 +460,9 @@ function WritingScorer() {
       return bubbleCls(state, selected);
     }
     if (c.kind === "caret") {
-      const map: Record<'correct'|'possible'|'incorrect','ok'|'maybe'|'bad'> = {
-        correct: 'ok',
-        possible: 'maybe',
-        incorrect: 'bad',
-      };
+      const state = ui.caretStates[c.bi] ?? (c.ui === 'incorrect' ? 'bad' : c.ui === 'possible' ? 'maybe' : 'ok');
       const selected = focus?.type === 'caret' && focus.index === c.bi;
-      return bubbleCls(map[c.ui], selected);
+      return bubbleCls(state, selected);
     }
     return "";
   }
@@ -486,7 +506,7 @@ function WritingScorer() {
   }
 
   function cellEl(c: UICell, key: React.Key) {
-    const role = (c.kind==="token") ? "button" : undefined;
+    const role = "button";
     const tabIndex = role ? 0 : -1;
     const draggable = c.kind === 'token';
     return (
@@ -504,7 +524,11 @@ function WritingScorer() {
           c.kind === 'token' ? (tooltipForToken((c as any).ti) || undefined)
           : tipForCaret((c as any).bi)
         }
-        aria-pressed={role ? isSel('token', (c as any).ti) : undefined}
+        aria-pressed={
+          c.kind === 'token'
+            ? isSel('token', (c as any).ti)
+            : (focus?.type === 'caret' && focus.index === (c as any).bi) || undefined
+        }
       >
         {/* token text or caret glyph */}
         {c.kind==="caret" ? "^" : displayTokens[c.ti].overlay ?? displayTokens[c.ti].raw}
@@ -569,8 +593,9 @@ function WritingScorer() {
   const [ui, setUi] = useState({
     tokens: tokenModels,
     minutes: durationMin,
-    caretBad: new Set<number>(),
-    kpis: computeKpis(tokenModels, durationMin, new Set<number>())
+    caretStates: {} as Record<number, 'ok'|'maybe'|'bad'>,
+    manualCaretOverrides: new Set<number>() as Set<number>,
+    kpis: computeKpis(tokenModels, durationMin, {})
   });
 
   // Update UI state when tokenModels or terminalGroups change
@@ -579,7 +604,7 @@ function WritingScorer() {
       ...prev,
       tokens: tokenModels,
       minutes: durationMin,
-      kpis: computeKpis(tokenModels, durationMin, prev.caretBad)
+      kpis: computeKpis(tokenModels, durationMin, prev.caretStates)
     }));
   }, [tokenModels, durationMin]);
 
@@ -648,12 +673,26 @@ function WritingScorer() {
     [vtInsertions]
   );
 
-  // caretBad set: boundaries with missing punctuation suggestions
+  // Initialize/update caret states from VT insertions, preserving manual overrides
   useEffect(() => {
-    const bad = new Set<number>();
-    for (const ins of vtInsertions) bad.add(ins.beforeBIndex);
-    setUi(prev => ({ ...prev, caretBad: bad, kpis: computeKpis(prev.tokens, prev.minutes, bad) }));
-  }, [vtInsertions]);
+    const N = displayTokens.length;
+    const defaults: Record<number, 'ok'|'maybe'|'bad'> = {};
+    for (let b = 0; b <= N; b++) defaults[b] = 'ok';
+    for (const ins of vtInsertions) defaults[ins.beforeBIndex] = 'bad';
+
+    setUi(prev => {
+      const nextStates: Record<number, 'ok'|'maybe'|'bad'> = { ...defaults };
+      // keep manual overrides intact when present
+      for (const bi of prev.manualCaretOverrides) {
+        if (prev.caretStates[bi] != null) nextStates[bi] = prev.caretStates[bi];
+      }
+      return {
+        ...prev,
+        caretStates: nextStates,
+        kpis: computeKpis(prev.tokens, prev.minutes, nextStates)
+      };
+    });
+  }, [vtInsertions, displayTokens.length]);
 
   // Build final output text with user overrides (removed tokens, kept/removed terminal groups)
   const finalOutputText = useMemo(() => {
@@ -681,12 +720,12 @@ function WritingScorer() {
   const gridCells: UICell[] = useMemo(() => {
     const cells: UICell[] = [];
     const N = displayTokens.length;
-    // caret severity: 'incorrect' if GB/VT suggests a terminal at this boundary
+    // caret severity from state: map ok/maybe/bad to correct/possible/incorrect for UI
 
     for (let b = 0; b <= N; b++) {
       // 1) caret at boundary b
-      const hasMissingPunc = (insertionMap.get(b) ?? []).length > 0;
-      const sev: 'correct'|'possible'|'incorrect' = hasMissingPunc ? 'incorrect' : 'correct';
+      const cState = ui.caretStates[b] ?? 'ok';
+      const sev: 'correct'|'possible'|'incorrect' = cState === 'bad' ? 'incorrect' : cState === 'maybe' ? 'possible' : 'correct';
       cells.push({ kind: 'caret', bi: b, ui: sev });
 
       // 3) token after boundary b (for b < N)
@@ -703,7 +742,7 @@ function WritingScorer() {
       }
     }
     return cells;
-  }, [displayTokens, caretRow, insertionMap, ui.tokens]);
+  }, [displayTokens, caretRow, insertionMap, ui.tokens, ui.caretStates]);
 
   // Split grid cells into paragraph blocks
   const paragraphBlocks: UICell[][] = useMemo(() => {
