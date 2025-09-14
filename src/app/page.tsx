@@ -510,7 +510,8 @@ function WritingScorer() {
     const tabIndex = role ? 0 : -1;
     const draggable = c.kind === 'token';
     return (
-      <span
+      <button
+        type="button"
         key={key}
         role={role}
         tabIndex={tabIndex}
@@ -519,7 +520,7 @@ function WritingScorer() {
         draggable={draggable}
         onDragStart={draggable ? (e) => { try { e.dataTransfer.setData('text/plain', `token:${(c as any).ti}`); } catch {} setDraggingToken((c as any).ti); e.dataTransfer.effectAllowed = 'move'; } : undefined}
         onDragEnd={draggable ? () => { setDraggingToken(null); setOverDiscard(false); } : undefined}
-        className={clsForCell(c) + ' tt'}
+        className={clsForCell(c) + ' tt cursor-pointer'}
         data-tip={
           c.kind === 'token' ? (tooltipForToken((c as any).ti) || undefined)
           : tipForCaret((c as any).bi)
@@ -532,7 +533,7 @@ function WritingScorer() {
       >
         {/* token text or caret glyph */}
         {c.kind==="caret" ? "^" : displayTokens[c.ti].overlay ?? displayTokens[c.ti].raw}
-      </span>
+      </button>
     );
   }
 
