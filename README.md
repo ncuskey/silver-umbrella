@@ -39,7 +39,11 @@ A TypeScript React web application for Curriculum‑Based Measurement (CBM) writ
   - `Kiosk` — Student-facing timed writing interface
 
 ### Data Persistence (Neon on Netlify)
-- Environment: Set `NEON_DATABASE_URL` (or `DATABASE_URL`) in Netlify to your Neon connection string.
+- Environment: Set one of these in Netlify env vars:
+  - `NETLIFY_DATABASE_URL` (preferred on Netlify)
+  - or `NEON_DATABASE_URL`
+  - or `DATABASE_URL`
+  - Optionally `NETLIFY_DATABASE_URL_UNPOOLED` is also recognized
 - API endpoints:
   - `POST /api/submissions` — Save a submission. Body: `{ student?: string, text: string, durationSeconds?: number, startedAt?: string }`. Returns `{ id }`.
   - `GET /api/submissions` — List recent submissions.
