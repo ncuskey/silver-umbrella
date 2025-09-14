@@ -364,9 +364,6 @@ function WritingScorer() {
     if (c.kind === "token") {
       onTokenClick(c.ti);
       setSelected({ type: "token", id: c.ti });
-      // Also toggle the adjacent carets (boundaries: ti and ti+1)
-      toggleCaret(c.ti);
-      toggleCaret(c.ti + 1);
     } else if (c.kind === 'caret') {
       toggleCaret(c.bi);
     }
@@ -381,12 +378,20 @@ function WritingScorer() {
     setUi(prev => {
       const tokens = prev.tokens.slice();
       const t = tokens[idx];
+      let next: 'ok'|'maybe'|'bad' = 'ok';
       if (t) {
-        const next = t.state === 'ok' ? 'maybe' : (t.state === 'maybe' ? 'bad' : 'ok');
+        next = t.state === 'ok' ? 'maybe' : (t.state === 'maybe' ? 'bad' : 'ok');
         tokens[idx] = { ...t, state: next } as any;
       }
-      const kpis = computeKpis(tokens, prev.minutes, prev.caretStates);
-      return { ...prev, tokens, kpis };
+      // Synchronize adjacent carets (idx and idx+1) to the word's new state
+      const nextStates = { ...prev.caretStates } as Record<number, 'ok'|'maybe'|'bad'>;
+      nextStates[idx] = next;
+      nextStates[idx + 1] = next;
+      const nextManual = new Set(prev.manualCaretOverrides);
+      nextManual.add(idx);
+      nextManual.add(idx + 1);
+      const kpis = computeKpis(tokens, prev.minutes, nextStates);
+      return { ...prev, tokens, caretStates: nextStates, manualCaretOverrides: nextManual, kpis };
     });
   };
 
@@ -1064,7 +1069,7 @@ export default function CBMApp(): JSX.Element {
             <ul className="text-sm list-disc ml-5 space-y-1">
               <li><strong>Dictionary packs</strong>: demo packs included; swap in real dictionaries or WASM spellcheckers for production.</li>
               <li><strong>Capitalization & terminals</strong>: heuristic checks flag definite/possible issues for quick review.</li>
-              <li><strong>Overrides</strong>: click words to toggle WSC; carets simply flag missing punctuation.</li>
+              <li><strong>Overrides</strong>: click words to toggle WSC; word clicks also synchronize the two adjacent carets to match the word. Click a caret to cycle that boundary independently.</li>
               <li><strong>Extensibility</strong>: uses GrammarBot for spell checking; add POS-based rules if desired.</li>
             </ul>
           </CardContent>
