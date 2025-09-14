@@ -402,6 +402,9 @@ export default function KioskPage() {
               setText(next);
             }}
             onPaste={(e) => { e.preventDefault(); }}
+            spellCheck={false}
+            autoCorrect="off"
+            autoCapitalize="off"
             disabled={false}
             placeholder={startTimeRef.current === null ? "Begin typing to start your timer…" : ""}
             className="min-h-[70vh] text-lg"
