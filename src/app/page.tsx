@@ -816,9 +816,10 @@ function WritingScorer() {
         {/* Discard area overlay on the right side */}
         <div
           className={cn(
-            'fixed left-4 top-1/2 -translate-y-1/2 z-30 w-40 h-40 rounded-xl border-2 border-dashed flex items-center justify-center transition-colors select-none',
+            'fixed top-1/2 -translate-y-1/2 z-30 h-[60vh] min-h-64 rounded-xl border-2 border-dashed flex items-center justify-center transition-colors select-none',
             overDiscard ? 'bg-rose-50 border-rose-400 text-rose-700 shadow-lg' : 'bg-slate-50/80 border-slate-300 text-slate-600'
           )}
+          style={{ left: 'var(--discard-x)', width: 'var(--discard-w)' }}
           onDragOver={(e) => { e.preventDefault(); (e.dataTransfer as DataTransfer).dropEffect = 'move'; setOverDiscard(true); }}
           onDragEnter={(e) => { e.preventDefault(); setOverDiscard(true); }}
           onDragLeave={() => { setOverDiscard(false); }}
@@ -1005,7 +1006,8 @@ function WritingScorer() {
 export default function CBMApp(): JSX.Element {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 p-4 md:p-8">
-      <div className="max-w-6xl mx-auto">
+      {/* Widen the main container on large/2xl screens while remaining fluid on small screens */}
+      <div className="mx-auto w-full max-w-screen-xl 2xl:max-w-screen-2xl with-discard-pad">
         <motion.h1 initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} className="text-2xl md:text-3xl font-bold">
           Written Expression (TWW, WSC, CWS) – with Flags
         </motion.h1>
