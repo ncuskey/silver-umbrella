@@ -328,7 +328,7 @@ interface DisplayToken extends Token {
 - `charOffsetToBoundaryIndex()`: Converts character offset to boundary index
 - `charOffsetToTokenIndex()`: Converts character offset to token index
 - `newlineBoundarySet()`: Detects paragraph boundaries from newline characters
-- `gbToVtInsertions()`: Converts GB edits to VT insertions, detecting sentence terminators in both INSERT PUNC and MODIFY replacements; includes end-of-text
+- `gbToVtInsertions()`: Converts GB edits to VT insertions, detecting sentence terminators in both INSERT PUNC and MODIFY replacements; includes end-of-text. Handles INSERT replacements that contain spaces (e.g., ". ") by extracting the first terminator.
 - `withParagraphFallbackDots()`: Adds fallback periods at paragraph boundaries (including final paragraph)
 - **Paragraph Detection**: Automatic recognition of carriage returns and line breaks
 - **Smart Fallback**: Adds periods where GB didn't suggest punctuation at paragraph ends
