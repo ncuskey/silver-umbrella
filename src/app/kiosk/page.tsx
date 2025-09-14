@@ -19,7 +19,14 @@ export default function KioskPage() {
   const [text, setText] = useState("");
   const [running, setRunning] = useState(false);
   const [remaining, setRemaining] = useState(0);
-  const [prohibitPaste, setProhibitPaste] = useState(false);
+  // Prompts
+  const [includePrompt, setIncludePrompt] = useState(false);
+  const [prompts, setPrompts] = useState<Array<{ id:string; title:string; content:string; created_at:string }>>([]);
+  const [promptsLoading, setPromptsLoading] = useState(false);
+  const [selectedPromptId, setSelectedPromptId] = useState<string>("");
+  const [promptText, setPromptText] = useState<string>("");
+  const [promptTitle, setPromptTitle] = useState<string>("");
+  const [promptSaveState, setPromptSaveState] = useState<"idle"|"saving"|"success"|"error">('idle');
   const [showTimer, setShowTimer] = useState(false);
   const [stage, setStage] = useState<"setup" | "writing" | "done">("setup");
   const [submitState, setSubmitState] = useState<"idle"|"submitting"|"success"|"error">('idle');
@@ -39,10 +46,10 @@ export default function KioskPage() {
   // Persist (simple localStorage)
   useEffect(() => {
     try {
-      const payload = JSON.stringify({ student, minutes, text, running, remaining, prohibitPaste, showTimer });
+      const payload = JSON.stringify({ student, minutes, text, running, remaining, showTimer, includePrompt, selectedPromptId, promptText });
       localStorage.setItem("kiosk.v1", payload);
     } catch {}
-  }, [student, minutes, text, running, remaining, prohibitPaste, showTimer]);
+  }, [student, minutes, text, running, remaining, showTimer, includePrompt, selectedPromptId, promptText]);
 
   useEffect(() => {
     try {
@@ -54,8 +61,10 @@ export default function KioskPage() {
           if (typeof saved.minutes === "number") setMinutes(saved.minutes);
           if (typeof saved.text === "string") setText(saved.text);
           if (typeof saved.remaining === "number") setRemaining(saved.remaining);
-          if (typeof saved.prohibitPaste === "boolean") setProhibitPaste(saved.prohibitPaste);
           if (typeof saved.showTimer === "boolean") setShowTimer(saved.showTimer);
+          if (typeof saved.includePrompt === "boolean") setIncludePrompt(saved.includePrompt);
+          if (typeof saved.selectedPromptId === "string") setSelectedPromptId(saved.selectedPromptId);
+          if (typeof saved.promptText === "string") setPromptText(saved.promptText);
         }
       } else {
         setRemaining(Math.max(1, Math.floor(minutes * 60)));
@@ -64,6 +73,24 @@ export default function KioskPage() {
       setRemaining(Math.max(1, Math.floor(minutes * 60)));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Load prompts list
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        setPromptsLoading(true);
+        const res = await fetch('/api/prompts');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!alive) return;
+        setPrompts(Array.isArray(data.items) ? data.items : []);
+      } finally {
+        setPromptsLoading(false);
+      }
+    })();
+    return () => { alive = false };
   }, []);
 
   // Keep remaining time in sync with duration if not started
@@ -109,6 +136,8 @@ export default function KioskPage() {
             text,
             durationSeconds: Math.max(1, Math.floor(minutes * 60)),
             startedAt: startTimeRef.current ? new Date(startTimeRef.current).toISOString() : null,
+            promptId: includePrompt && selectedPromptId ? selectedPromptId : null,
+            promptText: includePrompt && promptText ? promptText : null,
           }),
         });
         const data = await res.json();
@@ -231,12 +260,75 @@ export default function KioskPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2 text-sm">
-                <input id="paste" type="checkbox" checked={prohibitPaste} onChange={(e) => setProhibitPaste(e.target.checked)} />
-                <label htmlFor="paste">Prevent paste during writing</label>
-              </div>
-              <div className="flex items-center gap-2 text-sm">
                 <input id="timer" type="checkbox" checked={showTimer} onChange={(e) => setShowTimer(e.target.checked)} />
                 <label htmlFor="timer">Show timer in writing view</label>
+              </div>
+              <div className="pt-2 space-y-2">
+                <div className="flex items-center gap-2 text-sm">
+                  <input id="use-prompt" type="checkbox" checked={includePrompt} onChange={(e) => setIncludePrompt(e.target.checked)} />
+                  <label htmlFor="use-prompt">Include a writing prompt</label>
+                </div>
+                {includePrompt && (
+                  <div className="space-y-2">
+                    <div className="space-y-1">
+                      <label className="text-sm text-slate-700">Saved prompts</label>
+                      <select
+                        className="h-9 w-full rounded border px-2 text-sm"
+                        value={selectedPromptId}
+                        onChange={(e) => {
+                          const id = e.target.value;
+                          setSelectedPromptId(id);
+                          const found = prompts.find(p => p.id === id);
+                          if (found) setPromptText(found.content);
+                        }}
+                      >
+                        <option value="">{promptsLoading ? 'Loading…' : 'Select (optional)'}</option>
+                        {prompts.map(p => (
+                          <option key={p.id} value={p.id}>{p.title}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-sm text-slate-700">Prompt text</label>
+                      <Textarea value={promptText} onChange={(e) => setPromptText(e.target.value)} placeholder="Enter a custom prompt or select one above" className="min-h-[80px]" />
+                    </div>
+                    <div className="flex items-end gap-2">
+                      <div className="flex-1 space-y-1">
+                        <label className="text-sm text-slate-700">Prompt title (for saving)</label>
+                        <Input value={promptTitle} onChange={(e) => setPromptTitle(e.target.value)} placeholder="e.g., Narrative: A day at the park" />
+                      </div>
+                      <Button
+                        onClick={async () => {
+                          if (!promptTitle.trim() || !promptText.trim()) return;
+                          try {
+                            setPromptSaveState('saving');
+                            const res = await fetch('/api/prompts', {
+                              method: 'POST', headers: { 'content-type': 'application/json' },
+                              body: JSON.stringify({ title: promptTitle.trim(), content: promptText.trim() })
+                            });
+                            const data = await res.json();
+                            if (!res.ok) throw new Error(data?.error || 'save failed');
+                            const newId = data.id as string;
+                            // refresh list
+                            const listRes = await fetch('/api/prompts');
+                            const listData = await listRes.json();
+                            setPrompts(Array.isArray(listData.items) ? listData.items : []);
+                            setSelectedPromptId(newId);
+                            setPromptSaveState('success');
+                          } catch (e) {
+                            console.error(e);
+                            setPromptSaveState('error');
+                          } finally {
+                            setTimeout(() => setPromptSaveState('idle'), 1500);
+                          }
+                        }}
+                        className="min-w-[7rem]"
+                      >
+                        {promptSaveState === 'saving' ? 'Saving…' : promptSaveState === 'success' ? 'Saved' : 'Save'}
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="pt-2">
                 <Button
@@ -278,6 +370,12 @@ export default function KioskPage() {
           </div>
         )}
         <div className="mx-auto w-full max-w-screen-lg">
+          {includePrompt && promptText && (
+            <div className="mb-4 p-3 rounded-md bg-slate-50 border border-slate-200 text-slate-800">
+              <div className="text-sm font-medium mb-1">Prompt</div>
+              <div className="whitespace-pre-wrap text-sm">{promptText}</div>
+            </div>
+          )}
           <Textarea
             ref={textareaRef}
             value={text}
@@ -288,7 +386,7 @@ export default function KioskPage() {
               }
               setText(next);
             }}
-            onPaste={(e) => { if (running && prohibitPaste) e.preventDefault(); }}
+            onPaste={(e) => { e.preventDefault(); }}
             disabled={false}
             placeholder={startTimeRef.current === null ? "Begin typing to start your timer…" : ""}
             className="min-h-[70vh] text-lg"

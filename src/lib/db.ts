@@ -24,5 +24,16 @@ export async function ensureSchema() {
       submitted_at timestamptz default now()
     );
   `
+  // prompts table
+  await sql`
+    create table if not exists prompts (
+      id text primary key,
+      title text not null,
+      content text not null,
+      created_at timestamptz default now()
+    );
+  `
+  // add optional prompt linkage on submissions
+  await sql`alter table submissions add column if not exists prompt_id text;`
+  await sql`alter table submissions add column if not exists prompt_text text;`
 }
-
