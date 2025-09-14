@@ -59,3 +59,12 @@ This project aims to follow Keep a Changelog and Semantic Versioning.
 
 ### Changed
 - Navigation bar added across pages; includes Scoring and Kiosk.
+
+### OCR & Imports
+- Added: “Load Scan (PDF/PNG/JPG)” button on the scoring page to import scanned student work.
+- Added: Google Cloud Vision OCR backend at `POST /api/ocr`.
+  - Accepts `{ imageBase64?, imageUri?, lang? }` JSON; returns `{ text, raw }`.
+- Added: Server-side preprocessing with Sharp for OCR (autorotate, grayscale, normalize, median denoise, slight sharpen, threshold, trim/pad; light upsample for tiny scans).
+- Added: PDF support — PDFs render client-side page-by-page to images, each page OCR’d then concatenated.
+- Infra: Serve PDF.js worker and modules from same origin to avoid module/CORS issues (`/pdfjs/*`).
+- Docs: README updated with Google Vision env setup and OCR usage.

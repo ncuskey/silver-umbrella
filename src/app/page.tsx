@@ -344,6 +344,10 @@ function WritingScorer() {
   );
   const [loadedMeta, setLoadedMeta] = useState<{ id: string; student?: string|null; submitted_at?: string|null; duration_seconds?: number|null } | null>(null);
   const loadedOnceRef = useRef(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [ocrBusy, setOcrBusy] = useState(false);
+  const [ocrStatus, setOcrStatus] = useState<string>("");
+  const [ocrError, setOcrError] = useState<string>("");
 
   // Load recent submissions for dropdown
   useEffect(() => {
@@ -361,6 +365,102 @@ function WritingScorer() {
       }
     })();
     return () => { alive = false };
+  }, []);
+
+  // ———————————— OCR Helpers (Images + PDF) ————————————
+  function fileToBase64(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.onload = () => resolve(String(reader.result));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function ocrImage(file: File): Promise<string> {
+    setOcrStatus('Preparing image…');
+    const dataUrl = await fileToBase64(file);
+    setOcrStatus('Uploading image…');
+    const res = await fetch('/api/ocr', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageBase64: dataUrl, lang: 'en' })
+    });
+    if (!res.ok) throw new Error(`OCR failed (${res.status})`);
+    const json = await res.json();
+    return (json?.text ?? '').trim();
+  }
+
+  async function renderPdfToCanvases(file: File): Promise<HTMLCanvasElement[]> {
+    const pdfjsLib: any = await import('pdfjs-dist/build/pdf');
+    // Serve worker and its relative imports from same-origin route to avoid CORS/module issues
+    if (pdfjsLib?.GlobalWorkerOptions) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdfjs/pdf.worker.min.mjs';
+    }
+    const data = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data }).promise;
+    const canvases: HTMLCanvasElement[] = [];
+    const scale = 2.0;
+    for (let p = 1; p <= pdf.numPages; p++) {
+      setOcrStatus(`Rendering page ${p}/${pdf.numPages}…`);
+      const page = await pdf.getPage(p);
+      const viewport = page.getViewport({ scale });
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) continue;
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      canvases.push(canvas);
+    }
+    return canvases;
+  }
+
+  function canvasToDataURL(canvas: HTMLCanvasElement): string {
+    return canvas.toDataURL('image/png');
+  }
+
+  async function ocrPdf(file: File): Promise<string> {
+    const canvases = await renderPdfToCanvases(file);
+    const texts: string[] = [];
+    for (let i = 0; i < canvases.length; i++) {
+      setOcrStatus(`Uploading page ${i + 1}/${canvases.length}…`);
+      const dataUrl = canvasToDataURL(canvases[i]);
+      const res = await fetch('/api/ocr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64: dataUrl, lang: 'en' })
+      });
+      if (!res.ok) throw new Error(`OCR failed on page ${i + 1} (${res.status})`);
+      const json = await res.json();
+      texts.push((json?.text ?? '').trim());
+    }
+    return texts.filter(Boolean).join('\n\n');
+  }
+
+  const onSelectFileClick = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const onFilePicked = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    // Reset the input so the same file can be reselected later
+    e.target.value = '';
+    if (!f) return;
+    setOcrBusy(true);
+    setOcrError('');
+    setOcrStatus('Preparing…');
+    try {
+      const isPdf = /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name);
+      const text = isPdf ? await ocrPdf(f) : await ocrImage(f);
+      setText(text);
+      setOcrStatus('Done');
+    } catch (err: any) {
+      setOcrError(err?.message || String(err));
+    } finally {
+      setOcrBusy(false);
+      setTimeout(() => setOcrStatus(''), 1500);
+    }
   }, []);
 
   async function loadSubmission(id: string) {
@@ -1006,10 +1106,42 @@ function WritingScorer() {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           {/* LEFT: Textbox + controls + legend + stream */}
           <div className="space-y-3">
-            {/* Student writing textarea */}
+            {/* Student writing textarea + Load Scan button */}
             <div>
-              <label className="text-sm font-medium">Paste student writing</label>
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium">Paste student writing</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,image/png,image/jpeg,image/jpg,image/webp,image/bmp,image/tiff,image/gif"
+                    className="hidden"
+                    onChange={onFilePicked}
+                  />
+                  <button
+                    type="button"
+                    onClick={onSelectFileClick}
+                    className="px-3 py-1.5 text-sm rounded-md bg-slate-800 text-white hover:bg-slate-700"
+                    title="Load a scan (PDF/PNG/JPG) and OCR it"
+                  >
+                    Load Scan (PDF/PNG/JPG)
+                  </button>
+                </div>
+              </div>
               <Textarea className="min-h-[160px] mt-1" value={text} onChange={(e) => setText(e.target.value)} />
+              {(ocrBusy || ocrError || ocrStatus) && (
+                <div className="mt-2 text-xs">
+                  {ocrBusy && (
+                    <span className="inline-block mr-2 px-2 py-0.5 rounded bg-slate-100 text-slate-700 border">OCR…</span>
+                  )}
+                  {ocrStatus && (
+                    <span className="text-slate-600">{ocrStatus}</span>
+                  )}
+                  {ocrError && (
+                    <span className="ml-2 text-red-600">{ocrError}</span>
+                  )}
+                </div>
+              )}
             </div>
 
             {gbError && (

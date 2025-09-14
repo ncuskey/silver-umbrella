@@ -36,6 +36,12 @@ A TypeScript React web application for Curriculum‑Based Measurement (CBM) writ
 - **WSC (Words Spelled Correctly)**: Uses GrammarBot API for professional spell checking
 - **CWS (Correct Writing Sequences)**: Mechanical, CBM-aligned scoring of adjacent unit pairs with visual caret indicators
 
+### OCR Input (Google Vision)
+- **Load Scan button**: On the scoring page, click “Load Scan (PDF/PNG/JPG)” to import scanned work.
+- **PDF support**: Multi‑page PDFs render client‑side and are OCR’d page‑by‑page.
+- **Preprocessing**: Server trims and enhances images (autorotate, grayscale, normalize, denoise, slight sharpen, threshold, crop/pad) for better OCR accuracy.
+- **Backend**: Google Cloud Vision `documentTextDetection` via `/api/ocr`.
+
 <!-- Spelling assessment (CLS) removed; app now focuses on Written Expression only -->
 
 ### Navigation & Pages
@@ -172,6 +178,20 @@ Local development
 
 4. Open [http://localhost:3000](http://localhost:3000) in your browser
 
+### Optional: Google Vision OCR Setup
+
+Add these to `.env.local` to enable the “Load Scan (PDF/PNG/JPG)” OCR button:
+
+```
+# Google Cloud Vision (server-only)
+GCP_PROJECT_ID=autocbm
+GCP_CLIENT_EMAIL=autocbm@autocbm.iam.gserviceaccount.com
+# IMPORTANT: keep \n escapes; do not paste raw newlines
+GCP_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...your key...\n-----END PRIVATE KEY-----\n"
+```
+
+Then restart the dev server. The UI uploads images/PDF pages to `/api/ocr`, which preprocesses with Sharp and calls Google Vision.
+
 ## Development Scripts
 
 - `npm run dev` - Start development server
@@ -182,6 +202,10 @@ Local development
 - `npm run test:run` - Run tests in command line mode
 - `npm run size:report` - Analyze dependency sizes (shows top 30 largest packages)
 - `npm run analyze` - Generate bundle analysis reports (requires ANALYZE=1)
+
+### Relevant API Routes
+- `POST /api/ocr` — Google Vision OCR. Body (JSON): `{ imageBase64?: string, imageUri?: string, lang?: string }`. Returns `{ text, raw }`.
+- `GET /api/submissions`, `POST /api/submissions`, `GET /api/submissions/:id` — Manage writing samples.
 
 ## Usage
 1. Paste student writing in the text area
