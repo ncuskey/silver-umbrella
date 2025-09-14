@@ -7,14 +7,19 @@ A TypeScript React web application for Curriculum‑Based Measurement (CBM) writ
  A focused, student-facing timed writing interface is available at `/kiosk`.
 
  - Clean two-step flow: setup, then writing only
-   - Step 1 (Setup): Enter optional student name and select duration (minutes), choose options, then press Continue.
-   - Step 2 (Writing): Only the text field is shown. The timer starts automatically on the first character typed. No word or character counters, and no stop‑early control to avoid distractions.
+   - Step 1 (Setup): Enter optional student name, select duration (minutes), choose options (show timer, optional prompt), then Continue.
+   - Step 2 (Writing): Only the text field is shown. The timer starts automatically on the first character typed. No word/character counters, and no stop‑early control to avoid distractions.
  - Session end: When time elapses, the page beeps and switches to a completion view where the text can be copied or downloaded as `.txt`, or a new session can be started.
+ - Submission badge: A green “Submitted” indicator appears after a successful database save.
  - Navigation: The top nav is hidden during the writing step to keep the student focused.
 
  Options on setup
- - Prevent paste during writing: Blocks paste events while the timer is running.
  - Show timer in writing view: Displays a subtle countdown in the top‑right during writing.
+ - Include a writing prompt: Select a saved prompt from the dropdown or enter a custom prompt. Custom prompts can be saved for future use.
+
+ Writing view specifics
+ - Paste is always blocked (to preserve the integrity of the timed writing sample).
+ - Browser spellcheck and auto-correct are disabled.
 
 ## Breaking Changes (v9.0)
 
@@ -37,6 +42,7 @@ A TypeScript React web application for Curriculum‑Based Measurement (CBM) writ
 - Top navigation includes:
   - `Scoring` — Main written expression scoring tool (home page)
   - `Kiosk` — Student-facing timed writing interface
+  - Scoring page has a “Load submission” dropdown of recent student names and dates from the database; choosing one loads the text and uses the stored duration for CWS/min. A banner shows the loaded id, student, date, and duration.
 
 ### Data Persistence (Neon on Netlify)
 - Environment: Set one of these in Netlify env vars:
@@ -45,10 +51,15 @@ A TypeScript React web application for Curriculum‑Based Measurement (CBM) writ
   - or `DATABASE_URL`
   - Optionally `NETLIFY_DATABASE_URL_UNPOOLED` is also recognized
 - API endpoints:
-  - `POST /api/submissions` — Save a submission. Body: `{ student?: string, text: string, durationSeconds?: number, startedAt?: string }`. Returns `{ id }`.
+  - `POST /api/submissions` — Save a submission. Body: `{ student?: string, text: string, durationSeconds?: number, startedAt?: string, promptId?: string|null, promptText?: string|null }`. Returns `{ id }`.
   - `GET /api/submissions` — List recent submissions.
   - `GET /api/submissions/:id` — Get a specific submission including full `content`.
-- Schema: Created on first use as table `submissions (id text primary key, student_name text, content text, duration_seconds int, started_at timestamptz, submitted_at timestamptz default now())`.
+  - `GET /api/prompts` — List saved prompts (id, title, content, created_at).
+  - `POST /api/prompts` — Create a new prompt. Body: `{ title: string, content: string }`. Returns `{ id }`.
+  - `GET /api/prompts/:id` — Get a specific prompt.
+- Schema: Created on first use:
+  - `submissions (id text primary key, student_name text, content text not null, duration_seconds int, started_at timestamptz, submitted_at timestamptz default now(), prompt_id text, prompt_text text)`
+  - `prompts (id text primary key, title text not null, content text not null, created_at timestamptz default now())`
 - Kiosk auto‑saves when time expires and shows an “Open in Scoring” shortcut.
 
 Local development

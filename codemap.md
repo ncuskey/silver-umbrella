@@ -12,6 +12,25 @@ This application is a TypeScript React web app for Curriculum‑Based Measuremen
   - Timer starts on first character typed; no word/character counters; no early stop.
   - On completion, provides Copy and Download actions and a “New Session” reset.
 - Nav hiding: `src/components/SiteNav.tsx` reads `document.body.dataset.kioskMode` and hides during `writing`. Kiosk page sets and clears this flag and dispatches a `kioskmodechange` event.
+ - Options: show timer overlay; include a prompt. Prompts can be selected from the database or entered inline and saved.
+ - Writing view: paste is blocked; browser spellcheck/autocorrect disabled; shows a green “Submitted” badge after successful DB save.
+
+### Persistence: Submissions & Prompts
+- DB helper: `src/lib/db.ts` selects a connection string from `NETLIFY_DATABASE_URL`, `NEON_DATABASE_URL`, `DATABASE_URL`, or `NETLIFY_DATABASE_URL_UNPOOLED`. `ensureSchema()` creates tables on first use.
+- Tables:
+  - `submissions`: id, student_name, content, duration_seconds, started_at, submitted_at, prompt_id, prompt_text
+  - `prompts`: id, title, content, created_at
+- API routes (Node runtime, dynamic):
+  - `src/app/api/submissions/route.ts` (GET list, POST create)
+  - `src/app/api/submissions/[id]/route.ts` (GET one)
+  - `src/app/api/prompts/route.ts` (GET list, POST create)
+  - `src/app/api/prompts/[id]/route.ts` (GET one)
+
+### Scoring Page Integration
+- File: `src/app/page.tsx`
+- Loads recent submissions for a dropdown; selecting one fetches the text and sets `ui.minutes` from `duration_seconds`.
+- Also honors `?submission=ID` in the URL to autoload a submission.
+- A banner displays id, student, submitted_at, and duration.
 
 ## Breaking Changes (v9.0)
 
