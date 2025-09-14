@@ -1,17 +1,19 @@
 import { NextRequest } from 'next/server'
 import { ensureSchema, getSql, isDbConfigured } from '@/lib/db'
 
+type SubmissionListRow = { id: string; student_name: string|null; submitted_at: string|null; duration_seconds: number|null }
+
 export async function GET() {
   try {
     if (!isDbConfigured()) return new Response(JSON.stringify({ error: 'db_unconfigured' }), { status: 503 })
     await ensureSchema()
     const sql = getSql()
-    const rows = await sql<{ id: string, student_name: string|null, submitted_at: string|null, duration_seconds: number|null }[]>`
+    const rows = await (sql as any)`
       select id, student_name, submitted_at, duration_seconds
       from submissions
       order by submitted_at desc
       limit 50
-    `
+    ` as SubmissionListRow[]
     return new Response(JSON.stringify({ items: rows }), { status: 200, headers: { 'content-type': 'application/json' } })
   } catch (e: any) {
     return new Response(JSON.stringify({ error: e?.message || 'error' }), { status: 500 })
