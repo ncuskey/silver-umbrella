@@ -1,8 +1,9 @@
 import { NextRequest } from 'next/server'
-import { ensureSchema, getSql } from '@/lib/db'
+import { ensureSchema, getSql, isDbConfigured } from '@/lib/db'
 
 export async function GET() {
   try {
+    if (!isDbConfigured()) return new Response(JSON.stringify({ error: 'db_unconfigured' }), { status: 503 })
     await ensureSchema()
     const sql = getSql()
     const rows = await sql<{ id: string, student_name: string|null, submitted_at: string|null, duration_seconds: number|null }[]>`
@@ -19,6 +20,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    if (!isDbConfigured()) return new Response(JSON.stringify({ error: 'db_unconfigured' }), { status: 503 })
     await ensureSchema()
     const body = await req.json()
     const id = body?.id || (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`)
