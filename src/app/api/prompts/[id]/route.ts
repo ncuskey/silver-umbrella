@@ -1,10 +1,10 @@
 import { ensureSchema, getSql } from '@/lib/db'
 
-export async function GET(_req: Request, ctx: { params: { id: string } }) {
+export async function GET(_req: Request, { params }: any) {
   try {
     await ensureSchema()
     const sql = getSql()
-    const id = ctx.params.id
+    const id = params?.id
     const rows = await sql<{ id: string, title: string, content: string, created_at: string }[]>`
       select id, title, content, created_at from prompts where id = ${id} limit 1
     `
@@ -16,4 +16,3 @@ export async function GET(_req: Request, ctx: { params: { id: string } }) {
 }
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-export const config = { runtime: 'nodejs' } as const

@@ -1,11 +1,11 @@
 import { ensureSchema, getSql, isDbConfigured } from '@/lib/db'
 
-export async function GET(_req: Request, ctx: { params: { id: string } }) {
+export async function GET(_req: Request, { params }: any) {
   try {
     if (!isDbConfigured()) return new Response(JSON.stringify({ error: 'db_unconfigured' }), { status: 503 })
     await ensureSchema()
     const sql = getSql()
-    const id = ctx.params.id
+    const id = params?.id
     const rows = await sql<{ id: string, student_name: string|null, content: string, submitted_at: string|null, duration_seconds: number|null, started_at: string|null }[]>`
       select id, student_name, content, submitted_at, duration_seconds, started_at
       from submissions
@@ -20,4 +20,3 @@ export async function GET(_req: Request, ctx: { params: { id: string } }) {
 }
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-export const config = { runtime: 'nodejs' } as const
