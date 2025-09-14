@@ -342,8 +342,48 @@ function WritingScorer() {
   const [text, setText] = useState<string>(
     "yesterday me and my freind go to the park we was runned fast but the dog chased us and it dont stop we yell nobody hear us the grass are green the skye blue we decide climb the tree but the branch breaked my shoes was muddy my shirt have hole’s. I think i gonna climb again but then and then and then we fall.\n\nLater the teacher sayed you should of stay home insted of playing in rain. “be careful kids” she tell us and we dont listen we was to busy running their in the feild I thinked maybe we is lost. My friend smile and say its okay we gonna find are way home eventually at 5 pm but i writed 5:00 instead. I also got 1nd place in the race, lol, but my sister-inlaw laughed."
   );
-  const [loadedMeta, setLoadedMeta] = useState<{ id: string; student?: string|null; submitted_at?: string|null } | null>(null);
+  const [loadedMeta, setLoadedMeta] = useState<{ id: string; student?: string|null; submitted_at?: string|null; duration_seconds?: number|null } | null>(null);
   const loadedOnceRef = useRef(false);
+
+  // Load recent submissions for dropdown
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        setSubsLoading(true);
+        const res = await fetch('/api/submissions');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!alive) return;
+        setSubmissions(Array.isArray(data.items) ? data.items : []);
+      } finally {
+        setSubsLoading(false);
+      }
+    })();
+    return () => { alive = false };
+  }, []);
+
+  async function loadSubmission(id: string) {
+    try {
+      const res = await fetch(`/api/submissions/${encodeURIComponent(id)}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data?.content) {
+        setText(data.content);
+        const durSec = typeof data.duration_seconds === 'number' ? data.duration_seconds : null;
+        setLoadedMeta({ id, student: data.student_name ?? null, submitted_at: data.submitted_at ?? null, duration_seconds: durSec });
+        setSelectedSubmissionId(id);
+        setUi(prev => {
+          const minutes = durSec ? durSec / 60 : 0;
+          return {
+            ...prev,
+            minutes,
+            kpis: computeKpis(prev.tokens, minutes, prev.caretStates)
+          };
+        });
+      }
+    } catch {}
+  }
 
   // If a submission ID is present in the URL, load it and replace text
   useEffect(() => {
@@ -353,17 +393,7 @@ function WritingScorer() {
     const id = params.get('submission');
     if (!id) return;
     loadedOnceRef.current = true;
-    (async () => {
-      try {
-        const res = await fetch(`/api/submissions/${encodeURIComponent(id)}`);
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data?.content) {
-          setText(data.content);
-          setLoadedMeta({ id, student: data.student_name ?? null, submitted_at: data.submitted_at ?? null });
-        }
-      } catch {}
-    })();
+    loadSubmission(id);
   }, []);
   const [overrides, setOverrides] = useState<Record<string | number, WordOverride | PairOverride>>({});
   const [pairOverrides, setPairOverrides] = useState<PairOverrides>({});
@@ -636,27 +666,21 @@ function WritingScorer() {
 
   // Simple grammar mode label
   const grammarModeLabel = "GB-only";
-
-  // --- Time for probe (mm:ss) ---
-  const [timeMMSS, setTimeMMSS] = useState("03:00"); // default 3 min
-  function parseMMSS(s: string) {
-    const m = s.trim().match(/^(\d{1,2}):([0-5]\d)$/);
-    if (!m) return 0;
-    const mins = parseInt(m[1], 10), secs = parseInt(m[2], 10);
-    return mins * 60 + secs;
-  }
-  const durationSec = useMemo(() => parseMMSS(timeMMSS), [timeMMSS]);
-  const durationMin = durationSec ? durationSec / 60 : 0;
+  
+  // Submissions (load and select)
+  const [submissions, setSubmissions] = useState<Array<{ id: string; student_name: string|null; submitted_at: string|null; duration_seconds: number|null }>>([]);
+  const [subsLoading, setSubsLoading] = useState(false);
+  const [selectedSubmissionId, setSelectedSubmissionId] = useState<string>("");
 
   // Single UI state object with KPIs
   // caretBad is derived from VT insertions; initialize empty set
   const [ui, setUi] = useState({
     tokens: tokenModels,
-    minutes: durationMin,
+    minutes: 0,
     caretStates: {} as Record<number, 'ok'|'maybe'|'bad'>,
     manualCaretOverrides: new Set<number>() as Set<number>,
     removedCarets: new Set<number>() as Set<number>,
-    kpis: computeKpis(tokenModels, durationMin, {})
+    kpis: computeKpis(tokenModels, 0, {})
   });
 
   // Update UI state when tokenModels or terminalGroups change
@@ -664,10 +688,9 @@ function WritingScorer() {
     setUi(prev => ({
       ...prev,
       tokens: tokenModels,
-      minutes: durationMin,
-      kpis: computeKpis(tokenModels, durationMin, prev.caretStates)
+      kpis: computeKpis(tokenModels, prev.minutes, prev.caretStates)
     }));
-  }, [tokenModels, durationMin]);
+  }, [tokenModels]);
 
 // Complex functions removed - using LT-only approach
 
@@ -923,9 +946,10 @@ function WritingScorer() {
       <CardContent>
         {loadedMeta && (
           <div className="mb-4 p-2 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm">
-            Loaded saved submission {loadedMeta.id}
-            {loadedMeta.student ? ` for ${loadedMeta.student}` : ''}
+            Loaded submission {loadedMeta.id}
+            {loadedMeta.student ? ` · ${loadedMeta.student}` : ''}
             {loadedMeta.submitted_at ? ` · ${new Date(loadedMeta.submitted_at).toLocaleString()}` : ''}
+            {typeof loadedMeta.duration_seconds === 'number' ? ` · ${String(Math.floor((loadedMeta.duration_seconds||0)/60)).padStart(2,'0')}:${String((loadedMeta.duration_seconds||0)%60).padStart(2,'0')}` : ''}
           </div>
         )}
         {/* Discard area overlay on the right side */}
@@ -994,17 +1018,26 @@ function WritingScorer() {
               </div>
             )}
 
-            {/* Single-line controls: time + color key */}
+            {/* Single-line controls: load submission + color key */}
             <div className="mt-2 flex flex-wrap items-center gap-4 text-xs">
               <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Time (mm:ss)</span>
-                <input
-                  value={timeMMSS}
-                  onChange={(e) => setTimeMMSS(e.target.value)}
-                  className="h-8 w-20 rounded border px-2 text-sm"
-                  placeholder="mm:ss"
-                  aria-label="Probe time in minutes and seconds"
-                />
+                <span className="text-xs text-muted-foreground">Load submission</span>
+                <select
+                  className="h-8 min-w-[12rem] rounded border px-2 text-sm"
+                  value={selectedSubmissionId}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    if (!id) return;
+                    loadSubmission(id);
+                  }}
+                >
+                  <option value="" disabled>{subsLoading ? 'Loading…' : 'Select…'}</option>
+                  {submissions.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {(s.student_name || 'Unnamed')} · {s.submitted_at ? new Date(s.submitted_at).toLocaleString() : '—'}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="flex items-center gap-3">
                 <span className="inline-flex items-center gap-1">
@@ -1080,7 +1113,7 @@ function WritingScorer() {
               <StatCard
                 title="CWS / min"
                 value={kpis.cwsPerMin === null ? "—" : (Math.round(kpis.cwsPerMin * 10) / 10).toFixed(1)}
-                sub={durationSec ? `${timeMMSS} timed` : "enter time"}
+                sub={ui.minutes ? `${String(Math.floor(ui.minutes)).padStart(2,'0')}:${String(Math.round((ui.minutes*60)%60)).padStart(2,'0')} timed` : "no duration"}
               />
             </div>
 
