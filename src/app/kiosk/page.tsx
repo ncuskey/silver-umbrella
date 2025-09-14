@@ -19,6 +19,7 @@ export default function KioskPage() {
   const [running, setRunning] = useState(false);
   const [remaining, setRemaining] = useState(0);
   const [prohibitPaste, setProhibitPaste] = useState(false);
+  const [showTimer, setShowTimer] = useState(false);
   const [stage, setStage] = useState<"setup" | "writing" | "done">("setup");
   const [submitState, setSubmitState] = useState<"idle"|"submitting"|"success"|"error">('idle');
   const [submissionId, setSubmissionId] = useState<string | null>(null);
@@ -37,10 +38,10 @@ export default function KioskPage() {
   // Persist (simple localStorage)
   useEffect(() => {
     try {
-      const payload = JSON.stringify({ student, minutes, text, running, remaining, prohibitPaste });
+      const payload = JSON.stringify({ student, minutes, text, running, remaining, prohibitPaste, showTimer });
       localStorage.setItem("kiosk.v1", payload);
     } catch {}
-  }, [student, minutes, text, running, remaining, prohibitPaste]);
+  }, [student, minutes, text, running, remaining, prohibitPaste, showTimer]);
 
   useEffect(() => {
     try {
@@ -53,6 +54,7 @@ export default function KioskPage() {
           if (typeof saved.text === "string") setText(saved.text);
           if (typeof saved.remaining === "number") setRemaining(saved.remaining);
           if (typeof saved.prohibitPaste === "boolean") setProhibitPaste(saved.prohibitPaste);
+          if (typeof saved.showTimer === "boolean") setShowTimer(saved.showTimer);
         }
       } else {
         setRemaining(Math.max(1, Math.floor(minutes * 60)));
@@ -227,6 +229,14 @@ export default function KioskPage() {
                   </div>
                 </div>
               </div>
+              <div className="flex items-center gap-2 text-sm">
+                <input id="paste" type="checkbox" checked={prohibitPaste} onChange={(e) => setProhibitPaste(e.target.checked)} />
+                <label htmlFor="paste">Prevent paste during writing</label>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <input id="timer" type="checkbox" checked={showTimer} onChange={(e) => setShowTimer(e.target.checked)} />
+                <label htmlFor="timer">Show timer in writing view</label>
+              </div>
               <div className="pt-2">
                 <Button
                   className="w-full bg-emerald-600 hover:bg-emerald-700"
@@ -255,6 +265,11 @@ export default function KioskPage() {
   if (stage === 'writing') {
     return (
       <div className="min-h-screen bg-white p-4 md:p-8">
+        {showTimer && (
+          <div className="fixed top-3 right-3 z-40 rounded-md bg-black/70 text-white px-2 py-1 font-mono text-sm tabular-nums select-none">
+            {startTimeRef.current === null ? formatMMSS(Math.max(1, Math.floor(minutes * 60))) : formatMMSS(remaining)}
+          </div>
+        )}
         <div className="mx-auto w-full max-w-screen-lg">
           <Textarea
             ref={textareaRef}

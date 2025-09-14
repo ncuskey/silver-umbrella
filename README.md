@@ -4,13 +4,17 @@ A TypeScript React web application for Curriculum‑Based Measurement (CBM) writ
 
 ## Kiosk — Timed Writing
 
-A focused, student-facing timed writing interface is available at `/kiosk`.
+ A focused, student-facing timed writing interface is available at `/kiosk`.
 
-- Clean two-step flow: setup, then writing only
-  - Step 1 (Setup): Enter optional student name and select duration (minutes), then press Continue.
-  - Step 2 (Writing): Only the text field is shown. The timer starts automatically on the first character typed. No word or character counters, and no stop‑early control to avoid distractions.
-- Session end: When time elapses, the page beeps and switches to a completion view where the text can be copied or downloaded as `.txt`, or a new session can be started.
-- Navigation: The top nav is hidden during the writing step to keep the student focused.
+ - Clean two-step flow: setup, then writing only
+   - Step 1 (Setup): Enter optional student name and select duration (minutes), choose options, then press Continue.
+   - Step 2 (Writing): Only the text field is shown. The timer starts automatically on the first character typed. No word or character counters, and no stop‑early control to avoid distractions.
+ - Session end: When time elapses, the page beeps and switches to a completion view where the text can be copied or downloaded as `.txt`, or a new session can be started.
+ - Navigation: The top nav is hidden during the writing step to keep the student focused.
+
+ Options on setup
+ - Prevent paste during writing: Blocks paste events while the timer is running.
+ - Show timer in writing view: Displays a subtle countdown in the top‑right during writing.
 
 ## Breaking Changes (v9.0)
 
