@@ -73,7 +73,17 @@ const STATUS_CLS: Record<'ok'|'maybe'|'bad', string> = {
 function bubbleCls(status: 'ok'|'maybe'|'bad', selected: boolean) {
   return [
     'inline-flex items-center rounded-xl px-2 py-0.5 leading-6',
-    'ring-1 ring-offset-1 ring-offset-white',  // or ring-offset-background
+    'ring-1 ring-offset-1 ring-offset-white',
+    STATUS_CLS[status],
+    selected ? 'ring-2' : ''
+  ].join(' ');
+}
+
+// Caret pill styling: smaller padding and no ring offset to avoid overlapping the first character
+function caretCls(status: 'ok'|'maybe'|'bad', selected: boolean) {
+  return [
+    'inline-flex items-center rounded-xl px-1.5 py-0.5 leading-6',
+    'ring-1',
     STATUS_CLS[status],
     selected ? 'ring-2' : ''
   ].join(' ');
@@ -746,7 +756,7 @@ function WritingScorer() {
     if (c.kind === "caret") {
       const state = ui.caretStates[c.bi] ?? (c.ui === 'incorrect' ? 'bad' : c.ui === 'possible' ? 'maybe' : 'ok');
       const selected = focus?.type === 'caret' && focus.index === c.bi;
-      return bubbleCls(state, selected);
+      return caretCls(state, selected);
     }
     return "";
   }
@@ -817,7 +827,13 @@ function WritingScorer() {
           e.dataTransfer.effectAllowed = 'move';
         } : undefined}
         onDragEnd={draggable ? () => { setDraggingToken(null); setDraggingCaret(null); setOverDiscard(false); } : undefined}
-        className={clsForCell(c) + ' tt cursor-pointer relative group'}
+        className={
+          clsForCell(c) +
+          ' tt cursor-pointer relative group ' +
+          (c.kind === 'token'
+            ? 'word-pill hover:z-50 focus:z-50'
+            : 'caret-pill')
+        }
         data-tip={
           c.kind === 'token' ? (tooltipForToken((c as any).ti) || undefined)
           : tipForCaret((c as any).bi)
@@ -830,7 +846,20 @@ function WritingScorer() {
         onMouseEnter={c.kind === 'token' ? () => { ensureCropForToken((c as any).ti); } : undefined}
       >
         {/* token text or caret glyph */}
-        {c.kind==="caret" ? "^" : displayTokens[c.ti].overlay ?? displayTokens[c.ti].raw}
+        {c.kind === 'caret'
+          ? '^'
+          : (() => {
+              const t: any = displayTokens[c.ti];
+              // Use original source text slice for maximum fidelity,
+              // falling back to token.raw when offsets are missing.
+              const fromSource =
+                typeof t.start === 'number' && typeof t.end === 'number'
+                  ? text.slice(t.start, t.end)
+                  : t.raw;
+              const txt = t.overlay ?? fromSource ?? '';
+              return txt;
+            })()
+        }
         {c.kind === 'token' && tokenCrops[(c as any).ti] ? (
           <span className="pointer-events-none absolute left-0 top-[110%] z-50 hidden group-hover:block">
             <span className="inline-block rounded-md border border-slate-200 bg-white shadow-md p-1 max-w-[260px]">
@@ -1068,31 +1097,43 @@ function WritingScorer() {
   const gridCells: UICell[] = useMemo(() => {
     const cells: UICell[] = [];
     const N = displayTokens.length;
-    // caret severity from state: map ok/maybe/bad to correct/possible/incorrect for UI
 
-    for (let b = 0; b <= N; b++) {
-      // 1) caret at boundary b (skip if removed)
-      if (!ui.removedCarets?.has(b)) {
-        const cState = ui.caretStates[b] ?? 'ok';
-        const sev: 'correct'|'possible'|'incorrect' = cState === 'bad' ? 'incorrect' : cState === 'maybe' ? 'possible' : 'correct';
-        cells.push({ kind: 'caret', bi: b, ui: sev });
-      }
-
-      // 3) token after boundary b (for b < N)
-      if (b < N) {
-        const removed = !!ui.tokens[b]?.removed;
-        if (!removed) {
-          const t = displayTokens[b];
-          cells.push({ 
-            kind: "token", 
-            ti: b, 
-            ui: t.ui 
-          });
-        }
-      }
+    // Build list of visible word indices (skip punctuation/hidden tokens)
+    const visibleWordIdxs: number[] = [];
+    for (let i = 0; i < N; i++) {
+      if (ui.tokens[i]?.removed) continue;
+      const t = displayTokens[i] as any;
+      if (t?.type === 'WORD') visibleWordIdxs.push(i);
     }
+
+    // Nothing visible → nothing to render
+    if (!visibleWordIdxs.length) return cells;
+
+    const pushCaret = (bi: number) => {
+      if (ui.removedCarets?.has(bi)) return;
+      const cState = ui.caretStates[bi] ?? 'ok';
+      const sev: 'correct'|'possible'|'incorrect' = cState === 'bad' ? 'incorrect' : cState === 'maybe' ? 'possible' : 'correct';
+      cells.push({ kind: 'caret', bi: bi, ui: sev });
+    };
+
+    // Render as: v0 [^ between v0|v1] v1 [^ between v1|v2] ... [^ after last]
+    const first = visibleWordIdxs[0];
+    // Initial boundary caret before the first visible word
+    pushCaret(first);
+    // Then the first word
+    cells.push({ kind: 'token', ti: first, ui: (displayTokens[first] as any).ui });
+    for (let k = 1; k < visibleWordIdxs.length; k++) {
+      const i = visibleWordIdxs[k];
+      pushCaret(i);                 // caret between previous and this visible word (boundary = i)
+      cells.push({ kind: 'token', ti: i, ui: (displayTokens[i] as any).ui });
+    }
+
+    // Final caret after the last visible word (boundary = lastIndex + 1)
+    const last = visibleWordIdxs[visibleWordIdxs.length - 1];
+    pushCaret(last + 1);
+
     return cells;
-  }, [displayTokens, caretRow, insertionMap, ui.tokens, ui.caretStates, ui.removedCarets]);
+  }, [displayTokens, ui.tokens, ui.caretStates, ui.removedCarets]);
 
   // Clear cached crops if text diverges from OCR baseline
   useEffect(() => {

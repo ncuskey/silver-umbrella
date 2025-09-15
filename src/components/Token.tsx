@@ -4,7 +4,7 @@ export type TokState = 'ok' | 'maybe' | 'bad';
 
 export interface TokenModel {
   id: string;
-  kind: 'word' | 'caret' | 'dot' | 'newline';
+  kind: 'word' | 'caret' | 'dot' | 'newline' | 'punct';
   text: string;
   state: TokState;
   selected?: boolean;
