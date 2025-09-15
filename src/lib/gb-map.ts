@@ -24,10 +24,10 @@ export function bootstrapStatesFromGB(
   // 1) Create token models with initial states
   const tokenModels: TokenModel[] = tokens.map((token, index) => ({
     id: `token-${index}`,
-    kind: token.type === 'WORD' ? 'word' : 
+    kind: token.type === 'WORD' ? 'word' :
           token.raw === '^' ? 'caret' :
-          token.raw === '.' || token.raw === '!' || token.raw === '?' ? 'dot' :
-          token.raw === '\n' ? 'newline' : 'word',
+          (token.raw === '.' || token.raw === '!' || token.raw === '?') ? 'dot' :
+          token.raw === '\n' ? 'newline' : 'punct',
     text: token.raw,
     state: 'ok' as TokState
   }));

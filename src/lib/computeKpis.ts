@@ -6,8 +6,11 @@ type T = TokenModel;
 // caretStates: record of boundary index -> ('ok' | 'maybe' | 'bad')
 // Only 'bad' blocks a CWS boundary; 'ok' and 'maybe' still count as eligible.
 export function computeKpis(tokens: T[], minutes: number, caretStates: Record<number, 'ok'|'maybe'|'bad'>) {
+  // Word detector: letters with optional internal apostrophes/hyphens; exclude pure numerals
+  const isWord = (t: T) => /^[A-Za-z][A-Za-z'’-]*$/.test(t.text || '') && !/^\d/.test(t.text || '');
+
   // Consider only visible words (not removed)
-  const words = tokens.filter(t => t.kind === "word" && !(t as any).removed);
+  const words = tokens.filter(t => isWord(t) && !(t as any).removed);
   const tww = words.length;
 
   // Words Spelled Correctly = words not currently marked bad
@@ -19,8 +22,8 @@ export function computeKpis(tokens: T[], minutes: number, caretStates: Record<nu
   for (let i = 0; i < tokens.length - 1; i++) {
     const a = tokens[i];
     const b = tokens[i + 1];
-    const aWord = a && a.kind === 'word' && !(a as any).removed;
-    const bWord = b && b.kind === 'word' && !(b as any).removed;
+    const aWord = a && isWord(a) && !(a as any).removed;
+    const bWord = b && isWord(b) && !(b as any).removed;
     if (!aWord || !bWord) continue;
     eligible++;
     const aOk = a.state === 'ok';

@@ -13,7 +13,7 @@ export interface KPIs {
 }
 
 // Helper functions for KPI calculations
-const isWordToken = (t: Token) => /^[A-Za-z][A-Za-z''-]*$/.test(t.raw) && !/^\d/.test(t.raw);
+const isWordToken = (t: Token) => /^[A-Za-z][A-Za-z'’-]*$/.test(t.raw) && !/^\d/.test(t.raw);
 const isNumberToken = (t: Token) => /^\d+([.,]\d+)*$/.test(t.raw);
 
 // TWW (Total Words Written; numerals excluded)

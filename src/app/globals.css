@@ -143,6 +143,10 @@
   align-items: center;
 }
 
+/* Ensure caret pills never overlap the first glyph of following words */
+.cbm-paragraph .caret-pill { isolation: isolate; }
+.cbm-paragraph .word-pill  { isolation: isolate; position: relative; z-index: 1; }
+
 /* Each item is an inline-sized chunk that doesn't stretch */
 .cbm-flow > .cbm-cell,
 .cbm-paragraph > .cbm-cell {
