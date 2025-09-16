@@ -116,9 +116,7 @@ This application is a TypeScript React web app for Curriculum‑Based Measuremen
 │   │   │   ├── badge.tsx      # Badge component
 │   │   │   ├── button.tsx     # Button with variants
 │   │   │   ├── card.tsx       # Card layout components
-│   │   │   ├── checkbox.tsx   # Checkbox input
 │   │   │   ├── input.tsx      # Text input
-│   │   │   ├── tabs.tsx       # Tab navigation (currently unused)
 │   │   │   └── textarea.tsx   # Textarea input
 │   │   ├── Token.tsx          # Token component with centralized status classes and bubbleCls
 │   │   └── TerminalGroup.tsx  # Single clickable terminal group component (^ . ^) with unified state
@@ -241,8 +239,6 @@ interface DisplayToken extends Token {
 3. **Form Components**
    - `Input`: Text input with consistent styling
    - `Textarea`: Multi-line text input
-   - `Checkbox`: Boolean input with custom styling
-   - `Tabs`: Tab navigation system
 
 4. **Display Components**
    - `Badge`: Status indicators with variants
@@ -311,23 +307,12 @@ interface DisplayToken extends Token {
 - **Debug Logging**: Temporary console.log statements for state verification
 - **Type Safety**: Full TypeScript support with proper interfaces
 
-##### useKPIs (`src/lib/useKPIs.ts`)
-- **Automatic Recomputation**: `useEffect` hook that recomputes KPIs when state changes
-- **Real-time Updates**: TWW, WSC, CWS calculations update automatically
-- **State Integration**: Respects current token and group state overrides
-- **Performance**: Efficient calculations with proper dependency tracking
-
 ##### computeKpis (`src/lib/computeKpis.ts`)
 - **Immediate KPI Computation**: Pure function that calculates KPIs from current state
 - **Interleaved Sequence Logic**: Builds sequence of words and terminal groups for CWS calculation
 - **Status-based Scoring**: Uses current status values to determine correct/incorrect sequences
 - **Performance Optimized**: Efficient calculations with proper type safety
-
-##### UI State Management (`src/state/ui.ts`)
-- **Toggle Functions**: `toggleToken` and `toggleTerminalGroup` with immediate KPI updates
-- **State Synchronization**: Ensures UI state and KPIs stay in sync
-- **Console Logging**: Debug output for KPI changes after each toggle
-- **Type Safety**: Full TypeScript support with proper interfaces
+- **Direct Usage**: Called from the main page state reducer for real-time KPI updates without a dedicated hook
 
 #### GB State Mapping (`src/lib/gb-map.ts`)
 - **Initial State Application**: `bootstrapStatesFromGB()` applies initial states from GB edits
@@ -492,7 +477,7 @@ The tool implements scoring methods aligned with educational research:
 - **TerminalGroup Component**: Updated `src/components/TerminalGroup.tsx` to use new state management structure with proper CSS classes
 - **State CSS Variables**: Added comprehensive state CSS with CSS custom properties (`--c`, `--bg`, `--fg`) as single source of truth for colors
 - **Immutable State Management**: Implemented `src/lib/useTokensAndGroups.ts` hook with `useCallback` for immutable state updates using `map()` instead of mutations
-- **Automatic KPI Recomputation**: Added `src/lib/useKPIs.ts` hook with `useEffect` that automatically recomputes KPIs when token or group states change
+- **Automatic KPI Recomputation**: KPI calculations now run directly inside the main page reducer via `computeKpis()` with no extra hook
 - **Initial State Application**: Enhanced `src/lib/gb-map.ts` with `bootstrapStatesFromGB()` to properly apply initial states from GB edits to tokens and groups
 - **Debug Logging**: Added temporary debug console.log statements to verify state application and track changes
 - **State Cycling**: Implemented proper cycling order: green → yellow → red → green (ok → maybe → bad → ok) for both words and terminal groups

@@ -339,9 +339,8 @@ function SentenceList({ text }: { text: string }) {
 }
 
 function InfractionList({ items }: { items: Infraction[] }) {
-  if (!items.length) return <div className="text-sm text-muted-foreground">No infractions flagged.</div>;
-
   const groups = useMemo(() => {
+    if (!items.length) return [] as Array<{ count: number; tag: string; replace: string }>;
     const map = new Map<string, { count: number; tag: string; replace: string }>();
     for (const f of items) {
       const tag = (f.tag || f.category || "").toUpperCase();
@@ -353,6 +352,10 @@ function InfractionList({ items }: { items: Infraction[] }) {
     }
     return Array.from(map.values()).sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
   }, [items]);
+
+  if (!groups.length) {
+    return <div className="text-sm text-muted-foreground">No infractions flagged.</div>;
+  }
 
   return (
     <div className="space-y-2">

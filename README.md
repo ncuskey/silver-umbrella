@@ -646,7 +646,7 @@ The tool is designed for easy extension:
 - **TerminalGroup Component**: Updated `src/components/TerminalGroup.tsx` to use new state management structure with proper CSS classes
 - **State CSS Variables**: Added comprehensive state CSS with CSS custom properties (`--c`, `--bg`, `--fg`) as single source of truth for colors
 - **Immutable State Management**: Implemented `useTokensAndGroups` hook with `useCallback` for immutable state updates using `map()` instead of mutations
-- **Automatic KPI Recomputation**: Added `useKPIs` hook with `useEffect` that automatically recomputes KPIs when token or group states change
+- **Automatic KPI Recomputation**: KPI calculations now run directly inside the main page reducer via `computeKpis()` with no extra hook
 - **Initial State Application**: Enhanced `bootstrapStatesFromGB` to properly apply initial states from GB edits to tokens and groups
 - **Debug Logging**: Added temporary debug console.log statements to verify state application and track changes
 - **State Cycling**: Implemented proper cycling order: green → yellow → red → green (ok → maybe → bad → ok) for both words and terminal groups
@@ -734,7 +734,7 @@ The tool is designed for easy extension:
 - **Proven Functionality**: Comprehensive test suite validates the LT-only pipeline works independently
 - **Better Maintainability**: Single source of truth for terminal insertions (LanguageTool only)
 - **Reduced Complexity**: Simplified UI and logic focused solely on LT results
-- **New File Structure**: Created minimal, focused modules (`types.ts`, `ltClient.ts`, `ltFilter.ts`, `ltToVT.ts`, `tokenize.ts`)
+- **New File Structure**: Created minimal, focused modules (`types.ts`, `ltFilter.ts`, `ltToVT.ts`, `tokenize.ts`)
 
 ### Previous Improvements (v4.5) - UPPERCASE Boundary-Aware Insertion
 - **Boundary-Aware UPPERCASE Detection**: Enhanced UPPERCASE_SENTENCE_START processing that uses boundary caret ("^") ownership for proper VT integration

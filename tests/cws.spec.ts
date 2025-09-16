@@ -1,9 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { score, tokenize, buildPairs } from "@/lib/cws-core";
-import { buildCwsPairs } from "@/lib/cws";
-import type { VirtualTerminal } from "@/lib/cws-heuristics";
 import { deriveTerminalFromLT, convertLTTerminalsToInsertions } from "@/lib/cws-lt";
 import { tokenizeWithOffsets } from "@/lib/cws-core";
+
+type ScoreResult = ReturnType<typeof score>;
+type VirtualTerminal = NonNullable<ScoreResult["virtualTerminals"]>[number];
 
 const S = (t: string) => score(t);
 

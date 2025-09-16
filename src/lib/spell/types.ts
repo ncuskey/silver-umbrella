@@ -16,7 +16,12 @@ export interface GrammarIssue {
 }
 
 export interface GrammarChecker {
-  check(text: string, lang?: string, signal?: AbortSignal): Promise<GrammarIssue[]>;
+  check(
+    text: string,
+    lang?: string,
+    signal?: AbortSignal,
+    level?: "default" | "picky"
+  ): Promise<GrammarIssue[]>;
 }
 
 export interface Token {
