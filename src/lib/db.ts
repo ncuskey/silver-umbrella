@@ -1,8 +1,13 @@
-import { neon, neonConfig } from '@neondatabase/serverless'
+import { Pool, PoolConfig, QueryResult } from 'pg'
 
-neonConfig.fetchConnectionCache = true
+type SqlTag = {
+  <T = any>(strings: TemplateStringsArray, ...values: any[]): Promise<T[]>;
+  query<T = any>(strings: TemplateStringsArray, ...values: any[]): Promise<T[]>;
+  raw: <T = any>(text: string, params?: any[]) => Promise<QueryResult<T>>;
+};
 
-let _sql: ReturnType<typeof neon> | null = null
+let pool: Pool | null = null;
+let sqlTag: SqlTag | null = null;
 
 function getDbUrl(): string | null {
   const keys = [
@@ -25,9 +30,41 @@ export function isDbConfigured() {
 export function getSql() {
   const url = getDbUrl()
   if (!url) throw new Error('Database URL not set. Set NETLIFY_DATABASE_URL (or NEON_DATABASE_URL / DATABASE_URL).')
-  if (_sql) return _sql
-  _sql = neon(url)
-  return _sql
+  if (sqlTag) return sqlTag
+
+  if (!pool) {
+    const config: PoolConfig = { connectionString: url }
+    const sslMode = (process.env.PGSSLMODE || process.env.PG_SSL_MODE || '').toLowerCase()
+    const forceSSL = process.env.PGSSL === '1' || process.env.PG_SSL === '1'
+    const shouldUseSSL = forceSSL || (!sslMode && /neon\.tech|supabase\.co|amazonaws\.com|render\.com/i.test(url)) || (sslMode && sslMode !== 'disable')
+    if (shouldUseSSL) {
+      config.ssl = { rejectUnauthorized: false }
+    }
+    pool = new Pool(config)
+  }
+
+  const buildQuery = (strings: TemplateStringsArray, values: any[]) => {
+    let text = ''
+    for (let i = 0; i < strings.length; i++) {
+      text += strings[i]
+      if (i < values.length) text += `$${i + 1}`
+    }
+    return { text, values }
+  }
+
+  const tag = (async <T = any>(strings: TemplateStringsArray, ...values: any[]) => {
+    const { text, values: params } = buildQuery(strings, values)
+    const res = await pool!.query<T>(text, params)
+    return res.rows
+  }) as SqlTag
+
+  tag.query = tag
+  tag.raw = async <T = any>(text: string, params: any[] = []) => {
+    return pool!.query<T>(text, params)
+  }
+
+  sqlTag = tag
+  return sqlTag
 }
 
 export async function ensureSchema() {
@@ -54,4 +91,21 @@ export async function ensureSchema() {
   // add optional prompt linkage on submissions
   await sql`alter table submissions add column if not exists prompt_id text;`
   await sql`alter table submissions add column if not exists prompt_text text;`
+  await sql`
+    create table if not exists generator_samples (
+      id text primary key,
+      source text,
+      original_text text not null,
+      fixed_text text,
+      grammar_edits jsonb,
+      llama_verdict jsonb,
+      tww integer,
+      wsc integer,
+      cws integer,
+      eligible integer,
+      minutes numeric,
+      created_at timestamptz default now()
+    );
+  `
+  await sql`create index if not exists generator_samples_created_at_idx on generator_samples (created_at desc);`
 }

@@ -1,14 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 
+const DEFAULT_LT_BASE = "http://languagetool:8010";
+
+function ltBase() {
+  return process.env.LT_BASE_URL || process.env.LANGUAGETOOL_URL || DEFAULT_LT_BASE;
+}
+
+function buildLtUrl(path: string) {
+  const base = ltBase();
+  const trimmed = base.endsWith("/") ? base.slice(0, -1) : base;
+  const suffix = path.startsWith("/") ? path : `/${path}`;
+  return `${trimmed}${suffix}`;
+}
+
 /**
  * Proxies any path under /api/languagetool/* to the upstream LanguageTool service.
- * Example: POST /api/languagetool/v2/check -> https://api.languagetool.org/v2/check
+ * Example: POST /api/languagetool/v2/check -> http://languagetool:8010/v2/check (default)
  */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ path?: string[] }> }) {
   const form = await req.formData();
   const resolvedParams = await params;
   const subpath = (resolvedParams.path || []).join("/");
-  const upstreamUrl = `https://api.languagetool.org/${subpath || "v2/check"}`;
+  const upstreamUrl = buildLtUrl(`/${subpath || "v2/check"}`);
 
   // Pass through ALL client params as-is
   const params_obj = new URLSearchParams();

@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-This application is a TypeScript React web app for Curriculum‑Based Measurement (CBM) written expression scoring. Built with Next.js 15, it provides automated scoring for educational assessments with interactive overrides and professional spell checking via GrammarBot API.
+This application is a TypeScript React web app for Curriculum‑Based Measurement (CBM) written expression scoring. Built with Next.js 15, it provides automated scoring for educational assessments with interactive overrides and professional spell checking via the self-hosted LanguageTool + fixer services (mirrored in the docker stack) with optional Llama-based sanity checks.
 
 ### Kiosk Mode (Student Writing)
 - Route: `src/app/kiosk/page.tsx`
@@ -38,7 +38,7 @@ This application is a TypeScript React web app for Curriculum‑Based Measuremen
 - Missing punctuation is surfaced as caret flags at boundaries (from GB-derived insertions); carets are individually clickable. Clicking a word also synchronizes both adjacent carets to the word's state.
 - A left-side Discard area allows dragging tokens to hide them; Undo restores the last removal.
 - CWS scoring now depends on word states and absence of a caret flag at the boundary (i+1) between two visible words.
-- Output pane now renders GrammarBot's full corrected text (`correction`) when available; otherwise it reconstructs by applying GB edits. Discarded tokens do not affect this pane.
+- Output pane now renders LanguageTool's full corrected text (`correction`) when available; otherwise it reconstructs by applying GB edits. Discarded tokens do not affect this pane.
 
 ## Architecture
 
@@ -49,7 +49,7 @@ This application is a TypeScript React web app for Curriculum‑Based Measuremen
 - **Animations**: Framer Motion
 - **Icons**: Lucide React
 - **Build Tools**: PostCSS, Autoprefixer
-- **Spell Checking**: GrammarBot API
+- **Spell Checking**: Self-hosted LanguageTool + fixer (docker stack)
 - **Bundle Analysis**: @next/bundle-analyzer
 
 ### Recent Architectural Improvements
@@ -58,7 +58,7 @@ This application is a TypeScript React web app for Curriculum‑Based Measuremen
 - **Single Clickable Units**: Terminal groups (^ . ^) implemented as single buttons with non-interactive inner glyphs
 - **Deduplication Logic**: New `buildTerminalGroups` function eliminates duplicate "^ . ^ . ^" triples at paragraph breaks
 - **Boundary-Based Grouping**: Groups deduplicated by boundary index using `Map<number, TerminalGroupModel>`
-- **Source Tracking**: Terminal groups track their source ('GB' for GrammarBot, 'PARA' for paragraph fallback)
+- **Source Tracking**: Terminal groups track their source ('LT' for LanguageTool, 'PARA' for paragraph fallback)
 - **Clean Word Coloring**: Words before terminal groups no longer colored by PUNC edits
 - **Enhanced UX**: Single-click interaction model with proper visual feedback and state cycling
 - **Immediate KPI Updates**: Click handlers trigger instant KPI recalculation with console logging
@@ -106,7 +106,7 @@ This application is a TypeScript React web app for Curriculum‑Based Measuremen
 ├── src/
 │   ├── app/                    # Next.js App Router
 │   │   ├── api/               # API routes
-│   │   │   └── grammarbot/    # GrammarBot proxy endpoint
+│   │   │   └── grammarbot/    # LanguageTool proxy endpoint
 │   │   │       └── v1/check/route.ts # Proxy route for grammar checking
 │   │   ├── globals.css        # Global styles with CSS variables
 │   │   ├── layout.tsx         # Root layout component
@@ -123,9 +123,9 @@ This application is a TypeScript React web app for Curriculum‑Based Measuremen
 │   │   ├── Token.tsx          # Token component with centralized status classes and bubbleCls
 │   │   └── TerminalGroup.tsx  # Single clickable terminal group component (^ . ^) with unified state
 │   ├── lib/
-│   │   ├── gbClient.ts        # GrammarBot API client
-│   │   ├── gbToVT.ts          # GrammarBot to Virtual Terminal conversion
-│   │   ├── gbAnnotate.ts      # GrammarBot annotation and display logic (status mapping; preserves original casing)
+│   │   ├── gbClient.ts        # LanguageTool service client
+│   │   ├── gbToVT.ts          # LanguageTool to Virtual Terminal conversion
+│   │   ├── gbAnnotate.ts      # LanguageTool annotation and display logic (status mapping; preserves original casing)
 │   │   ├── gb-map.ts          # GB state mapping; builds clickable TerminalGroups from VT insertions
 │   │   ├── useTokensAndGroups.ts # State management hook for tokens and groups (legacy support)
 │   │   ├── paragraphUtils.ts  # Paragraph-aware terminal insertion with end-of-text support; ignores empty paragraphs and dedupes paragraph ends
@@ -160,9 +160,9 @@ This application is a TypeScript React web app for Curriculum‑Based Measuremen
 - **Written Expression Scoring**: TWW, WSC, CWS calculations with derived metrics
 - **Caret-Only Punctuation Flags**: Missing terminals flagged on carets; no terminal groups in UI
 - (Spelling page removed) 
-- **GrammarBot Integration**: Professional spell checking and grammar analysis via GrammarBot API
+- **LanguageTool Integration**: Professional spell checking and grammar analysis via LanguageTool service
 - **Interactive UI**: Clickable carets, tokens, and terminal groups with keyboard navigation
-- **Output Text (Corrected)**: Blue box shows GrammarBot's full corrected text, with local edit-application fallback
+- **Output Text (Corrected)**: Blue box shows LanguageTool's full corrected text, with local edit-application fallback
 - **Focus Management**: Visual focus indicators and selection rings for accessibility
 - **Export Functionality**: CSV audit export and PDF report generation
 - **Responsive Design**: Mobile-friendly interface with flex layout
@@ -185,7 +185,7 @@ This application is a TypeScript React web app for Curriculum‑Based Measuremen
    - Implementation: `computeTWW()`
 
 2. **WSC (Words Spelled Correctly)**
-   - Uses GrammarBot API for professional spell checking
+   - Uses LanguageTool service for professional spell checking
    - Supports manual overrides via terminal group cycling
    - Implementation: `calcWSC()` with `spellErrorSetFromGB()`
 
@@ -194,7 +194,7 @@ This application is a TypeScript React web app for Curriculum‑Based Measuremen
    - Excludes commas from CWS calculations
    - Rule-based validation (capitalization after terminals, spelling accuracy)
    - Implementation: `calcCWS()` with `capitalizationFixWordSet()` and `terminalBoundarySet()`
-   - Testing helper: a minimal VT proposal in the scoring core flags lowercase→Capital boundaries (excluding multi‑word Title Case) to support golden tests; it does not mutate source text (runtime uses GrammarBot only).
+   - Testing helper: a minimal VT proposal in the scoring core flags lowercase→Capital boundaries (excluding multi‑word Title Case) to support golden tests; it does not mutate source text (runtime uses LanguageTool only).
 
 <!-- Spelling metrics (CLS) removed -->
 
@@ -341,33 +341,35 @@ interface DisplayToken extends Token {
 #### Terminal Group Building (`src/lib/buildTerminalGroups.ts`)
 - **Deduplication Logic**: Prevents duplicate "^ . ^ . ^" patterns at paragraph breaks
 - **Boundary-based Grouping**: Uses `Set<number>` to track seen anchor indices
-- **Source Tracking**: Terminal groups track their source ('GB' for GrammarBot, 'PARA' for paragraph fallback)
+- **Source Tracking**: Terminal groups track their source ('LT' for LanguageTool, 'PARA' for paragraph fallback)
 - **Paragraph Filtering**: Skips empty paragraphs; includes final paragraph when missing a terminal
 - **Console Logging**: Debug output shows all terminal groups with their IDs and statuses
 
 
 ### Automated Validation
-- **Spelling Detection**: GrammarBot-based spell checking
+- **Spelling Detection**: LanguageTool-based spell checking
 - **Grammar Rules**: Capitalization, terminal punctuation
 - **Infraction Categories**: Definite vs. possible issues
 
-### GrammarBot Integration (`src/lib/gbClient.ts`)
+### LanguageTool Integration (`src/lib/gbClient.ts`)
 
 #### API Client
-- `checkWithGrammarBot()`: Main function for grammar and spell checking
-- **Professional Spell Checking**: Uses GrammarBot's neural API
+- `checkWithLanguageTool()`: Main function for grammar and spell checking (wraps the fixer service)
+- **Professional Spell Checking**: Uses the self-hosted LanguageTool container with neural rules enabled
 - **Grammar Analysis**: Automatic grammar checking with debounced text analysis
 - **Request Cancellation**: AbortSignal support for grammar checking requests
 - **Rate Limiting**: Simple backoff handling for 429 responses
+- **Irregular Verb Fixer**: Applies custom replacements before returning edits/`fixed` text
+- **LLM Sanity Check**: Calls the Ollama/Llama endpoint (`sanityCheckWithLlama`) to flag questionable edits and returns `llamaVerdict`
 
 #### Virtual Terminal System (`src/lib/gbToVT.ts`)
-- `gbEditsToInsertions()`: Converts GrammarBot edits to virtual terminal insertions
+- `gbEditsToInsertions()`: Converts LanguageTool edits to virtual terminal insertions
 - **Terminal Punctuation Detection**: Accepts INSERT PUNC and also sentence terminators found in MODIFY replacements
 - **Boundary Mapping**: Maps insertions to proper boundary indices, including end-of-text (`tokens.length`)
 - **Smart Detection**: Identifies terminal punctuation suggestions (., !, ?) anywhere within the replacement span
 
 #### Annotation System (`src/lib/gbAnnotate.ts`)
-- `annotateFromGb()`: Annotates tokens with GrammarBot results
+- `annotateFromGb()`: Annotates tokens with LanguageTool results
 - `buildCaretRow()`: Builds caret states for boundary display
 - `groupInsertionsByBoundary()`: Groups insertions by boundary index
 - **Display Token Management**: Handles token styling and overlays
@@ -377,7 +379,7 @@ interface DisplayToken extends Token {
 - `charOffsetToBoundaryIndex()`: Converts character offset to boundary index
 - `charOffsetToTokenIndex()`: Converts character offset to token index
 - `newlineBoundarySet()`: Detects paragraph boundaries from newline characters
-- `gbToVtInsertions()`: Converts GB edits to VT insertions, detecting sentence terminators in both INSERT PUNC and MODIFY replacements; includes end-of-text. Handles INSERT replacements that contain spaces (e.g., ". ") by extracting the first terminator.
+- `gbToVtInsertions()`: Converts LanguageTool edits to VT insertions, detecting sentence terminators in both INSERT PUNC and MODIFY replacements; includes end-of-text. Handles INSERT replacements that contain spaces (e.g., ". ") by extracting the first terminator.
 - `withParagraphFallbackDots()`: Adds fallback periods at paragraph boundaries (including final paragraph)
 - **Paragraph Detection**: Automatic recognition of carriage returns and line breaks
 - **Smart Fallback**: Adds periods where GB didn't suggest punctuation at paragraph ends
@@ -417,9 +419,9 @@ interface DisplayToken extends Token {
 
 ### API Routes (`src/app/api/`)
 
-#### GrammarBot Proxy (`grammarbot/v1/check/route.ts`)
+#### LanguageTool Proxy (`grammarbot/v1/check/route.ts`)
 - Proxy endpoint to avoid CORS and rate limiting
-- Passes through requests to GrammarBot API
+- Passes through requests to LanguageTool service
 - Returns grammar suggestions in standardized format
 
 ## Configuration
@@ -466,7 +468,7 @@ The tool implements scoring methods aligned with educational research:
 
 ### Current State
 - Single-page application with tabbed interface
-- GrammarBot API integration for professional spell checking
+- LanguageTool service integration for professional spell checking
 - Interactive UI with clickable carets and tokens
 - Client-side only (no backend integration)
 - Responsive design with mobile support
@@ -513,7 +515,7 @@ The tool implements scoring methods aligned with educational research:
 - **Visual Consistency**: Yellow insertion dots now match the active caret color for cohesive design
 
 ### Previous Improvements (v6.3) - GB Insertion Display System
-- **GB Insertion Pills**: New blue pill system displays suggested punctuation insertions from GrammarBot
+- **GB Insertion Pills**: New blue pill system displays suggested punctuation insertions from LanguageTool
 - **Synthetic Caret System**: Additional carets after each insertion create proper visual grouping (`^ . ^` pattern)
 - **Boundary Grouping**: `groupInsertionsByBoundary()` function in `src/lib/gbAnnotate.ts` organizes insertions by boundary index
 - **Interleaved Display**: Seamless integration with existing token and caret display system in `src/app/page.tsx`

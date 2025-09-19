@@ -8,14 +8,17 @@ export type GbEdit = {
   err_desc?: string;
 };
 
+export type LlamaDecision = { index: number; keep: boolean; reason?: string };
+
 export type GbResponse = { 
   correction?: string; 
   status: number; 
   edits: GbEdit[]; 
-  latency?: number 
+  latency?: number;
+  llamaVerdict?: { status: "ok" | "skipped" | "error"; decisions?: LlamaDecision[]; error?: string };
 };
 
-export async function checkWithGrammarBot(text: string): Promise<GbResponse> {
+async function runFixer(text: string): Promise<GbResponse> {
   const res = await fetch("/api/grammarbot/v1/check", {
     method: "POST", 
     headers: { "Content-Type": "application/json" },
@@ -43,3 +46,9 @@ export async function checkWithGrammarBot(text: string): Promise<GbResponse> {
   // Always surface HTTP status back to the caller so UI can react
   return { status: res.status, ...(json as any) } as GbResponse;
 }
+
+export async function checkWithLanguageTool(text: string): Promise<GbResponse> {
+  return runFixer(text);
+}
+
+export const checkWithGrammarBot = checkWithLanguageTool;

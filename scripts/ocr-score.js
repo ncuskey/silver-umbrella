@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /*
- OCR + GrammarBot scoring CLI
+ OCR + LanguageTool scoring CLI
  Usage:
    node scripts/ocr-score.js --input path/to/image.jpg [--lang en] [--output out.json]
 
  Env:
-   - GRAMMARBOT_API_KEY (optional)
-   - GRAMMARBOT_ENDPOINT (optional, default: https://api.grammarbot.io/v2/check)
-   - Reads `.env.local` if present
+   - LT_ENDPOINT (optional, default: http://127.0.0.1:8010/v2/check)
+   - FIXER_URL (optional, default: http://127.0.0.1:8085/fix)
+  - Reads `.env.local` if present
 */
 
 const fs = require('node:fs');
@@ -40,7 +40,7 @@ function parseArgs(argv) {
 }
 
 function printHelp() {
-  console.log(`\nOCR + GrammarBot CLI\n\nUsage:\n  node scripts/ocr-score.js --input <image> [--lang en] [--output out.json]\n\nOptions:\n  -i, --input    Path to image file (jpg, png, tif, bmp)\n  -l, --lang     Language hint (default: en -> eng)\n  -o, --output   Output JSON path (default: print to stdout)\n  -h, --help     Show help\n\nEnv:\n  GRAMMARBOT_API_KEY   Optional API key\n  GRAMMARBOT_ENDPOINT  Override endpoint (default: https://api.grammarbot.io/v2/check)\n`);
+  console.log(`\nOCR + LanguageTool CLI\n\nUsage:\n  node scripts/ocr-score.js --input <image> [--lang en] [--output out.json]\n\nOptions:\n  -i, --input    Path to image file (jpg, png, tif, bmp)\n  -l, --lang     Language hint (default: en -> eng)\n  -o, --output   Output JSON path (default: print to stdout)\n  -h, --help     Show help\n\nEnv:\n  LT_ENDPOINT   Override LanguageTool endpoint (default: http://127.0.0.1:8010/v2/check)\n  FIXER_URL     Optional fixer URL for irregular verb cleanup (default: http://127.0.0.1:8085/fix)\n`);
 }
 
 function isoNow() {
@@ -84,14 +84,13 @@ function calcTextStats(text) {
   return { chars, words, sentences };
 }
 
-async function grammarCheck(text, lang) {
-  const endpoint = process.env.GRAMMARBOT_ENDPOINT || 'https://api.grammarbot.io/v2/check';
-  const apiKey = process.env.GRAMMARBOT_API_KEY;
-
+async function languageToolCheck(text, lang) {
+  const endpoint = process.env.LT_ENDPOINT || 'http://127.0.0.1:8010/v2/check';
   const params = new URLSearchParams();
   params.append('text', text);
   params.append('language', lang.toLowerCase().startsWith('en') ? 'en-US' : lang);
-  if (apiKey) params.append('api_key', apiKey);
+  params.append('level', 'picky');
+  params.append('enabledOnly', 'false');
 
   const res = await fetch(endpoint, {
     method: 'POST',
@@ -100,10 +99,9 @@ async function grammarCheck(text, lang) {
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    throw new Error(`GrammarBot request failed: ${res.status} ${res.statusText} ${body ? '- ' + body : ''}`);
+    throw new Error(`LanguageTool request failed: ${res.status} ${res.statusText} ${body ? '- ' + body : ''}`);
   }
-  const json = await res.json();
-  return json;
+  return await res.json();
 }
 
 function scoreFromMatches(matches, textStats) {
@@ -142,15 +140,33 @@ async function main() {
   const stats = calcTextStats(text);
   let grammar = null;
   let score = null;
+  let fixer = null;
   if (text) {
     try {
-      console.error(`[${isoNow()}] GrammarBot check…`);
-      grammar = await grammarCheck(text, args.lang);
+      console.error(`[${isoNow()}] LanguageTool check…`);
+      grammar = await languageToolCheck(text, args.lang);
       const matches = grammar?.matches || [];
       score = scoreFromMatches(matches, stats);
-      console.error(`[${isoNow()}] GrammarBot found ${matches.length} issue(s); score=${score}`);
+      console.error(`[${isoNow()}] LanguageTool found ${matches.length} issue(s); score=${score}`);
     } catch (err) {
-      console.error(`[${isoNow()}] GrammarBot error: ${err.message}`);
+      console.error(`[${isoNow()}] LanguageTool error: ${err.message}`);
+    }
+
+    try {
+      const fixerUrl = process.env.FIXER_URL || 'http://127.0.0.1:8085/fix';
+      console.error(`[${isoNow()}] Fixer sanity check via ${fixerUrl}…`);
+      const resp = await fetch(fixerUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      if (resp.ok) {
+        fixer = await resp.json();
+      } else {
+        console.error(`[${isoNow()}] Fixer returned ${resp.status}`);
+      }
+    } catch (err) {
+      console.error(`[${isoNow()}] Fixer error: ${err.message}`);
     }
   }
 
@@ -168,6 +184,7 @@ async function main() {
       software: grammar.software,
       language: grammar.language,
     } : null,
+    fixer,
     score,
     timestamp: isoNow(),
   };
@@ -185,4 +202,3 @@ main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
-

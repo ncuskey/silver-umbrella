@@ -16,4 +16,5 @@ build
 src/app/.!*
 *.backup
 .env.local
+.env.local*
 .env

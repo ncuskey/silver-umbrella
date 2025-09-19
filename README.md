@@ -27,21 +27,24 @@ A TypeScript React web application for Curriculum‑Based Measurement (CBM) writ
  - Missing punctuation is flagged directly on the caret between words; carets are individually clickable to override boundary status.
 - Added left-side Discard area: drag words or individual carets to remove them from the stream and KPIs; Undo via button or Cmd/Ctrl+Z.
 - KPIs now compute CWS using word states plus caret flags (no group acceptance needed).
-- Output text now shows GrammarBot's full corrected text when available (the `correction` field). If `correction` is missing, it reconstructs the text by applying GrammarBot's edits. Discarded tokens do not affect this pane.
+- Output text now shows the fixer service's corrected text (LanguageTool + irregular verb patcher). If the service omits a `fixed` field, the UI reconstructs the draft by applying the normalized edits. Discarded tokens do not affect this pane.
+- Grammar analysis now runs entirely on the self-hosted stack: `/api/grammarbot/v1/check` proxies to the dockerized LanguageTool container, runs the irregular verb fixer, then asks the local Ollama (Llama 3) instance to sanity-check high-risk edits.
+- OCR no longer depends on Tesseract. `/api/ocr` preprocesses uploads with Sharp and runs them through the bundled Tesseract worker so everything stays offline.
 
 ## Features
 
 ### Written Expression Scoring
 - **TWW (Total Words Written)**: Counts all words written, including misspellings, excluding numerals
-- **WSC (Words Spelled Correctly)**: Uses GrammarBot API for professional spell checking
+- **WSC (Words Spelled Correctly)**: Uses the dockerized LanguageTool service plus the fixer microservice for irregular verb support; results feed the same highlighting pipeline as before.
 - **CWS (Correct Writing Sequences)**: Mechanical, CBM-aligned scoring of adjacent unit pairs with visual caret indicators
+- **LLM sanity check**: Each batch of LanguageTool edits is reviewed by a local Llama model (Ollama) and any "do not apply" recommendations show up in the sidebar.
 
-### OCR Input (Google Vision)
+### OCR Input (Self-Hosted Tesseract)
 - **Load Scan button**: On the scoring page, click “Load Scan (PDF/PNG/JPG)” to import scanned work.
 - **PDF support**: Multi‑page PDFs render client‑side and are OCR’d page‑by‑page.
-- **Preprocessing**: Server trims and enhances images (autorotate, grayscale, normalize, denoise, slight sharpen, threshold, crop/pad) for better OCR accuracy.
-- **Backend**: Google Cloud Vision `documentTextDetection` via `/api/ocr`.
- - **Hover preview of scanned words**: After uploading a scan, hover over any word token in the UI to see an image snippet of the corresponding handwritten/printed word from the scan. This helps teachers visually compare the scanned glyphs to the OCR/typed output. Previews are generated from the exact preprocessed image sent to Vision for alignment.
+- **Preprocessing**: Server trims and enhances images (autorotate, grayscale, normalize, denoise, slight sharpen, threshold, crop/pad) before sending them to Tesseract.
+- **Backend**: `/api/ocr` now runs Tesseract.js locally (no Google Cloud dependencies) and returns token-level bounding boxes and confidences for hover previews.
+- **Hover preview of scanned words**: After uploading a scan, hover over any word token in the UI to see an image snippet of the corresponding handwritten/printed word from the scan. This helps teachers visually compare the scanned glyphs to the OCR/typed output. Previews are generated from the same preprocessed image passed into Tesseract so offsets line up.
 
 <!-- Spelling assessment (CLS) removed; app now focuses on Written Expression only -->
 
@@ -67,6 +70,10 @@ A TypeScript React web application for Curriculum‑Based Measurement (CBM) writ
 - Schema: Created on first use:
   - `submissions (id text primary key, student_name text, content text not null, duration_seconds int, started_at timestamptz, submitted_at timestamptz default now(), prompt_id text, prompt_text text)`
   - `prompts (id text primary key, title text not null, content text not null, created_at timestamptz default now())`
+- `generator_samples (id text primary key, source text, original_text text not null, fixed_text text, grammar_edits jsonb, llama_verdict jsonb, tww int, wsc int, cws int, eligible int, minutes numeric, created_at timestamptz default now())`
+- Generator API endpoints:
+  - `POST /api/generator/samples` — Persist a LanguageTool run (with optional Llama verdict and KPI snapshot).
+  - `GET /api/generator/samples?limit=25` — Fetch recent stored samples.
 - Kiosk auto‑saves when time expires and shows an “Open in Scoring” shortcut.
 
 Local development
@@ -86,23 +93,23 @@ Local development
 - **Deduplication Logic**: New `buildTerminalGroups` function eliminates duplicate "^ . ^ . ^" triples at paragraph breaks
 - **Immediate KPI Computation**: Click handlers trigger instant KPI recalculation with console logging for debugging
 - **Tailwind Color Safelist**: Comprehensive safelist ensures all dynamic color classes render properly
-- **GrammarBot API**: Professional spell checking and grammar analysis via GrammarBot's neural API
-- **GrammarBot Integration**: Professional spell checking and grammar checking via GrammarBot API
-- **Spell Engine Status**: Visual indicator showing GrammarBot spell checking mode
-- **Spelling Suggestions**: Tooltip suggestions for misspelled words via GrammarBot
-- **GrammarBot Grammar**: Automatic grammar checking with debounced text analysis
+- **LanguageTool API**: Professional spell checking and grammar analysis via LanguageTool's neural API
+- **LanguageTool Integration**: Professional spell checking and grammar checking via LanguageTool API
+- **Spell Engine Status**: Visual indicator showing LanguageTool spell checking mode
+- **Spelling Suggestions**: Tooltip suggestions for misspelled words via LanguageTool
+- **LanguageTool Grammar**: Automatic grammar checking with debounced text analysis
 - **Request Cancellation**: AbortSignal support for grammar checking requests
-- **Rate Limiting**: Simple backoff handling for GrammarBot 429 responses
-- **Infraction Flagging**: Automated detection of definite vs. possible issues from GrammarBot
-- **Aggregated Infractions List**: Groups identical GrammarBot infractions by type + replacement and shows a frequency count (e.g., `10× PUNC → .`), sorted by most frequent
-- **Output Text (Corrected)**: Blue box shows GrammarBot's full corrected text; falls back to locally applying GB edits if needed
+- **Rate Limiting**: Simple backoff handling for LanguageTool 429 responses
+- **Infraction Flagging**: Automated detection of definite vs. possible issues from LanguageTool
+- **Aggregated Infractions List**: Groups identical LanguageTool infractions by type + replacement and shows a frequency count (e.g., `10× PUNC → .`), sorted by most frequent
+- **Output Text (Corrected)**: Blue box shows LanguageTool's full corrected text; falls back to locally applying GB edits if needed
 - **Rule Tooltips**: Instant, accessible tooltips show rule labels and suggested replacements on hover for tokens; terminal dots/carets show proposed punctuation. Includes a subtle pop‑in animation.
 - **Interactive Overrides**: Click words to toggle WSC scoring; clicking a word also synchronizes the two adjacent carets to match the word's new state. Click carets to cycle their state individually.
 - **CWS Engine**: Strictly mechanical, CBM-aligned engine with visual caret indicators and boundary validation
 - **Rule-based Checks**: Capitalization, terminal punctuation, and sentence structure validation
-- **Spell Result Caching**: Intelligent caching for GrammarBot API responses
+- **Spell Result Caching**: Intelligent caching for LanguageTool API responses
 - **Curly Apostrophe Support**: Proper handling of smart quotes and apostrophes
-- **Token Character Offsets**: Precise character position tracking for GrammarBot issue alignment
+- **Token Character Offsets**: Precise character position tracking for LanguageTool issue alignment
 - **Discard Controls**: Drag words or individual carets into the Discard panel to hide them from the stream and make them non‑blocking for CWS; Undo restores the last removal (Cmd/Ctrl+Z).
 
 ### Layout & Responsiveness
@@ -113,9 +120,9 @@ Local development
     - `--discard-w`: width of the discard area
   - Padding applied via `.with-discard-pad` only at `xl+`: `padding-left = (2 × gap) + width`, creating equal spacing on both sides of the discard and preventing overlap.
 - **Tuning**: Adjust `--discard-x` and `--discard-w` in `globals.css` to change the discard size/offset, or override them inside media queries for per‑breakpoint sizing.
-- **CWS-GrammarBot Integration**: Grammar suggestions mapped to CWS boundaries with advisory hints
+- **CWS-LanguageTool Integration**: Grammar suggestions mapped to CWS boundaries with advisory hints
 - **3-State Caret Cycling**: Yellow (advisory) → Red (incorrect) → Green (correct) → Yellow (default)
-- **Advisory Infractions**: GrammarBot grammar suggestions shown as yellow advisory entries
+- **Advisory Infractions**: LanguageTool grammar suggestions shown as yellow advisory entries
 - **Color Legend**: Visual guide for teachers explaining caret color meanings
 - **Derived Metrics**: CIWS, %CWS, and CWS/min calculations with time control
 - **Time Control**: Configurable probe duration (mm:ss format) for fluency rate calculations
@@ -125,15 +132,15 @@ Local development
 - **Enhanced Virtual Terminal System**: Comprehensive boundary tracking with proper CWS integration when accepted
 - **Grammar Mode Badge**: Always-visible indicator showing current grammar checking configuration
 - **Export Functionality**: CSV audit export and PDF report generation
-- **Privacy Controls**: FERPA/COPPA compliant with secure API key handling
-- **Rate Limiting**: Automatic backoff for GrammarBot API rate limits
+- **Privacy Controls**: FERPA/COPPA aligned—grammar/OCR stay on the self-hosted stack (no third-party APIs)
+- **Rate Limiting**: Automatic backoff for LanguageTool API rate limits
 - **Golden Tests**: Comprehensive test suite for CWS rule validation
-- **License Compliance**: GrammarBot API usage compliance
+- **License Compliance**: LanguageTool API usage compliance
 - **GB Token Annotation**: Visual token highlighting with color-coded pills (green=correct, yellow=possible, red=incorrect)
 - **Caret Row Display**: Visual caret indicators showing GB-proposed terminal punctuation positions
 - **Capitalization Overlays**: Optional display of capitalization fixes without changing source text
 - **Terminal Dots**: Visual indicators for punctuation insertions from GB analysis
-- **Enhanced Infractions**: GB-only infractions panel with proper GRMR/SPELL/PUNC tagging
+- **Enhanced Infractions**: LT + Llama infractions panel with proper GRMR/SPELL/PUNC tagging
 
 ## Recent Improvements
 
@@ -143,7 +150,7 @@ Local development
 - **Unified State Management**: Single click handler cycles entire terminal groups while maintaining individual token control
 - **Deduplication Logic**: New `buildTerminalGroups` function eliminates duplicate "^ . ^ . ^" triples at paragraph breaks
 - **Boundary-Based Grouping**: Groups are deduplicated by boundary index to prevent overlapping suggestions
-- **Source Tracking**: Terminal groups track their source ('GB' for GrammarBot, 'PARA' for paragraph fallback)
+- **Source Tracking**: Terminal groups track their source ('LT' for LanguageTool, 'PARA' for paragraph fallback)
 - **Clean Word Coloring**: Words before terminal groups are no longer colored by PUNC edits
 - **Enhanced UX**: Single-click interaction model with proper visual feedback and state cycling
 
@@ -165,38 +172,34 @@ Local development
    npm install
    ```
 
-2. Set up GrammarBot API key:
-   - Get your API key from [https://neural.grammarbot.io/](https://neural.grammarbot.io/)
-   - Create a `.env.local` file in the project root
-   - Add your API key: `GRAMMARBOT_API_KEY=your_api_key_here`
-   - Restart the dev server after adding the key
-   - If the key is missing or invalid, the app shows a small banner indicating GrammarBot is unavailable
+2. Boot the local stack (Postgres, LanguageTool, fixer, Llama, etc.):
+   ```bash
+   cd ../server
+   docker compose up -d
+   ```
+   The compose file exposes defaults that let the app reach services at `http://localhost:5432`, `:8010`, `:8085`, and `:11434`.
 
-3. Start the development server:
+3. Configure database access for the Next.js app:
+   - Create `.env.local` in `silver-umbrella/` (if it does not already exist)
+   - Add `DATABASE_URL=postgresql://<user>:<password>@localhost:5432/<db>` matching the credentials in `server/.env`
+   - Optional overrides: `FIXER_URL`, `LT_BASE_URL`, or `OLLAMA_URL` if you expose the services on different ports/hosts.
+
+4. Start the development server:
    ```bash
    npm run dev
    ```
 
-4. Open [http://localhost:3000](http://localhost:3000) in your browser
+5. Open [http://localhost:3000](http://localhost:3000) in your browser
 
-### Optional: Google Vision OCR Setup
+### Optional: Tesseract OCR Notes
 
-Add these to `.env.local` to enable the “Load Scan (PDF/PNG/JPG)” OCR button:
-
-```
-# Google Cloud Vision (server-only)
-GCP_PROJECT_ID=autocbm
-GCP_CLIENT_EMAIL=autocbm@autocbm.iam.gserviceaccount.com
-# IMPORTANT: keep \n escapes; do not paste raw newlines
-GCP_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...your key...\n-----END PRIVATE KEY-----\n"
-```
-
-Then restart the dev server. The UI uploads images/PDF pages to `/api/ocr`, which preprocesses with Sharp and calls Google Vision.
+- OCR is self-contained—no Google Cloud credentials required. The API route embeds the `eng` language data and runs entirely locally.
+- To add additional tessdata languages, supply `TESSDATA_PREFIX` or mount extra traineddata files and set `TESS_LANG` in `.env.local`.
 
 #### Notes on Scanned Word Hover Previews
-- The server returns the preprocessed image alongside Vision’s word boxes so bounding boxes line up with what Vision saw.
+- The server returns the preprocessed image alongside the word-level bounding boxes so coordinates match what Tesseract processed.
 - The client aligns OCR words to the combined text and lazily crops the matching word region for hover popovers.
-- If you edit the text after OCR, previews are cleared (offsets no longer match the OCR baseline).
+- Editing the text after OCR clears previews (offsets no longer match the OCR baseline).
 
 ### Developer tips
 
@@ -221,20 +224,20 @@ Then restart the dev server. The UI uploads images/PDF pages to `/api/ocr`, whic
 - `npm run analyze` - Generate bundle analysis reports (requires ANALYZE=1)
 
 ### Relevant API Routes
-- `POST /api/ocr` — Google Vision OCR. Body (JSON): `{ imageBase64?: string, imageUri?: string, lang?: string }`. Returns `{ text, raw }`.
+- `POST /api/ocr` — Tesseract OCR. Body (JSON): `{ imageBase64?: string, imageUri?: string, lang?: string }`. Returns `{ text, raw }`.
 - `GET /api/submissions`, `POST /api/submissions`, `GET /api/submissions/:id` — Manage writing samples.
 
 ## Usage
 1. Paste student writing in the text area
 2. Set the probe time duration (mm:ss format) for fluency calculations
-3. GrammarBot provides professional spell checking and grammar analysis via API
+3. LanguageTool provides professional spell checking and grammar analysis via API
 4. Grammar checking runs automatically as you type (debounced)
 5. Review the 6 key metrics in the right column grid
-6. Review the aggregated infractions and suggestions (always visible) — driven purely by GrammarBot, grouped by type + replacement with counts, and ordered from most to fewest
+6. Review the aggregated infractions and suggestions (always visible) — driven purely by LanguageTool, grouped by type + replacement with counts, and ordered from most to fewest
 7. Use interactive overrides to adjust scoring as needed (click words for WSC; clicking a word also synchronizes the two adjacent carets to match the word; click carets to cycle CWS)
 8. Drag words or individual carets into the Discard panel to remove them from the stream and KPIs; use Undo to restore
 9. Capitalization issues are treated as errors (red) but the original word casing is preserved in the bubble
-10. The blue Output Text box shows GrammarBot's full corrected text for quick review
+10. The blue Output Text box shows LanguageTool's full corrected text for quick review
 
 <!-- Spelling tab removed -->
 
@@ -256,7 +259,7 @@ Then restart the dev server. The UI uploads images/PDF pages to `/api/ocr`, whic
 
 - LT caret handling: more tolerant capitalization detection for `UPPERCASE_SENTENCE_START` with robust token anchoring when offsets vary.
 - VT insertion compatibility: `convertLTTerminalsToInsertions` now supports both `(text, tokens, issues)` and `(tokens, issues)` signatures and falls back to the previous WORD boundary when an explicit caret is absent.
-- No local heuristics at runtime: spelling/capitalization highlighting is based solely on GrammarBot edits. A banner appears if GrammarBot is unavailable.
+- No local heuristics at runtime: spelling/capitalization highlighting is based solely on LanguageTool edits. A banner appears if LanguageTool is unavailable.
 
 ### Punctuation Handling
 
@@ -266,13 +269,13 @@ Then restart the dev server. The UI uploads images/PDF pages to `/api/ocr`, whic
 
 ### Capitalization Treatment
 
-- Capitalization fixes returned by GrammarBot (pure case‑change replacements) are treated as errors (red) but do not change the bubble text (original casing is shown).
+- Capitalization fixes returned by LanguageTool (pure case‑change replacements) are treated as errors (red) but do not change the bubble text (original casing is shown).
 - Caret highlighting derives from adjacent token states; both carets around an error reflect the token’s severity.
 
 ## Scoring Guidelines
 
 - **TWW**: All words written; include misspellings; exclude numerals
-- **WSC**: Words spelled correctly in isolation (GrammarBot + custom lexicon)
+- **WSC**: Words spelled correctly in isolation (LanguageTool + custom lexicon)
 - **CWS**: Adjacent units (words & essential punctuation). Commas excluded. Initial valid word counts 1. Capitalize after terminals
 <!-- CLS removed -->
 
@@ -309,41 +312,41 @@ The CWS (Correct Writing Sequences) engine implements strictly mechanical, CBM-a
 - **Visual Indicators**: Color-coded carets (^) show boundary status:
   - Green: Valid CWS boundary
   - Red: Invalid boundary (spelling/capitalization issue)
-  - Yellow: Advisory hint from GrammarBot grammar checking
+  - Yellow: Advisory hint from LanguageTool grammar checking
   - Muted: Non-eligible boundary (comma/quote/etc.)
 - **Interactive Overrides**: Click carets to cycle through yellow (advisory)→red (incorrect)→green (correct)→yellow (default)
-- **Character Position Tracking**: Token offsets enable precise alignment of GrammarBot issues to CWS boundaries
+- **Character Position Tracking**: Token offsets enable precise alignment of LanguageTool issues to CWS boundaries
 
 ## Spell Checking & Grammar
 
-### GrammarBot Integration
-- **API-based Spell Checking**: Uses GrammarBot's neural API for professional spell checking
+### LanguageTool Integration
+- **Self-hosted Spell Checking**: Uses the dockerized LanguageTool service that ships with the stack (no external API traffic)
 - **Enhanced Spelling Detection**: Neural network-based detection for typos and grammar issues
 - **Language Variant Support**: Uses `en-US` variant for optimal spelling and grammar detection
 - **Complete Category Support**: Processes all standard grammar categories (spelling, grammar, style, punctuation)
 - **Intelligent Rule Mapping**: Maps grammar issues to user-friendly messages
-- **Development Debugging**: Console logging for GrammarBot parity checks
+- **Development Debugging**: Console logging for LanguageTool parity checks
 - **Automatic Grammar Checking**: Grammar analysis runs automatically as you type with debounce
-- **Status Tracking**: Visual badge shows GrammarBot spell checking mode
-- **Spelling Suggestions**: Built-in GrammarBot suggestion engine for misspelled words
+- **Status Tracking**: Visual badge shows LanguageTool spell checking mode
+- **Spelling Suggestions**: Built-in LanguageTool suggestion engine for misspelled words
 - **Tooltip Integration**: Suggestions appear in word tooltips when words are flagged
-- **Spell Result Caching**: Intelligent in-memory caching for GrammarBot API responses
-- **Rate Limiting**: Simple backoff handling for 429 responses with 1.5s retry delay
+- **Spell Result Caching**: Intelligent in-memory caching for LanguageTool responses
+- **Rate Limiting**: Graceful retries if the local service returns HTTP 429/503 while starting up
 - **Request Cancellation**: AbortSignal support for canceling stale requests
-- **Correction Preview**: Shows GrammarBot's suggested correction for sanity checking
+- **Correction Preview**: Shows LanguageTool's suggested correction for sanity checking
 - **Capitalization Toggle**: Option to show/hide capitalization fixes in infractions
 
-### GrammarBot Grammar
+### LanguageTool Grammar
 - **Automatic Grammar Checking**: Runs automatically as you type with 800ms debounce
 - **Request Cancellation**: AbortSignal support prevents stale grammar check results
-- **Server Proxy**: Uses Next.js API route to keep API key secure
+- **Service Proxy**: Next.js API routes call the dockerized LanguageTool/fixer services via internal URLs (no credentials required)
 - **Advisory-only suggestions** (doesn't affect CBM scores)
 - **Status Indicators**: Visual feedback showing grammar check status (idle/checking/ok/error)
 - **CWS Boundary Mapping**: Grammar issues mapped to nearest CWS boundaries
 - **Advisory Hints**: Grammar suggestions shown as yellow carets and advisory infractions
 - **Smart Filtering**: Only grammar issues (not spelling/punctuation) mapped to boundaries
 - **Grammar Mode Badge**: Always-visible indicator showing current grammar configuration
-- **Debug Parity Assert**: Verifies that applying all GrammarBot edits reproduces the correction
+- **Debug Parity Assert**: Verifies that applying all LanguageTool edits reproduces the correction
 
 ### GB Token Annotation System
 - **Visual Token Highlighting**: Color-coded token pills show GB analysis results:
@@ -356,12 +359,12 @@ The CWS (Correct Writing Sequences) engine implements strictly mechanical, CBM-a
   - **Active Carets**: Highlighted carets for GB-proposed terminals
 - **Capitalization Overlays**: Optional display of capitalization fixes without changing source text
 - **Terminal Dots**: Visual indicators for punctuation insertions from GB analysis
-- **Enhanced Infractions**: GB-only infractions panel with proper GRMR/SPELL/PUNC tagging and aggregated counts
+- **Enhanced Infractions**: LT + Llama infractions panel with proper GRMR/SPELL/PUNC tagging and aggregated counts
 - **Interactive Tooltips**: Hover over tokens to see rule labels and suggestions (e.g., Capitalization, Grammar → were, Spelling → friend). Instant display with a subtle pop‑in animation.
 - **Debug Logging**: Console output for development debugging with `__CBM_DEBUG__` flag
 
 ### GB Insertion Display System
-- **Insertion Pills**: Blue pills show suggested punctuation insertions from GrammarBot:
+- **Insertion Pills**: Blue pills show suggested punctuation insertions from LanguageTool:
   - **Light Blue Pills**: Display the exact punctuation GB suggests (`.`, `!`, `?`)
   - **Rounded Design**: Distinctive pill styling to differentiate from token pills
   - **Boundary Grouping**: Insertions grouped by boundary index for proper placement
@@ -387,7 +390,7 @@ The CWS (Correct Writing Sequences) engine implements strictly mechanical, CBM-a
 - **Aggregation**: Identical GB infractions are grouped by tag (e.g., `PUNC`, `SPELL`, `GRMR`) and replacement character/text (if any).
 - **Counts**: Each row shows a frequency badge like `10×` followed by the tag and optional `→ replacement`.
 - **Ordering**: Rows are sorted by count (desc), then by tag to keep the list concise and scannable.
-- **Scope**: Display is derived directly from `gb.edits` (no heuristics), ensuring parity with GrammarBot output while staying compact.
+- **Scope**: Display is derived directly from `gb.edits` (no heuristics), ensuring parity with LanguageTool output while staying compact.
 
 ### GB Enhancement Features (v3.1)
 - **Clean Punctuation Highlighting**: Words before punctuation insertions are no longer highlighted, providing cleaner visual feedback
@@ -462,11 +465,11 @@ The CWS (Correct Writing Sequences) engine implements strictly mechanical, CBM-a
 The application is configured for optimal Netlify deployment:
 
 1. **Automatic Build**: Netlify will run `npm run build` automatically
-2. **API Functions**: Server routes (GrammarBot proxy, OCR, PDF worker) run as Netlify Functions
+2. **API Functions**: Server routes (LanguageTool proxy, OCR, PDF worker) run as Netlify Functions
 3. **Environment Variables**: Configure these in Netlify → Site settings → Build & deploy → Environment:
-   - `GRAMMARBOT_API_KEY` — GrammarBot cloud key
+   - `LANGUAGETOOL_API_KEY` — LanguageTool cloud key
    - Database URL — one of: `NETLIFY_DATABASE_URL` (preferred) or `NEON_DATABASE_URL` or `DATABASE_URL`
-   - Google Vision OCR (recommended names used by the app):
+   - Tesseract OCR (recommended names used by the app):
      - `GCP_PROJECT_ID` — GCP project id
      - `GCP_CLIENT_EMAIL` — service account email
      - `GCP_PRIVATE_KEY` — private key string; you may paste with real newlines or with `\n` escapes (both supported)
@@ -474,7 +477,7 @@ The application is configured for optimal Netlify deployment:
 4. **Secrets Scanning**: Netlify blocks builds if secrets are detected in repo files or build output.
    - We do not commit secrets in this repo; if you hit false positives (often in docs), the repo includes sane defaults in `netlify.toml`:
      - `SECRETS_SCAN_OMIT_PATHS="README.md,CHANGELOG.md,codemap.md"`
-     - `SECRETS_SCAN_OMIT_KEYS="GCP_PRIVATE_KEY,GOOGLE_APPLICATION_CREDENTIALS_JSON,NETLIFY_DATABASE_URL,NEON_DATABASE_URL,DATABASE_URL,GRAMMARBOT_API_KEY"`
+     - `SECRETS_SCAN_OMIT_KEYS="GCP_PRIVATE_KEY,GOOGLE_APPLICATION_CREDENTIALS_JSON,NETLIFY_DATABASE_URL,NEON_DATABASE_URL,DATABASE_URL,LANGUAGETOOL_API_KEY"`
    - If necessary, you can disable scanning from the Netlify UI by setting `SECRETS_SCAN_ENABLED=false` (not recommended long‑term).
 4. **Configuration**: Uses `netlify.toml` with Next.js plugin for proper function deployment
 
@@ -509,23 +512,20 @@ The application is optimized for production deployment with minimal runtime requ
 
 ## Privacy & Compliance
 
-### FERPA/COPPA Compliance
-- **API Key Required**: GrammarBot requires an API key for cloud-based grammar checking
-- **Secure Proxy**: API key is kept secure on the server side, never exposed to the browser
-- **No Data Collection**: Student text is only sent to GrammarBot for grammar checking
-- **Session Data Clearing**: One-click session data clearing for privacy-conscious environments
-- **Transparent Privacy**: Clear indicators show when cloud services are enabled
-- **Educational Focus**: Designed specifically for school environments with privacy requirements
+### FERPA/COPPA Considerations
+- **Local processing**: Grammar, OCR, and LLM validation all run on the self-hosted stack (Postgres, LanguageTool, fixer, Tesseract, Ollama). No student text leaves your infrastructure.
+- **Granular storage**: Submissions and prompts live in Postgres; generator snapshots are optional and can be purged independently.
+- **Session reset**: One-click “Clear session data” removes local state for shared workstations.
 
 ### Privacy Controls
-- **Secure API Key**: API key is stored securely on the server side
-- **Rate Limiting**: Automatic handling of API rate limits with exponential backoff
-- **Clear Session Data**: Complete reset of all settings and student text
+- **Stack visibility**: Status badges surface when LanguageTool/fixer/Ollama are offline so you know when checks fall back to manual review.
+- **Clear session data**: Complete reset of all settings and student text with one action.
+- **Backup discipline**: `server/backup.sh` syncs workspace and MinIO buckets to Backblaze with explicit excludes so student uploads remain under district control.
 
 ### License Compliance
-- **GrammarBot Attribution**: Proper attribution for GrammarBot API usage
-- **API Usage**: Compliant with GrammarBot's terms of service
-- **Privacy Controls**: FERPA/COPPA compliant with secure API key handling
+- **LanguageTool**: Uses the AGPL-licensed docker image (`silviof/docker-languagetool`). Attribution retained in the stack docs.
+- **Ollama/Llama**: Refer to the upstream model license when loading additional weights; defaults to community Llama 3.1 (8B).
+- **Tesseract.js**: Distributed under Apache 2.0; LICENSE bundled in `node_modules/tesseract.js`.
 
 ## Debugging
 
@@ -625,8 +625,8 @@ If virtual terminal groups are not appearing or functioning correctly:
 ## Extensibility
 
 The tool is designed for easy extension:
-- **GrammarBot API**: Professional spell checking and grammar analysis with neural network support
-- **Multi-language Ready**: GrammarBot supports multiple languages with neural processing
+- **LanguageTool API**: Professional spell checking and grammar analysis with neural network support
+- **Multi-language Ready**: LanguageTool supports multiple languages with neural processing
 - **Advanced Grammar**: Neural network-based grammar checking with high accuracy
 - **API Extensions**: Easy integration with additional language services
 - **Performance Optimization**: Intelligent caching and request management
@@ -655,7 +655,7 @@ The tool is designed for easy extension:
 - **Real-time Updates**: All state changes trigger automatic KPI recalculation and UI updates without manual intervention
 
 ### Previous Improvements (v6.3) - GB Insertion Display System
-- **GB Insertion Pills**: New blue pill system displays suggested punctuation insertions from GrammarBot
+- **GB Insertion Pills**: New blue pill system displays suggested punctuation insertions from LanguageTool
 - **Synthetic Caret System**: Additional carets after each insertion create proper visual grouping (`^ . ^` pattern)
 - **Boundary Grouping**: `groupInsertionsByBoundary()` function organizes insertions by boundary index
 - **Interleaved Display**: Seamless integration with existing token and caret display system
@@ -670,37 +670,37 @@ The tool is designed for easy extension:
 - **Caret Row Display**: Visual caret indicators above tokens showing GB-proposed terminal punctuation positions
 - **Capitalization Overlays**: Optional display of capitalization fixes without changing source text
 - **Terminal Dots**: Visual indicators for punctuation insertions from GB analysis
-- **Enhanced Infractions**: GB-only infractions panel with proper GRMR/SPELL/PUNC tagging
+- **Enhanced Infractions**: LT + Llama infractions panel with proper GRMR/SPELL/PUNC tagging
 - **Interactive Tooltips**: Hover over tokens to see error categories and suggestions
 - **Debug Logging**: Console output for development debugging with `__CBM_DEBUG__` flag
 - **New Annotation Module**: Created `src/lib/gbAnnotate.ts` with `annotateFromGb` and `buildCaretRow` functions
 - **CSS Styling**: Added comprehensive styles for caret states and token pill colors
 - **UI Integration**: Seamless integration with existing token display and infractions panel
 
-### Previous Improvements (v6.1) - GrammarBot Migration Polish
-- **Complete Migration**: Fully migrated from LanguageTool to GrammarBot for all grammar and spell checking
-- **Neural Network Processing**: Now uses GrammarBot's neural API for enhanced accuracy
-- **Secure API Proxy**: Server-side API key handling keeps credentials secure
+### Previous Improvements (v6.1) - LanguageTool Migration Polish
+- **Complete Migration**: Finished shifting from the hosted GrammarBot API to self-hosted LanguageTool + fixer containers
+- **Neural Network Processing**: LanguageTool still runs with neural rules enabled for enhanced accuracy
+- **Service Proxy**: Hardened the API routes that talk to LanguageTool/fixer/Redis inside the docker network
 - **Simplified Architecture**: Removed all LanguageTool code, rule filters, and LT→VT paths
 - **Enhanced Performance**: Streamlined grammar checking with neural network processing
-- **Updated UI**: All labels now show "GB-only" and "GrammarBot" instead of LT references
+- **Updated UI**: All labels now show "LT + Llama" and "LanguageTool" instead of LT references
 - **Pure GB Infractions**: Infractions list now renders directly from gb.edits with proper mapping
-- **Rate Limiting**: Added simple backoff handling for GrammarBot 429 responses
-- **Correction Preview**: Added GrammarBot correction preview banner for sanity checking
+- **Rate Limiting**: Added simple backoff handling for LanguageTool 429 responses
+- **Correction Preview**: Added LanguageTool correction preview banner for sanity checking
 - **Capitalization Toggle**: Added toggle to show/hide capitalization fixes in infractions
 - **Debug Parity Assert**: Added assertion that GB edits reproduce response.correction
-- **API Key Security**: Confirmed GRAMMARBOT_API_KEY is server-only and never logged
-- **Maintained Compatibility**: All existing features work seamlessly with GrammarBot
+- **Offline First**: Removed reliance on external API keys; all grammar runs stay local
+- **Maintained Compatibility**: All existing features work seamlessly with LanguageTool
 
-### Previous Improvements (v6.0) - GrammarBot Integration
-- **Initial Migration**: Migrated from LanguageTool to GrammarBot for all grammar and spell checking
-- **Neural Network Processing**: Now uses GrammarBot's neural API for enhanced accuracy
-- **Secure API Proxy**: Server-side API key handling keeps credentials secure
-- **Simplified Architecture**: Removed complex LanguageTool configuration and settings
-- **Enhanced Performance**: Streamlined grammar checking with neural network processing
-- **Updated UI**: All labels and indicators now reflect GrammarBot integration
-- **API Key Setup**: Simple environment variable configuration for GrammarBot API key
-- **Maintained Compatibility**: All existing features work seamlessly with GrammarBot
+### Previous Improvements (v6.0) - LanguageTool Integration
+- **Initial Migration**: Began the move from the hosted GrammarBot API to LanguageTool running in Docker
+- **Neural Network Processing**: Enabled LanguageTool's neural rule set for higher accuracy
+- **Service Proxy**: Added API routes that forward to the internal LanguageTool endpoint
+- **Simplified Architecture**: Removed complex GrammarBot configuration and rule filters
+- **Enhanced Performance**: Streamlined grammar checking with local container latency
+- **Updated UI**: All labels and indicators now reflect the LanguageTool integration
+- **Offline Ready**: Documented fallback defaults so development works without internet access
+- **Maintained Compatibility**: All existing features work seamlessly with LanguageTool
 
 ### Previous Improvements (v5.2) - API Proxy Rule Filtering Fix
 - **Fixed Rule Filtering**: Updated API proxy to properly handle form data and prevent artificial rule restrictions

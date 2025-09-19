@@ -9,7 +9,7 @@ This project aims to follow Keep a Changelog and Semantic Versioning.
  - UX: Clicking a word cycles its state and synchronizes both adjacent carets to the same state; clicking a caret cycles only that caret.
 - Added: Left-side Discard area to drag-remove tokens from the stream and KPIs; Undo button and Cmd/Ctrl+Z support.
 - Changed: KPIs compute CWS using word states plus caret flags instead of terminal groups.
- - Changed: Output pane now shows GrammarBot's full corrected text (`correction`) when available; otherwise it reconstructs by applying GB edits. This pane no longer reflects discarded tokens.
+- Changed: Output pane now shows the fixer service's corrected text (`fixed`) when available; otherwise it reconstructs by applying normalized edits. This pane no longer reflects discarded tokens.
 
 - UI: Responsive main container widened (`max-w-screen-xl`, `2xl:max-w-screen-2xl`) to better utilize large displays.
 - UI: Precise, computed left padding for Discard area using CSS variables (`--discard-x`, `--discard-w`) and `.with-discard-pad` at `xl+` to prevent overlap and keep symmetric spacing.
@@ -17,7 +17,7 @@ This project aims to follow Keep a Changelog and Semantic Versioning.
 
 - UX: Allow dragging individual carets to the Discard panel; removed carets are hidden and treated as non-blocking for CWS; Undo restores discarded carets.
 
-- Added: Aggregated “Infractions & Suggestions” list. Identical GrammarBot infractions are grouped by tag + replacement and shown with counts (e.g., `10× PUNC → .`), sorted by most frequent.
+- Added: Aggregated “Infractions & Suggestions” list. Identical LanguageTool infractions are grouped by tag + replacement and shown with counts (e.g., `10× PUNC → .`), sorted by most frequent.
 - Changed: Updated default sample text in the “Paste student writing” box to the provided passage.
 - Fixed: Netlify type error by adding optional `err_type` to `GBEdit` to align with `GbEdit`.
 - Docs: Updated README and codemap to describe the new Infractions aggregation behavior.
@@ -62,12 +62,12 @@ This project aims to follow Keep a Changelog and Semantic Versioning.
 
 ### OCR & Imports
 - Added: “Load Scan (PDF/PNG/JPG)” button on the scoring page to import scanned student work.
-- Added: Google Cloud Vision OCR backend at `POST /api/ocr`.
-  - Accepts `{ imageBase64?, imageUri?, lang? }` JSON; returns `{ text, raw }`.
+- Added: Self-hosted Tesseract OCR backend at `POST /api/ocr` (no Google Cloud dependency).
+  - Accepts `{ imageBase64?, imageUri?, lang? }` JSON; returns `{ text, raw, words, confidence }`.
 - Added: Server-side preprocessing with Sharp for OCR (autorotate, grayscale, normalize, median denoise, slight sharpen, threshold, trim/pad; light upsample for tiny scans).
 - Added: PDF support — PDFs render client-side page-by-page to images, each page OCR’d then concatenated.
 - Infra: Serve PDF.js worker and modules from same origin to avoid module/CORS issues (`/pdfjs/*`).
-- Docs: README updated with Google Vision env setup and OCR usage.
+- Docs: README updated with Tesseract setup and OCR usage.
 # Changelog
 
 ## Unreleased

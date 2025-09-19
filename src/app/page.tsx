@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Info, AlertTriangle, ListChecks, Settings } from "lucide-react";
 import type { Token as LibToken, VirtualTerminalInsertion } from "@/lib/types";
-import { checkWithGrammarBot } from "@/lib/gbClient";
+import { checkWithLanguageTool } from "@/lib/gbClient";
 import { gbEditsToInsertions } from "@/lib/gbToVT";
 import { annotateFromGb, buildCaretRow, groupInsertionsByBoundary, type CaretState, type DisplayToken as GbDisplayToken } from "@/lib/gbAnnotate";
 import { gbToVtInsertions, withParagraphFallbackDots, newlineBoundarySet } from "@/lib/paragraphUtils";
@@ -22,27 +22,23 @@ import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 
 // OCR types and helpers
-type OcrVertex = { x?: number; y?: number };
-type OcrBBox = { vertices?: OcrVertex[]; normalizedVertices?: OcrVertex[] };
-type OcrSymbol = { text?: string; property?: { detectedBreak?: { type?: string } } };
-type OcrWord = { symbols?: OcrSymbol[]; boundingBox?: OcrBBox };
-type OcrParagraph = { words?: OcrWord[] };
-type OcrBlock = { paragraphs?: OcrParagraph[] };
-type OcrPage = { blocks?: OcrBlock[] };
-type OcrFull = { fullTextAnnotation?: { text?: string; pages?: OcrPage[] } };
+type OcrBBox = { x0: number; y0: number; x1: number; y1: number };
 
 type OcrWordSpan = {
   text: string;
   start: number;
   end: number;
   pageIndex: number;
-  bbox: { x0: number; y0: number; x1: number; y1: number };
+  bbox: OcrBBox;
+  confidence?: number | null;
 };
 
 type OcrData = {
   text: string;
   pages: { imageSrc: string | null }[];
   words: OcrWordSpan[];
+  confidence: number | null;
+  engine?: string;
 };
 
 /**
@@ -129,7 +125,7 @@ const WORD_RE = /^[A-Za-z]+(?:[-'’][A-Za-z]+)*$/;
 const NUMERAL_RE = /^\d+(?:[\.,]\d+)*/;
 
 // ———————————— Demo Dictionary Packs ————————————
-// Tiny placeholder packs; in production, use GrammarBot for spell checking
+// Tiny placeholder packs; in production, rely on LanguageTool/fixer for spell checking
 const PACKS: Record<string, string[]> = {
   "us-k2": [
     "i","a","and","the","was","it","is","in","to","we","you","he","she","they","see","like","go","went","have","had",
@@ -384,6 +380,8 @@ function WritingScorer() {
   const [ocrError, setOcrError] = useState<string>("");
   const [ocr, setOcr] = useState<OcrData | null>(null);
   const ocrPageImagesRef = useRef<(HTMLImageElement|null)[]>([]);
+  const [savingSample, setSavingSample] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<string>("");
 
   // Load recent submissions for dropdown
   useEffect(() => {
@@ -413,45 +411,32 @@ function WritingScorer() {
     });
   }
 
-  function buildWordText(w: OcrWord): string {
-    const syms = w?.symbols ?? [];
-    return syms.map(s => s?.text ?? '').join('');
-  }
-
-  function bboxFromWord(w: OcrWord): { x0: number; y0: number; x1: number; y1: number } {
-    const verts = (w?.boundingBox?.vertices ?? []) as OcrVertex[];
-    if (!verts.length) return { x0: 0, y0: 0, x1: 0, y1: 0 };
-    const xs = verts.map(v => v?.x ?? 0);
-    const ys = verts.map(v => v?.y ?? 0);
-    const x0 = Math.max(0, Math.min(...xs));
-    const y0 = Math.max(0, Math.min(...ys));
-    const x1 = Math.max(0, Math.max(...xs));
-    const y1 = Math.max(0, Math.max(...ys));
-    return { x0, y0, x1, y1 };
-  }
-
-  function extractOcrWords(raw: OcrFull, pageIndex: number, baseOffset: number, baseText: string): OcrWordSpan[] {
-    const pages = raw?.fullTextAnnotation?.pages ?? [];
-    const words: OcrWordSpan[] = [];
-    let cursor = baseOffset;
-    const pg = pages[pageIndex];
-    if (!pg) return words;
-    for (const block of pg.blocks ?? []) {
-      for (const para of block.paragraphs ?? []) {
-        for (const word of para.words ?? []) {
-          const wt = buildWordText(word);
-          if (!wt) continue;
-          const start = (wt ? baseText.indexOf(wt, cursor) : -1);
-          if (start < 0) continue;
-          const end = start + wt.length;
-          words.push({ text: wt, start, end, pageIndex, bbox: bboxFromWord(word) });
-          cursor = end;
-          const nextCh = baseText[cursor];
-          if (nextCh && /\s/.test(nextCh)) cursor += 1;
-        }
-      }
-    }
-    return words;
+  function mapWordsFromResponse(rawWords: any, offset: number, pageIndex: number): OcrWordSpan[] {
+    if (!Array.isArray(rawWords)) return [];
+    return rawWords
+      .map((w) => {
+        const text = typeof w?.text === 'string' ? w.text : '';
+        if (!text) return null;
+        const start = Number.isFinite(w?.start) ? Number(w.start) + offset : null;
+        const end = Number.isFinite(w?.end) ? Number(w.end) + offset : (start != null ? start + text.length : null);
+        if (start == null || end == null) return null;
+        const bboxRaw = w?.bbox ?? {};
+        const bbox: OcrBBox = {
+          x0: Number.isFinite(bboxRaw?.x0) ? Number(bboxRaw.x0) : 0,
+          y0: Number.isFinite(bboxRaw?.y0) ? Number(bboxRaw.y0) : 0,
+          x1: Number.isFinite(bboxRaw?.x1) ? Number(bboxRaw.x1) : 0,
+          y1: Number.isFinite(bboxRaw?.y1) ? Number(bboxRaw.y1) : 0,
+        };
+        return {
+          text,
+          start,
+          end,
+          pageIndex,
+          bbox,
+          confidence: typeof w?.confidence === 'number' ? w.confidence : null,
+        } as OcrWordSpan;
+      })
+      .filter((w): w is OcrWordSpan => !!w);
   }
 
   async function ocrImage(file: File): Promise<{ text: string; ocr: OcrData | null }> {
@@ -466,15 +451,15 @@ function WritingScorer() {
     if (!res.ok) throw new Error(`OCR failed (${res.status})`);
     const json = await res.json();
     const textResp: string = (json?.text ?? '').trim();
-    const raw: OcrFull = json?.raw ?? {};
     const preSrc: string | null = json?.preprocessedImageBase64 ?? null;
-    let words: OcrWordSpan[] = [];
-    try {
-      if (raw?.fullTextAnnotation?.pages?.length) {
-        words = extractOcrWords(raw, 0, 0, textResp);
-      }
-    } catch {}
-    const ocr: OcrData = { text: textResp, pages: [{ imageSrc: preSrc }], words };
+    const words = mapWordsFromResponse(json?.words ?? [], 0, 0);
+    const ocr: OcrData = {
+      text: textResp,
+      pages: [{ imageSrc: preSrc }],
+      words,
+      confidence: typeof json?.confidence === 'number' ? json.confidence : null,
+      engine: json?.engine || 'tesseract',
+    };
     return { text: textResp, ocr };
   }
 
@@ -512,6 +497,8 @@ function WritingScorer() {
     const texts: string[] = [];
     const pages: { imageSrc: string | null }[] = [];
     const allWords: OcrWordSpan[] = [];
+    let confidenceSum = 0;
+    let confidenceCount = 0;
     let offset = 0;
     for (let i = 0; i < canvases.length; i++) {
       setOcrStatus(`Uploading page ${i + 1}/${canvases.length}…`);
@@ -525,19 +512,25 @@ function WritingScorer() {
       const json = await res.json();
       const pageText = (json?.text ?? '').trim();
       texts.push(pageText);
-      const raw: OcrFull = json?.raw ?? {};
       const preSrc: string | null = json?.preprocessedImageBase64 ?? null;
       pages.push({ imageSrc: preSrc });
-      try {
-        if (raw?.fullTextAnnotation?.pages?.length) {
-          const w = extractOcrWords(raw, 0, offset, pageText);
-          for (const it of w) allWords.push({ ...it, pageIndex: i });
-        }
-      } catch {}
+      const words = mapWordsFromResponse(json?.words ?? [], offset, i);
+      for (const span of words) allWords.push(span);
+      if (typeof json?.confidence === 'number') {
+        confidenceSum += json.confidence;
+        confidenceCount += 1;
+      }
       offset += pageText.length + 2; // for the join with \n\n
     }
     const combined = texts.filter(Boolean).join('\n\n');
-    const ocr: OcrData = { text: combined, pages, words: allWords };
+    const avgConfidence = confidenceCount ? confidenceSum / confidenceCount : null;
+    const ocr: OcrData = {
+      text: combined,
+      pages,
+      words: allWords,
+      confidence: avgConfidence,
+      engine: 'tesseract',
+    };
     return { text: combined, ocr };
   }
 
@@ -903,14 +896,14 @@ function WritingScorer() {
   const [gb, setGb] = useState<{edits: any[], correction?: string} | null>(null);
   const [showCaps, setShowCaps] = useState(true);
   
-  // GrammarBot settings state
+  // Grammar service settings state
   const [showSettings, setShowSettings] = useState(false);
   const [showCapitalizationFixes, setShowCapitalizationFixes] = useState(true);
   const lastCheckedText = useRef<string>("");    // to avoid duplicate checks
   const grammarRunId = useRef<number>(0);        // cancellation token for in-flight checks
 
   // Simple grammar mode label
-  const grammarModeLabel = "GB-only";
+  const grammarModeLabel = "LT + Llama";
   
   // Submissions (load and select)
   const [submissions, setSubmissions] = useState<Array<{ id: string; student_name: string|null; submitted_at: string|null; duration_seconds: number|null }>>([]);
@@ -949,7 +942,7 @@ function WritingScorer() {
   useEffect(() => {
     let alive = true;
     (async () => {
-      const resp = await checkWithGrammarBot(text);
+      const resp = await checkWithLanguageTool(text);
       if (alive) {
         setGb(resp);
         // Initialize token models and terminal groups from GB data
@@ -1027,14 +1020,14 @@ function WritingScorer() {
     const url = canvas.toDataURL('image/png');
     setTokenCrops(prev => ({ ...prev, [ti]: url }));
   }, [ocr, displayTokens, tokenCrops]);
-  // Detect GrammarBot availability/error from client response
+  // Detect LanguageTool/fixer availability/error from client response
   const gbError: string | null = useMemo(() => {
     const anyGb = gb as any;
     if (!anyGb) return null;
     if (typeof anyGb.status === 'number' && anyGb.status >= 400) {
-      return anyGb.error || `GrammarBot error (${anyGb.status})`;
+      return anyGb.error || `LanguageTool fixer error (${anyGb.status})`;
     }
-    if (!Array.isArray(anyGb.edits)) return 'GrammarBot unavailable (no edits)';
+    if (!Array.isArray(anyGb.edits)) return 'LanguageTool fixer unavailable (no edits)';
     return null;
   }, [gb]);
 
@@ -1074,9 +1067,9 @@ function WritingScorer() {
     });
   }, [vtInsertions, displayTokens.length, ui.tokens]);
 
-  // Build final output text from GrammarBot's full correction
+  // Build final output text from the fixer/LanguageTool correction
   const finalOutputText = useMemo(() => {
-    // Prefer `correction` from GrammarBot when available
+    // Prefer `fixed` (or `correction`) from the fixer service when available
     if (gb?.correction && typeof gb.correction === 'string') return gb.correction;
 
     // Fallback: apply edits to original text (reverse order to preserve offsets)
@@ -1190,6 +1183,14 @@ function WritingScorer() {
       replace: e.replace,
     })), [gb, text]);
 
+  const llamaVerdict = useMemo(() => (gb?.llamaVerdict ?? null) as (typeof gb & { llamaVerdict?: any })['llamaVerdict'], [gb]);
+  const llamaSummary = useMemo(() => {
+    if (!llamaVerdict || llamaVerdict.status !== 'ok') return null;
+    const decisions = Array.isArray(llamaVerdict.decisions) ? llamaVerdict.decisions : [];
+    const flagged = decisions.filter((d: any) => d && d.keep === false);
+    return { decisions, flagged };
+  }, [llamaVerdict]);
+
   // Debug: assert parity between GB edits and correction
   useEffect(() => {
     if (gb?.edits && gb?.correction && DEBUG) {
@@ -1238,6 +1239,48 @@ function WritingScorer() {
     pdf.addImage(img, "PNG", 0, 0, canvas.width * ratio, canvas.height * ratio);
     pdf.save("cbm-report.pdf");
   };
+
+  const persistSample = useCallback(async () => {
+    if (!text.trim()) {
+      setSaveMessage('Enter sample text first');
+      setTimeout(() => setSaveMessage(''), 2500);
+      return;
+    }
+    setSavingSample(true);
+    try {
+      const payload = {
+        source: ocr ? 'ocr' : 'manual',
+        originalText: text,
+        fixedText: gb?.correction ?? null,
+        grammarEdits: gb?.edits ?? [],
+        llamaVerdict: llamaVerdict ?? null,
+        metrics: {
+          tww: kpis.tww,
+          wsc: kpis.wsc,
+          cws: kpis.cws,
+          eligible: kpis.eligible,
+          minutes: ui.minutes ?? null,
+        },
+      };
+      const res = await fetch('/api/generator/samples', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        throw new Error(`Save failed (${res.status}) ${body ? '- ' + body : ''}`.trim());
+      }
+      const data = await res.json().catch(() => ({}));
+      const id = data?.id ? `#${data.id}` : '✓';
+      setSaveMessage(`Saved sample ${id}`);
+    } catch (err: any) {
+      setSaveMessage(err?.message || 'Save failed');
+    } finally {
+      setSavingSample(false);
+      setTimeout(() => setSaveMessage(''), 4000);
+    }
+  }, [text, gb, llamaVerdict, kpis, ui.minutes, ocr]);
 
   // Clear session data function
   const handleClearSessionData = () => {
@@ -1352,7 +1395,7 @@ function WritingScorer() {
 
             {gbError && (
               <div className="mt-2 p-2 rounded-lg bg-amber-50 border border-amber-300 text-xs text-amber-900">
-                GrammarBot unavailable: {gbError}. Set GRAMMARBOT_API_KEY in .env.local and restart the dev server.
+            Grammar assistant unavailable: {gbError}. Ensure FIXER_URL and LT_BASE_URL point at the stack services.
               </div>
             )}
 
@@ -1406,7 +1449,7 @@ function WritingScorer() {
           {/* RIGHT: Metrics grid (2 rows × 3 cards) + infractions */}
           <div id="report-pane" className="space-y-4">
             {/* Export buttons */}
-            <div className="flex gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={exportCSV}
                 className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
@@ -1419,6 +1462,21 @@ function WritingScorer() {
               >
                 Export PDF
               </button>
+              <button
+                onClick={persistSample}
+                disabled={savingSample}
+                className={cn(
+                  'px-3 py-1 text-sm rounded transition-colors border border-emerald-300',
+                  savingSample ? 'bg-emerald-100 text-emerald-600 opacity-70 cursor-not-allowed' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                )}
+              >
+                {savingSample ? 'Saving…' : 'Save sample to SQL'}
+              </button>
+              {saveMessage && (
+                <span className="text-xs text-slate-600">
+                  {saveMessage}
+                </span>
+              )}
             </div>
             {/* Metrics grid */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -1461,6 +1519,47 @@ function WritingScorer() {
               <div className="text-sm text-blue-700 whitespace-pre-wrap break-words">{finalOutputText}</div>
             </div>
 
+            {llamaVerdict && (
+              <div className="p-3 rounded-lg border border-emerald-200 bg-emerald-50/70">
+                <div className="flex items-center justify-between text-sm font-medium text-emerald-800">
+                  <span>LLM sanity check</span>
+                  <span className="text-xs uppercase tracking-wide">Llama</span>
+                </div>
+                <div className="mt-1 text-xs text-emerald-900 space-y-1">
+                  {llamaVerdict.status === 'error' && (
+                    <div className="text-red-600">LLM error: {llamaVerdict.error || 'unknown error'}</div>
+                  )}
+                  {llamaVerdict.status === 'skipped' && (
+                    <div>No sanity check run (no edits detected).</div>
+                  )}
+                  {llamaVerdict.status === 'ok' && llamaSummary && llamaSummary.decisions.length > 0 && (
+                    <div>
+                      <div className="font-medium">
+                        {llamaSummary.flagged.length === 0
+                          ? 'All suggested edits look reasonable.'
+                          : `${llamaSummary.flagged.length} edit${llamaSummary.flagged.length === 1 ? '' : 's'} flagged for review.`}
+                      </div>
+                      {llamaSummary.flagged.length > 0 && (
+                        <ul className="mt-1 space-y-1">
+                          {llamaSummary.flagged.slice(0, 5).map((d: any) => (
+                            <li key={d.index} className="pl-2 border-l-2 border-amber-400 text-amber-800">
+                              Edit #{d.index + 1}: {d.reason || 'Review manually.'}
+                            </li>
+                          ))}
+                          {llamaSummary.flagged.length > 5 && (
+                            <li className="text-emerald-700">…and {llamaSummary.flagged.length - 5} more.</li>
+                          )}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+                  {llamaVerdict.status === 'ok' && (!llamaSummary || llamaSummary.decisions.length === 0) && (
+                    <div>No LLM feedback returned.</div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Infractions & Suggestions list — always visible now */}
             <div>
               <div className="mb-2 text-sm font-medium">Infractions &amp; Suggestions</div>
@@ -1473,7 +1572,7 @@ function WritingScorer() {
           <p className="font-medium">Scoring guidance</p>
           <ul className="list-disc ml-5 space-y-1">
             <li><strong>TWW</strong>: all words written; include misspellings; exclude numerals.</li>
-            <li><strong>WSC</strong>: each correctly spelled word in isolation (override by clicking). Uses GrammarBot for spell checking; otherwise, a custom-lexicon fallback is used.</li>
+            <li><strong>WSC</strong>: each correctly spelled word in isolation (override by clicking). Uses LanguageTool + fixer service for spell checking; otherwise, a custom-lexicon fallback is used.</li>
             <li><strong>CWS</strong>: adjacent units (words & essential punctuation). Commas excluded. Initial valid word counts 1. Capitalize after terminals.</li>
           </ul>
         </div>
@@ -1484,7 +1583,7 @@ function WritingScorer() {
             <div className="flex items-center gap-2">
               <span>Privacy:</span>
               <span className="px-2 py-1 rounded text-xs font-medium bg-amber-100 text-amber-700">
-                GrammarBot cloud service (API key required)
+                LanguageTool, Tesseract & Llama (Docker stack)
               </span>
             </div>
             <div className="flex items-center gap-3">
@@ -1526,7 +1625,7 @@ export default function CBMApp(): JSX.Element {
               <li><strong>Dictionary packs</strong>: demo packs included; swap in real dictionaries or WASM spellcheckers for production.</li>
               <li><strong>Capitalization & terminals</strong>: heuristic checks flag definite/possible issues for quick review.</li>
               <li><strong>Overrides</strong>: click words to toggle WSC; word clicks also synchronize the two adjacent carets to match the word. Click a caret to cycle that boundary independently.</li>
-              <li><strong>Extensibility</strong>: uses GrammarBot for spell checking; add POS-based rules if desired.</li>
+              <li><strong>Extensibility</strong>: uses LanguageTool + fixer for spell checking; add POS-based rules if desired.</li>
             </ul>
           </CardContent>
         </Card>
