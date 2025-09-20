@@ -13,6 +13,22 @@ log() {
   printf '\n[ColdStart] %s\n' "$1"
 }
 
+if [[ -z "${NVM_DIR:-}" && -d "$HOME/.nvm" ]]; then
+  export NVM_DIR="$HOME/.nvm"
+fi
+if [[ -n "${NVM_DIR:-}" && -s "$NVM_DIR/nvm.sh" ]]; then
+  # shellcheck disable=SC1090
+  . "$NVM_DIR/nvm.sh"
+fi
+if command -v nvm >/dev/null 2>&1; then
+  log "Using Node.js 20 via nvm"
+  nvm use 20 >/dev/null 2>&1 || {
+    log "Node.js 20 not installed in nvm; installing"
+    nvm install 20 >/dev/null 2>&1
+    nvm use 20 >/dev/null 2>&1
+  }
+fi
+
 free_port() {
   local port="$1"
   if ! command -v lsof >/dev/null 2>&1; then
@@ -25,6 +41,18 @@ free_port() {
     kill $pids 2>/dev/null || kill -9 $pids 2>/dev/null || true
     sleep 1
   fi
+}
+
+wait_for_docker() {
+  local attempts=${1:-30}
+  local delay=${2:-2}
+  for ((i = 1; i <= attempts; i++)); do
+    if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep "$delay"
+  done
+  return 1
 }
 
 ensure_tool() {
@@ -56,6 +84,11 @@ if command -v colima >/dev/null 2>&1; then
   else
     log "Skipping Colima restart (RESTART_COLIMA=${RESTART_COLIMA})"
   fi
+  if eval "$(colima docker-env --shell bash)" >/dev/null 2>&1; then
+    log "Configured Docker CLI to use Colima daemon"
+  else
+    log "Warning: failed to configure docker-env; Docker commands may not connect"
+  fi
 fi
 
 if command -v ollama >/dev/null 2>&1; then
@@ -77,18 +110,18 @@ if [[ "${FORCE_FREE_PORTS:-1}" == "1" ]]; then
   free_port 11434
 fi
 
+docker_ready=0
 if command -v docker >/dev/null 2>&1 || command -v docker-compose >/dev/null 2>&1; then
   log "Waiting for Docker daemon"
-  for _ in {1..10}; do
-    if docker info >/dev/null 2>&1; then
-      break
-    fi
-    sleep 2
-  done
+  if wait_for_docker 40 2; then
+    docker_ready=1
+  else
+    log "Docker daemon did not become ready; container startup will be skipped"
+  fi
 fi
 
 if [[ -f "docker-compose.local.yml" ]]; then
-  if command -v docker >/dev/null 2>&1 || command -v docker-compose >/dev/null 2>&1; then
+  if [[ "$docker_ready" == "1" ]]; then
     COMPOSE_SERVICES=""
     if docker compose version >/dev/null 2>&1; then
       COMPOSE_SERVICES="$(docker compose -f docker-compose.local.yml config --services | tr '\n' ' ')"
@@ -107,7 +140,7 @@ if [[ -f "docker-compose.local.yml" ]]; then
       log "No services detected in docker-compose.local.yml; skipping container startup"
     fi
   else
-    log "Docker not available; skipping container startup"
+    log "Docker not available or not ready; skipping container startup"
   fi
 else
   log "docker-compose.local.yml not found; skipping container startup"
