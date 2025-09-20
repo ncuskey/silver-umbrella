@@ -31,10 +31,60 @@ else
   log "Skipping npm install (SKIP_INSTALL=1)"
 fi
 
+if command -v colima >/dev/null 2>&1; then
+  if [[ "${RESTART_COLIMA:-1}" == "1" ]]; then
+    if colima status >/dev/null 2>&1; then
+      log "Stopping existing Colima instance to free ports"
+      colima stop || log "colima stop reported an error (continuing)"
+    fi
+    log "Starting Colima"
+    colima start
+  else
+    log "Skipping Colima restart (RESTART_COLIMA=${RESTART_COLIMA})"
+  fi
+fi
+
+if command -v ollama >/dev/null 2>&1; then
+  if [[ "${STOP_HOST_OLLAMA:-1}" == "1" ]]; then
+    log "Stopping host Ollama service"
+    ollama stop || log "ollama stop reported an error (continuing)"
+    if command -v brew >/dev/null 2>&1 && brew services list | grep -q "^ollama"; then
+      brew services stop ollama || log "brew services stop ollama reported an error (continuing)"
+    fi
+  else
+    log "Skipping host Ollama stop (STOP_HOST_OLLAMA=${STOP_HOST_OLLAMA})"
+  fi
+fi
+
+if command -v docker >/dev/null 2>&1 || command -v docker-compose >/dev/null 2>&1; then
+  log "Waiting for Docker daemon"
+  for _ in {1..10}; do
+    if docker info >/dev/null 2>&1; then
+      break
+    fi
+    sleep 2
+  done
+fi
+
 if [[ -f "docker-compose.local.yml" ]]; then
-  if command -v docker >/dev/null 2>&1; then
-    log "Starting local containers (LanguageTool, fixer, Ollama)"
-    docker compose -f docker-compose.local.yml up -d languagetool fixer ollama
+  if command -v docker >/dev/null 2>&1 || command -v docker-compose >/dev/null 2>&1; then
+    COMPOSE_SERVICES=""
+    if docker compose version >/dev/null 2>&1; then
+      COMPOSE_SERVICES="$(docker compose -f docker-compose.local.yml config --services | tr '\n' ' ')"
+    elif command -v docker-compose >/dev/null 2>&1; then
+      COMPOSE_SERVICES="$(docker-compose -f docker-compose.local.yml config --services | tr '\n' ' ')"
+    fi
+
+    if [[ -n "$COMPOSE_SERVICES" ]]; then
+      log "Starting local containers ($COMPOSE_SERVICES)"
+      if docker compose version >/dev/null 2>&1; then
+        docker compose -f docker-compose.local.yml up -d $COMPOSE_SERVICES
+      else
+        docker-compose -f docker-compose.local.yml up -d $COMPOSE_SERVICES
+      fi
+    else
+      log "No services detected in docker-compose.local.yml; skipping container startup"
+    fi
   else
     log "Docker not available; skipping container startup"
   fi
