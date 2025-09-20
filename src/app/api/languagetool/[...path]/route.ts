@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const DEFAULT_LT_BASE = "http://languagetool:8010";
+const DEFAULT_DISABLE_RULES = [
+  "PASSIVE_VOICE",
+  "PASSIVE_VOICE_SIMPLE",
+  "TOO_WORDY",
+  "WORDINESS",
+  "REDUNDANT_EXPRESSION",
+  "WEASEL_WORDS"
+];
 
 function ltBase() {
   return process.env.LT_BASE_URL || process.env.LANGUAGETOOL_URL || DEFAULT_LT_BASE;
@@ -27,16 +35,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ pat
   const params_obj = new URLSearchParams();
   for (const [k, v] of form.entries()) params_obj.append(k, String(v));
 
-  // Ensure we are NOT restricting categories/rules on the server
-  // (Only honor them if the client explicitly sent them.)
-  if (!params_obj.has("level")) params_obj.set("level", "default");      // or "picky" if you prefer
+  // Default to picky US English unless caller overrides
+  if (!params_obj.has("language")) params_obj.set("language", "en-US");
+  if (!params_obj.has("level")) params_obj.set("level", "picky");
   if (!params_obj.has("enabledOnly")) params_obj.set("enabledOnly", "false");
+
+  if (!form.has("disabledRules")) {
+    params_obj.delete("disabledRules");
+    DEFAULT_DISABLE_RULES.forEach(rule => params_obj.append("disabledRules", rule));
+  }
+
   // Do NOT set enabledCategories / enabledRules here.
   // If older code added them, delete those defaults now:
   if (!form.has("enabledCategories")) params_obj.delete("enabledCategories");
   if (!form.has("enabledRules")) params_obj.delete("enabledRules");
   if (!form.has("disabledCategories")) params_obj.delete("disabledCategories");
-  if (!form.has("disabledRules")) params_obj.delete("disabledRules");
 
   const upstream = await fetch(upstreamUrl, {
     method: "POST",

@@ -1,9 +1,9 @@
-import { Pool, PoolConfig, QueryResult } from 'pg'
+import { Pool, PoolConfig, QueryResult, type QueryResultRow } from 'pg'
 
 type SqlTag = {
-  <T = any>(strings: TemplateStringsArray, ...values: any[]): Promise<T[]>;
-  query<T = any>(strings: TemplateStringsArray, ...values: any[]): Promise<T[]>;
-  raw: <T = any>(text: string, params?: any[]) => Promise<QueryResult<T>>;
+  <T extends QueryResultRow = QueryResultRow>(strings: TemplateStringsArray, ...values: any[]): Promise<T[]>;
+  query<T extends QueryResultRow = QueryResultRow>(strings: TemplateStringsArray, ...values: any[]): Promise<T[]>;
+  raw: <T extends QueryResultRow = QueryResultRow>(text: string, params?: any[]) => Promise<QueryResult<T>>;
 };
 
 let pool: Pool | null = null;
@@ -52,14 +52,14 @@ export function getSql() {
     return { text, values }
   }
 
-  const tag = (async <T = any>(strings: TemplateStringsArray, ...values: any[]) => {
+  const tag = (async <T extends QueryResultRow = QueryResultRow>(strings: TemplateStringsArray, ...values: any[]) => {
     const { text, values: params } = buildQuery(strings, values)
     const res = await pool!.query<T>(text, params)
     return res.rows
   }) as SqlTag
 
   tag.query = tag
-  tag.raw = async <T = any>(text: string, params: any[] = []) => {
+  tag.raw = async <T extends QueryResultRow = QueryResultRow>(text: string, params: any[] = []) => {
     return pool!.query<T>(text, params)
   }
 

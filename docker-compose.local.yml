@@ -1,0 +1,28 @@
+version: "3.8"
+
+services:
+  languagetool:
+    image: erikvl87/languagetool:latest
+    restart: unless-stopped
+    environment:
+      LT_LANGUAGE_MODEL: "EN"
+    ports:
+      - "8010:8010"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8010/v2/check", "-H", "content-type: application/x-www-form-urlencoded", "--data", "text=ping&language=en-US"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+
+volumes:
+  ollama-models:
+    driver: local

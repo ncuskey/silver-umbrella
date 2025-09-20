@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import SiteNav from '@/components/SiteNav'
+import { warnIfInvalidAssetPrefix } from '@/lib/runtimeWarnings'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -15,6 +16,9 @@ export default function RootLayout({
 }: {
   children: React.ReactNode
 }) {
+  if (typeof window !== 'undefined') {
+    warnIfInvalidAssetPrefix()
+  }
   return (
     <html lang="en">
       <head>

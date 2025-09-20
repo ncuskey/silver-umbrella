@@ -1,5 +1,5 @@
 import type { Token, VirtualTerminalInsertion } from "./types";
-import type { GbEdit } from "./gbClient";
+import type { LtEdit } from "./ltClient";
 
 const TERMS = [".","!","?"] as const;
 const isWord = (t: Token) => /\w/.test(t.raw?.[0] ?? "");
@@ -29,7 +29,7 @@ function termFromReplace(original: string, repl: string) {
 export function gbEditsToInsertions(
   text: string, 
   tokens: Token[], 
-  edits: GbEdit[]
+  edits: LtEdit[]
 ): VirtualTerminalInsertion[] {
   const out: VirtualTerminalInsertion[] = [];
   const seen = new Set<number>();

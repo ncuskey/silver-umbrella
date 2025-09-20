@@ -1,4 +1,4 @@
-import type { GbEdit } from "./gbClient";
+import type { LtEdit } from "./ltClient";
 import type { Token, VirtualTerminalInsertion } from "./types";
 
 export function groupInsertionsByBoundary(
@@ -19,7 +19,7 @@ export type UiState = "correct" | "incorrect" | "possible";
 export type DisplayToken = Token & {
   ui: UiState;
   overlay?: string;        // optional display text (e.g., capitalization)
-  gbHits?: GbEdit[];       // edits intersecting this token
+  gbHits?: LtEdit[];       // edits intersecting this token
 };
 
 const TERMS = new Set([".", "!", "?"]);
@@ -28,7 +28,7 @@ const isWord = (t: Token) => /\w/.test(t.raw?.[0] ?? "");
 export function annotateFromGb(
   text: string,
   tokens: Token[],
-  edits: GbEdit[],
+  edits: LtEdit[],
   opts?: { showCaps?: boolean }
 ): DisplayToken[] {
   const out: DisplayToken[] = tokens.map(t => ({ ...t, ui: "correct" as UiState, gbHits: [] }));

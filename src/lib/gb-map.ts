@@ -1,25 +1,16 @@
 import type { Token } from "./types";
 import type { TokenModel } from "@/components/Token";
 import type { TerminalGroupModel } from "@/components/TerminalGroup";
+import type { LtEdit } from "./ltClient";
 import { buildTerminalGroups as buildTerminalGroupsNew } from "./buildTerminalGroups";
 import { gbToVtInsertions, withParagraphFallbackDots } from "./paragraphUtils";
 
 export type TokState = 'ok' | 'maybe' | 'bad';
 
-export interface GBEdit {
-  start: number;
-  end: number;
-  err_cat?: string;
-  replace: string;
-  err_desc?: string;
-  err_type?: string;
-  edit_type?: string;
-}
-
 export function bootstrapStatesFromGB(
   text: string,
   tokens: Token[],
-  edits: GBEdit[]
+  edits: LtEdit[]
 ): { tokenModels: TokenModel[]; terminalGroups: TerminalGroupModel[] } {
   // 1) Create token models with initial states
   const tokenModels: TokenModel[] = tokens.map((token, index) => ({

@@ -7,7 +7,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Info, AlertTriangle, ListChecks, Settings } from "lucide-react";
 import type { Token as LibToken, VirtualTerminalInsertion } from "@/lib/types";
-import { checkWithLanguageTool } from "@/lib/gbClient";
+import { checkWithLanguageTool, type LtResponse } from "@/lib/ltClient";
+import { ltToTokens, type TokenHint } from "@/lib/languagetoolAdapter";
 import { gbEditsToInsertions } from "@/lib/gbToVT";
 import { annotateFromGb, buildCaretRow, groupInsertionsByBoundary, type CaretState, type DisplayToken as GbDisplayToken } from "@/lib/gbAnnotate";
 import { gbToVtInsertions, withParagraphFallbackDots, newlineBoundarySet } from "@/lib/paragraphUtils";
@@ -18,6 +19,9 @@ import { Token, type TokenModel } from "@/components/Token";
 import { bootstrapStatesFromGB, type TokState } from "@/lib/gb-map";
 import { useTokensAndGroups } from "@/lib/useTokensAndGroups";
 import { computeKpis } from "@/lib/computeKpis";
+import { analyzeText } from "@/lib/cbmHeuristics";
+import type { HeuristicsResult } from "@/lib/cbmHeuristics";
+import type { LlamaFinding } from "@/lib/llamaVerifier";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 
@@ -114,11 +118,11 @@ const triForGroup = (group: any, pairOverrides: Record<number, { cws?: boolean }
 
 interface Infraction {
   source: string;
-  tag?: string;
-  category: string;
-  message: string;
+  ruleId: string;
+  label: string;
   span: string;
-  replace: string;
+  start: number;
+  end: number;
 }
 
 const WORD_RE = /^[A-Za-z]+(?:[-'’][A-Za-z]+)*$/;
@@ -338,30 +342,40 @@ function InfractionList({ items }: { items: Infraction[] }) {
   if (!items.length) return <div className="text-sm text-muted-foreground">No infractions flagged.</div>;
 
   const groups = useMemo(() => {
-    const map = new Map<string, { count: number; tag: string; replace: string }>();
-    for (const f of items) {
-      const tag = (f.tag || f.category || "").toUpperCase();
-      const rep = (f.replace || "").trim();
-      const key = `${tag}|${rep}`;
+    const map = new Map<string, { count: number; ruleId: string; label: string; example: string }>();
+    for (const entry of items) {
+      const ruleId = entry.ruleId || "LT_RULE";
+      const label = entry.label || ruleId;
+      const key = `${ruleId}|${label}`;
       const prev = map.get(key);
-      if (prev) prev.count += 1;
-      else map.set(key, { count: 1, tag, replace: rep });
+      if (prev) {
+        prev.count += 1;
+        if (!prev.example && entry.span) prev.example = entry.span;
+      } else {
+        map.set(key, { count: 1, ruleId, label, example: entry.span });
+      }
     }
-    return Array.from(map.values()).sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+    return Array.from(map.values()).sort((a, b) => b.count - a.count || a.ruleId.localeCompare(b.ruleId));
   }, [items]);
 
   return (
     <div className="space-y-2">
-      {groups.map((g, i) => (
-        <div key={i} className="text-sm p-2 rounded-xl border border-amber-300 bg-amber-50">
-          <div className="flex items-center gap-2">
-            <ListChecks className="h-4 w-4" />
-            <span className="inline-flex items-center rounded bg-slate-200 px-2 py-0.5 text-xs font-medium">{g.count}×</span>
-            <Badge variant="secondary">{g.tag}</Badge>
-            {g.replace && <span className="text-xs text-muted-foreground">→ {g.replace}</span>}
+      {groups.map((g, i) => {
+        const trimmed = g.example ? (g.example.length > 80 ? `${g.example.slice(0, 77)}…` : g.example) : "";
+        return (
+          <div key={i} className="text-sm p-2 rounded-xl border border-amber-300 bg-amber-50">
+            <div className="flex items-center gap-2">
+              <ListChecks className="h-4 w-4" />
+              <span className="inline-flex items-center rounded bg-slate-200 px-2 py-0.5 text-xs font-medium">{g.count}×</span>
+              <Badge variant="secondary">{g.ruleId}</Badge>
+            </div>
+            <div className="mt-1 text-xs text-slate-700">{g.label}</div>
+            {trimmed && (
+              <div className="mt-1 text-xs text-muted-foreground italic">“{trimmed}”</div>
+            )}
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -757,32 +771,19 @@ function WritingScorer() {
   // accessibility + click
   // Build simple tooltip text from GB hits
   function tooltipForToken(i: number): string | undefined {
-    const t = displayTokens[i] as any;
-    const hits = (t?.gbHits ?? []) as Array<{ start:number; end:number; replace?:string; err_cat?:string; err_type?:string; err_desc?:string; edit_type?:string }>;
-    if (!hits.length) return undefined;
-    const labels: string[] = [];
-    for (const e of hits) {
-      const cat = (e.err_cat || "").toUpperCase();
-      const rep = e.replace || "";
-      const original = text.slice(e.start, e.end);
-      const isCap = !!(rep && original && rep.toLowerCase() === original.toLowerCase() && rep !== original);
-      if (cat === 'SPELL') {
-        labels.push(`Spelling → ${rep}`);
-      } else if (cat === 'GRMR') {
-        if (isCap) labels.push('Capitalization');
-        else if (/n't|’t/.test(rep)) labels.push(`Contraction → ${rep}`);
-        else if (/\b(was|were|is|are|has|have|do|does|did|go|went|run|running)\b/i.test(rep)) labels.push(`Grammar → ${rep}`);
-        else labels.push('Grammar');
-      } else if (cat === 'PUNC' && /[.!?]/.test(rep)) {
-        labels.push(`Add terminal: ${rep}`);
-      } else if (cat) {
-        labels.push(cat);
-      }
-    }
-    // de-dupe while preserving order
+    const hints = tokenHintMap.get(i) ?? [];
+    if (!hints.length) return undefined;
     const seen = new Set<string>();
-    const uniq = labels.filter(l => (seen.has(l) ? false : (seen.add(l), true)));
-    return uniq.join('; ');
+    const labels = hints
+      .map((hint) => (hint.label || hint.ruleId || ""))
+      .filter((label) => {
+        if (!label) return false;
+        const key = label.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    return labels.join("; ");
   }
 
   function tipForCaret(bi: number): string | undefined {
@@ -892,8 +893,13 @@ function WritingScorer() {
   // If code referenced user-chosen dictionary packs, freeze to auto/default behavior.
   const selectedPacks: string[] = useMemo(() => ["us-k2","us-k5","general"], []);
   
+  const heuristics = useMemo<HeuristicsResult>(() => analyzeText(text), [text]);
+  const [llamaFindings, setLlamaFindings] = useState<LlamaFinding[]>([]);
+  const [llamaStatus, setLlamaStatus] = useState<"idle" | "running" | "error" | "disabled">("idle");
+  const [llamaError, setLlamaError] = useState<string | null>(null);
 
-  const [gb, setGb] = useState<{edits: any[], correction?: string} | null>(null);
+  const [gb, setGb] = useState<(LtResponse & { edits?: any[]; correction?: string }) | null>(null);
+  const [ltHints, setLtHints] = useState<TokenHint[]>([]);
   const [showCaps, setShowCaps] = useState(true);
   
   // Grammar service settings state
@@ -941,10 +947,12 @@ function WritingScorer() {
 
   useEffect(() => {
     let alive = true;
+    setLtHints([]);
     (async () => {
       const resp = await checkWithLanguageTool(text);
       if (alive) {
         setGb(resp);
+        setLtHints(ltToTokens(resp));
         // Initialize token models and terminal groups from GB data
         const gbEdits = resp?.edits ?? [];
         const { tokenModels: newTokenModels } = bootstrapStatesFromGB(text, tokens, gbEdits) as any;
@@ -953,6 +961,56 @@ function WritingScorer() {
     })();
     return () => { alive = false; };
   }, [text, tokens, setTokenModels]);
+
+  useEffect(() => {
+    if (!text.trim()) {
+      setLlamaFindings([]);
+      setLlamaStatus("idle");
+      setLlamaError(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    (async () => {
+      try {
+        setLlamaStatus("running");
+        setLlamaError(null);
+        const res = await fetch("/api/verifier", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, ltEdits: gb?.edits ?? [] }),
+          signal: controller.signal,
+        });
+        if (!res.ok) {
+          throw new Error(await res.text());
+        }
+        const data = await res.json();
+        if (controller.signal.aborted) return;
+        if (data?.disabled) {
+          setLlamaStatus("disabled");
+          setLlamaFindings([]);
+        } else {
+          setLlamaStatus("idle");
+          setLlamaFindings(Array.isArray(data?.findings) ? data.findings : []);
+        }
+      } catch (err: any) {
+        if (controller.signal.aborted) return;
+        console.warn('[LLM] verifier error', err);
+        setLlamaStatus("error");
+        setLlamaError(String(err?.message || err));
+        setLlamaFindings([]);
+      }
+    })();
+
+    return () => { controller.abort(); };
+  }, [text, gb?.edits, heuristics]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && (window as any).__CBM_DEBUG__) {
+      (window as any).__CBM_HEURISTICS__ = heuristics;
+      (window as any).__CBM_LLAMA__ = { status: llamaStatus, findings: llamaFindings, error: llamaError };
+    }
+  }, [heuristics, llamaStatus, llamaFindings, llamaError]);
 
   const terminalInsertions = useMemo<VirtualTerminalInsertion[]>(() => {
     const edits = gb?.edits ?? [];
@@ -976,6 +1034,27 @@ function WritingScorer() {
     () => annotateFromGb(text, tokens, gb?.edits ?? [], { showCaps }),
     [text, tokens, gb, showCaps]
   );
+
+  const tokenHintMap = useMemo(() => {
+    const map = new Map<number, TokenHint[]>();
+    if (!ltHints.length || !displayTokens.length) return map;
+
+    for (let ti = 0; ti < displayTokens.length; ti++) {
+      const token: any = displayTokens[ti];
+      const start = typeof token?.start === 'number' ? token.start : null;
+      const end = typeof token?.end === 'number' ? token.end : null;
+      if (start == null || end == null) continue;
+
+      for (const hint of ltHints) {
+        if (hint.end <= start || hint.start >= end) continue;
+        const existing = map.get(ti);
+        if (existing) existing.push(hint);
+        else map.set(ti, [hint]);
+      }
+    }
+
+    return map;
+  }, [ltHints, displayTokens]);
 
   const caretRow = useMemo(() => buildCaretRow(tokens, vtInsertions), [tokens, vtInsertions]);
   
@@ -1172,18 +1251,29 @@ function WritingScorer() {
   const iws = 0;
   const ciws = 0;
 
-  // Infractions list (pure GB)
-  const infractions = useMemo(() =>
-    (gb?.edits ?? []).map(e => ({
-      source: "GB",
-      tag: (e.err_cat || e.edit_type || "").toUpperCase(),
-      category: e.err_cat ?? e.edit_type,
-      message: e.err_desc ?? "",
-      span: text.slice(e.start, e.end),
-      replace: e.replace,
-    })), [gb, text]);
+  // Infractions list derived from LanguageTool hints
+  const infractions = useMemo(() => {
+    if (!ltHints.length) return [] as Infraction[];
+    return ltHints.map((hint) => {
+      const safeStart = Math.max(0, Math.min(text.length, hint.start));
+      const safeEnd = Math.max(safeStart, Math.min(text.length, hint.end));
+      const spanRaw = text.slice(safeStart, safeEnd);
+      const span = spanRaw.trim() || spanRaw;
+      return {
+        source: "LT",
+        ruleId: hint.ruleId || "LT_RULE",
+        label: hint.label,
+        span,
+        start: safeStart,
+        end: safeEnd,
+      } satisfies Infraction;
+    });
+  }, [ltHints, text]);
 
-  const llamaVerdict = useMemo(() => (gb?.llamaVerdict ?? null) as (typeof gb & { llamaVerdict?: any })['llamaVerdict'], [gb]);
+  const llamaVerdict = useMemo(
+  () => (gb && 'llamaVerdict' in (gb as any) ? (gb as any).llamaVerdict : null),
+  [gb]
+);
   const llamaSummary = useMemo(() => {
     if (!llamaVerdict || llamaVerdict.status !== 'ok') return null;
     const decisions = Array.isArray(llamaVerdict.decisions) ? llamaVerdict.decisions : [];

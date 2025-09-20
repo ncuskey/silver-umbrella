@@ -28,8 +28,78 @@ A TypeScript React web application for Curriculum‑Based Measurement (CBM) writ
 - Added left-side Discard area: drag words or individual carets to remove them from the stream and KPIs; Undo via button or Cmd/Ctrl+Z.
 - KPIs now compute CWS using word states plus caret flags (no group acceptance needed).
 - Output text now shows the fixer service's corrected text (LanguageTool + irregular verb patcher). If the service omits a `fixed` field, the UI reconstructs the draft by applying the normalized edits. Discarded tokens do not affect this pane.
-- Grammar analysis now runs entirely on the self-hosted stack: `/api/grammarbot/v1/check` proxies to the dockerized LanguageTool container, runs the irregular verb fixer, then asks the local Ollama (Llama 3) instance to sanity-check high-risk edits.
+- Grammar analysis now runs entirely on the self-hosted stack: `/api/languagetool/v1/check` talks to the local LanguageTool container, and `/api/verifier` asks the local Llama (Ollama) instance to sanity-check high-risk edits.
 - OCR no longer depends on Tesseract. `/api/ocr` preprocesses uploads with Sharp and runs them through the bundled Tesseract worker so everything stays offline.
+
+## Local-first mode
+
+- **LanguageTool**: `${LT_BASE_URL:-http://127.0.0.1:8010}` (`/v2/check` endpoint, consumed by `/api/languagetool/v1/check`).
+- **Llama verifier**: `${LLM_BASE_URL:-http://127.0.0.1:11434/v1}` (Ollama-compatible `/chat/completions`, consumed by `/api/verifier`).
+
+Smoke test both services after bringing up the stack:
+
+```bash
+curl -s -X POST http://localhost:3000/api/languagetool/v1/check \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"I has an apple.","language":"en-US"}'
+
+curl -s -X POST http://localhost:3000/api/verifier \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"I has an apple.","mode":"quick"}'
+```
+
+### Local containers (LanguageTool + Ollama)
+
+Launch the local services from the project root:
+
+```bash
+docker compose -f docker-compose.local.yml up -d
+```
+
+Set the endpoints for the Next.js app (e.g., in your shell or `.env.local`):
+
+```bash
+export LT_BASE_URL="http://127.0.0.1:8010"
+export LLM_BASE_URL="http://127.0.0.1:11434/v1"
+```
+
+After the containers are healthy, load the Llama model once to ensure it is downloaded:
+
+```bash
+ollama run llama3.1:8b-instruct
+```
+
+> Tip: use `npm run smoke:lt` and `npm run smoke:llm` to confirm both services return HTTP 200.
+
+### Cold start helper
+
+For a clean reboot you can run the bundled helper:
+
+```bash
+scripts/cold-start.sh
+```
+
+This script performs the following:
+
+1. Verifies your Node.js version matches the project requirement.
+2. Runs `npm install` (skip with `SKIP_INSTALL=1`).
+3. Starts the local Docker services defined in `docker-compose.local.yml` (LanguageTool, fixer, Ollama).
+4. Builds the standalone Next.js output (`npm run build`).
+5. Syncs `.next/static` and `public/` into `.next/standalone/` so the standalone server can serve assets.
+6. Optionally runs the smoke tests (`RUN_SMOKE_TESTS=0` to skip).
+7. Launches the standalone server (`npm start`).
+
+You can pass environment flags such as `SKIP_INSTALL=1` or `RUN_SMOKE_TESTS=0 scripts/cold-start.sh` to tailor the run.
+
+### Standalone build layout
+
+When running `npm run build` and starting the standalone server (`npm start`), ensure the following directories sit alongside `.next/standalone/server.js`:
+
+- `.next/standalone/`
+- `.next/static/`
+- `public/`
+
+Most deployment targets accomplish this by copying `.next/static` and `public` next to the extracted `.next/standalone` directory before launching the server binary.
 
 ## Features
 
@@ -467,7 +537,7 @@ The application is configured for optimal Netlify deployment:
 For the district instance, Apache serves as a thin front door that forwards visitors from `https://autocbm.com/` to the internal Next.js dev server via a Cloudflare tunnel.
 
 1. Keep the tunnel process active so `autocbm.com` resolves to the Cloudflare hostname (`c500f01a-fa89-4773-b3c4-55ae5d8e716b.cfargotunnel.com`).
-2. Update the Apache document root (`/Library/WebServer/Documents/index.html`) to redirect to the tunnel target:
+2. Update the Apache document root (`/Library/WebServer/Documents/index.html`) to redirect to the tunnel target and unregister any legacy service workers:
    ```bash
    cat <<'HTML' | sudo tee /Library/WebServer/Documents/index.html >/dev/null
    <!DOCTYPE html>
@@ -475,7 +545,7 @@ For the district instance, Apache serves as a thin front door that forwards visi
      <head>
        <meta charset="utf-8" />
        <title>CBM Webtool</title>
-       <meta http-equiv="refresh" content="0; url=https://c500f01a-fa89-4773-b3c4-55ae5d8e716b.cfargotunnel.com/" />
+       <meta http-equiv="refresh" content="1; url=https://c500f01a-fa89-4773-b3c4-55ae5d8e716b.cfargotunnel.com/" />
        <style>
          body { font-family: system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; display: grid; place-items: center; min-height: 100vh; margin: 0; background: #0d1117; color: #f0f6fc; }
          a { color: #58a6ff; text-decoration: none; font-size: 1.1rem; }
@@ -484,6 +554,18 @@ For the district instance, Apache serves as a thin front door that forwards visi
      </head>
      <body>
        <p>Redirecting to the CBM Webtool… <a href="https://c500f01a-fa89-4773-b3c4-55ae5d8e716b.cfargotunnel.com/">Continue</a></p>
+       <script>
+         (function redirect() {
+           if ('serviceWorker' in navigator) {
+             navigator.serviceWorker.getRegistrations().then(registrations => {
+               registrations.forEach(reg => reg.unregister().catch(() => {}));
+             }).catch(() => {});
+           }
+           setTimeout(() => {
+             window.location.replace('https://c500f01a-fa89-4773-b3c4-55ae5d8e716b.cfargotunnel.com/');
+           }, 100);
+         })();
+       </script>
      </body>
    </html>
    HTML
@@ -690,7 +772,7 @@ The tool is designed for easy extension:
 - **UI Integration**: Seamless integration with existing token display and infractions panel
 
 ### Previous Improvements (v6.1) - LanguageTool Migration Polish
-- **Complete Migration**: Finished shifting from the hosted GrammarBot API to self-hosted LanguageTool + fixer containers
+- **Complete Migration**: Finished shifting from any hosted grammar API to the self-hosted LanguageTool + fixer containers with local Llama verification
 - **Neural Network Processing**: LanguageTool still runs with neural rules enabled for enhanced accuracy
 - **Service Proxy**: Hardened the API routes that talk to LanguageTool/fixer/Redis inside the docker network
 - **Simplified Architecture**: Removed all LanguageTool code, rule filters, and LT→VT paths
@@ -705,10 +787,10 @@ The tool is designed for easy extension:
 - **Maintained Compatibility**: All existing features work seamlessly with LanguageTool
 
 ### Previous Improvements (v6.0) - LanguageTool Integration
-- **Initial Migration**: Began the move from the hosted GrammarBot API to LanguageTool running in Docker
+- **Initial Migration**: Began the move away from hosted grammar APIs toward LanguageTool running in Docker with local Llama review
 - **Neural Network Processing**: Enabled LanguageTool's neural rule set for higher accuracy
 - **Service Proxy**: Added API routes that forward to the internal LanguageTool endpoint
-- **Simplified Architecture**: Removed complex GrammarBot configuration and rule filters
+- **Simplified Architecture**: Removed legacy hosted grammar configuration and rule filters
 - **Enhanced Performance**: Streamlined grammar checking with local container latency
 - **Updated UI**: All labels and indicators now reflect the LanguageTool integration
 - **Offline Ready**: Documented fallback defaults so development works without internet access

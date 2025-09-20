@@ -1,7 +1,10 @@
 const path = require("path");
 const withBundleAnalyzer = require("@next/bundle-analyzer")({ enabled: process.env.ANALYZE === "1" });
+const isProd = process.env.NODE_ENV === "production";
+
 const nextConfig = withBundleAnalyzer({
   output: 'standalone',
+  assetPrefix: isProd && process.env.ASSET_PREFIX ? process.env.ASSET_PREFIX : '',
   images: { unoptimized: true },
   // Force correct workspace root to avoid Next.js mis-detecting parent lockfiles
   outputFileTracingRoot: __dirname,

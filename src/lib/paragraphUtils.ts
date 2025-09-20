@@ -1,5 +1,5 @@
 import type { Token, VirtualTerminalInsertion } from "./types";
-import type { GbEdit } from "./gbClient";
+import type { LtEdit } from "./ltClient";
 
 /**
  * Convert character offset to boundary index
@@ -39,7 +39,7 @@ export function newlineBoundarySet(text: string, tokens: Token[]): Set<number> {
 /**
  * Convert GB edits to VT insertions, filtering out end-of-text insertions
  */
-export function gbToVtInsertions(gb: { edits?: GbEdit[] }, text: string, tokens: Token[]): VirtualTerminalInsertion[] {
+export function gbToVtInsertions(gb: { edits?: LtEdit[] }, text: string, tokens: Token[]): VirtualTerminalInsertion[] {
   const N = tokens.length;
   const out: VirtualTerminalInsertion[] = [];
   const seen = new Set<string>(); // key = `${b}|${ch}`

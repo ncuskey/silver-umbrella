@@ -114,11 +114,11 @@ This application is a TypeScript React web app for Curriculum‑Based Measuremen
 ├── src/
 │   ├── app/                     # Next.js App Router
 │   │   ├── api/                 # API routes (Node runtime)
-│   │   │   ├── grammarbot/v1/check/route.ts   # Legacy GB-compatible proxy (wraps LanguageTool)
+│   │   │   ├── languagetool/v1/check/route.ts # Local LanguageTool JSON proxy with offline fallback
 │   │   │   ├── languagetool/route.ts          # LanguageTool passthrough with default rule tuning
 │   │   │   ├── languagetool/[...path]/route.ts # Streams arbitrary LT paths to the container
 │   │   │   ├── submissions/*                   # CRUD for timed writing submissions
-│   │   │   ├── verifier/route.ts               # Heuristics + Llama verifier orchestrator
+│   │   │   ├── verifier/route.ts               # Local Llama verifier (Ollama-compatible)
 │   │   │   └── prompts/*                       # Prompt CRUD endpoints
 │   │   ├── globals.css           # Global styles with CSS variables
 │   │   ├── layout.tsx            # Root layout component
@@ -139,7 +139,7 @@ This application is a TypeScript React web app for Curriculum‑Based Measuremen
 │   ├── lib/
 │   │   ├── cbmHeuristics.ts      # Sentence + boundary heuristics for CBM scoring
 │   │   ├── llamaVerifier.ts      # Ollama verifier window selection + prompt builder
-│   │   ├── gbClient.ts           # LanguageTool service client
+│   │   ├── ltClient.ts           # LanguageTool service client
 │   │   ├── gbToVT.ts             # LanguageTool to Virtual Terminal conversion
 │   │   ├── gbAnnotate.ts         # LanguageTool annotation and display logic
 │   │   ├── gb-map.ts             # Legacy grouping helper (caret scaffolding)
@@ -386,7 +386,7 @@ interface DisplayToken extends Token {
 - **Grammar Rules**: Capitalization, terminal punctuation
 - **Infraction Categories**: Definite vs. possible issues
 
-### LanguageTool Integration (`src/lib/gbClient.ts`)
+### LanguageTool Integration (`src/lib/ltClient.ts`)
 
 #### API Client
 - `checkWithLanguageTool()`: Main function for grammar and spell checking (wraps the fixer service)
@@ -454,10 +454,10 @@ interface DisplayToken extends Token {
 
 ### API Routes (`src/app/api/`)
 
-#### LanguageTool Proxy (`grammarbot/v1/check/route.ts`)
-- Proxy endpoint to avoid CORS and rate limiting
-- Passes through requests to LanguageTool service
-- Returns grammar suggestions in standardized format
+#### LanguageTool Local (`languagetool/v1/check/route.ts`)
+- Local-first JSON proxy that posts to `${LT_BASE_URL:-http://127.0.0.1:8010}/v2/check`
+- Returns LanguageTool matches directly; on errors it fail-softs with empty matches and `X-LT-Fallback: offline`
+- Requires `application/json` body with `{ text, language }`
 
 ## Configuration
 
