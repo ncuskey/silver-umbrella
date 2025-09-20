@@ -37,6 +37,7 @@ A TypeScript React web application for Curriculum‑Based Measurement (CBM) writ
 - **TWW (Total Words Written)**: Counts all words written, including misspellings, excluding numerals
 - **WSC (Words Spelled Correctly)**: Uses the dockerized LanguageTool service plus the fixer microservice for irregular verb support; results feed the same highlighting pipeline as before.
 - **CWS (Correct Writing Sequences)**: Mechanical, CBM-aligned scoring of adjacent unit pairs with visual caret indicators
+- **Heuristic rubric checks**: Offline rules catch missing sentence terminals, lowercase sentence starts, fused sentences, unmatched wrappers, and rubric-driven number handling before they impact KPIs.
 - **LLM sanity check**: Each batch of LanguageTool edits is reviewed by a local Llama model (Ollama) and any "do not apply" recommendations show up in the sidebar.
 
 ### OCR Input (Self-Hosted Tesseract)
@@ -421,42 +422,22 @@ The CWS (Correct Writing Sequences) engine implements strictly mechanical, CBM-a
 - **Rate Limiting**: Automatic exponential backoff for API rate limits
 - **Request Cancellation**: AbortSignal support for canceling stale requests
 
-### LanguageTool Grammar
-- **Automatic Grammar Checking**: Runs automatically as you type with 800ms debounce
-- **Request Cancellation**: AbortSignal support prevents stale grammar check results
-- **Smart Proxy with Fallback**: Uses local API proxy with automatic fallback to public service
-- **Netlify Function Support**: API routes deployed as Netlify Functions for optimal performance
-- **Advisory-only suggestions** (doesn't affect CBM scores)
-- **Status Indicators**: Visual feedback showing grammar check status (idle/checking/ok/error)
-- **CWS Boundary Mapping**: Grammar issues mapped to nearest CWS boundaries within ±2 characters
-- **Advisory Hints**: Grammar suggestions shown as yellow carets and advisory infractions
-- **Smart Filtering**: Only grammar issues (not spelling/punctuation) mapped to boundaries
-- **Grammar Mode Badge**: Always-visible indicator showing current grammar configuration (public/proxy/off)
+### LanguageTool + Heuristics Pipeline
+- **Self-hosted grammar stack**: `/api/languagetool` proxies to the dockerized LanguageTool container, appends fixer rules, and normalizes match fields so the UI can reason about corrections consistently.
+- **CBM heuristics layer**: `analyzeText()` (see `src/lib/cbmHeuristics.ts`) tokenizes drafts, detects sentence boundaries, classifies numbers, and flags rubric-aligned infractions (e.g., missing capitals, fused sentences, unmatched wrappers).
+- **Context aware dictionaries**: `src/data/cbmDictionaries.ts` seeds abbreviations, proper nouns, and the default lexicon; teachers can extend these sets via `HeuristicsOptions` when wiring custom deployments.
+- **Verifier API**: `/api/verifier` merges LanguageTool edits and heuristic findings, selects up to `LLAMA_MAX_WINDOWS` sentence windows, and asks the local Ollama model to confirm or veto high-risk changes.
+- **LLM guardrails**: Disable Llama checks by setting `LLAMA_SANITY_DISABLED=1` or `LLAMA_SANITY_CHECK=false`; otherwise findings surface in the infractions drawer with `source: "llama"` tags.
 
-### Virtual Terminal Insertion (LT-Only Architecture)
-- **Pure LT Architecture**: Completely redesigned to use only LanguageTool for terminal punctuation suggestions
-- **Eliminated Heuristics**: Removed all heuristic-based logic including paragraph-end detection, capitalization rules, and smart comma detection
-- **Minimal Rule Set**: Only processes three specific LT rules: `UPPERCASE_SENTENCE_START`, `MISSING_SENTENCE_TERMINATOR`, and `PUNCTUATION_PARAGRAPH_END`
-- **Robust Field Shims**: Tolerant field accessors handle different LanguageTool server response formats
-- **Caret-Aware Logic**: Advanced boundary detection that places terminals using caret ("^") ownership for proper VT integration
-- **Simple Tokenizer**: Clean tokenization that yields WORD/PUNCT/BOUNDARY tokens including caret markers
-- **Streamlined Pipeline**: LT issues → filter → convert to insertions → display, with no complex fusion layers
-- **Proven Functionality**: Comprehensive test suite validates the LT-only pipeline works independently
-- **Clean Codebase**: Removed 1000+ lines of complex heuristic logic and wrapper functions
-- **Better Maintainability**: Single source of truth for terminal insertions (LanguageTool only)
-- **Reduced Complexity**: Simplified UI and logic focused solely on LT results
+### Caret-Only Terminal Handling
+- **Boundary states**: Carets track `ok/maybe/bad` status per boundary; clicking a word syncs both adjacent carets to the word’s state, keeping CWS calculations aligned.
+- **Manual overrides**: Clicking a caret cycles its state; removed carets (dragged into the discard lane) no longer block CWS but remain available through Undo.
+- **Discard workflow**: Tokens and carets can be dragged left to the discard panel; an Undo stack restores the last action and recomputes KPIs immediately.
+- **KPI integration**: `computeKpis()` consumes token states, discard flags, and caret statuses to refresh TWW/WSC/CWS metrics in real time.
+- **Infractions pane**: Aggregated issues from LanguageTool, heuristics, and Llama display with severity pills so teachers can triage quickly.
 
-### Terminal Group System
-- **LT-Driven Grouping**: LanguageTool punctuation/grammar issues automatically grouped with three related carets
-- **Three-Caret Structure**: Each group contains groupLeftCaret, primaryCaret, and groupRightCaret
-- **Smart Boundary Detection**: Uses LT match offset/length to find primary caret, then expands to sentence boundaries
-- **Bulk Toggle Operations**: One-click cycling of all three carets simultaneously (yellow → red → green → yellow)
-- **Visual Group Highlighting**: Hovering over terminal suggestions highlights all related carets with blue rings
-- **Independent Groups**: Each terminal group operates independently without cross-coupling
-- **Edge Case Handling**: Properly handles start-of-text and end-of-text boundaries
-- **Suggestion Panel Integration**: Terminal groups appear as blue-themed suggestions in the infractions panel
-- **Hover Preview**: Users can see which carets will be affected before clicking
-- **Smooth Transitions**: All visual changes use CSS transitions for polished user experience
+### Legacy Terminal Group System (Removed)
+Earlier versions bundled caret triplets into “terminal groups.” The component still exists for reference, but the production UI now operates strictly on individual carets and heuristics-driven boundaries. See the v8.x notes in this README if you need historical context.
 
 ## Deployment
 
@@ -480,6 +461,37 @@ The application is configured for optimal Netlify deployment:
      - `SECRETS_SCAN_OMIT_KEYS="GCP_PRIVATE_KEY,GOOGLE_APPLICATION_CREDENTIALS_JSON,NETLIFY_DATABASE_URL,NEON_DATABASE_URL,DATABASE_URL,LANGUAGETOOL_API_KEY"`
    - If necessary, you can disable scanning from the Netlify UI by setting `SECRETS_SCAN_ENABLED=false` (not recommended long‑term).
 4. **Configuration**: Uses `netlify.toml` with Next.js plugin for proper function deployment
+
+### Apache + Cloudflare Tunnel Frontend
+
+For the district instance, Apache serves as a thin front door that forwards visitors from `https://autocbm.com/` to the internal Next.js dev server via a Cloudflare tunnel.
+
+1. Keep the tunnel process active so `autocbm.com` resolves to the Cloudflare hostname (`c500f01a-fa89-4773-b3c4-55ae5d8e716b.cfargotunnel.com`).
+2. Update the Apache document root (`/Library/WebServer/Documents/index.html`) to redirect to the tunnel target:
+   ```bash
+   cat <<'HTML' | sudo tee /Library/WebServer/Documents/index.html >/dev/null
+   <!DOCTYPE html>
+   <html lang="en">
+     <head>
+       <meta charset="utf-8" />
+       <title>CBM Webtool</title>
+       <meta http-equiv="refresh" content="0; url=https://c500f01a-fa89-4773-b3c4-55ae5d8e716b.cfargotunnel.com/" />
+       <style>
+         body { font-family: system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; display: grid; place-items: center; min-height: 100vh; margin: 0; background: #0d1117; color: #f0f6fc; }
+         a { color: #58a6ff; text-decoration: none; font-size: 1.1rem; }
+         a:hover { text-decoration: underline; }
+       </style>
+     </head>
+     <body>
+       <p>Redirecting to the CBM Webtool… <a href="https://c500f01a-fa89-4773-b3c4-55ae5d8e716b.cfargotunnel.com/">Continue</a></p>
+     </body>
+   </html>
+   HTML
+   ```
+3. Restart Apache if needed: `sudo apachectl graceful`.
+4. Verify the redirect by visiting `https://autocbm.com/` and ensuring the Next.js UI responds on the tunneled host.
+
+The same HTML redirect lives in version control under `docs/apache-index.html` if you prefer to copy it directly.
 
 ### Production Build
 

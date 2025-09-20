@@ -5,8 +5,11 @@ This project aims to follow Keep a Changelog and Semantic Versioning.
 
 ## Unreleased
 
- - Breaking: Removed terminal groups and group cycling UI. Carets now flag missing punctuation directly at boundaries and are individually clickable.
- - UX: Clicking a word cycles its state and synchronizes both adjacent carets to the same state; clicking a caret cycles only that caret.
+- Added: Offline heuristics engine (`src/lib/cbmHeuristics.ts`) plus seed dictionaries for abbreviations/proper nouns.
+- Added: `/api/verifier` endpoint and `runLlamaVerifier()` workflow that batches heuristics + LanguageTool findings and routes them through the local Ollama model.
+- Added: Apache + Cloudflare tunnel deployment notes and HTML redirect for the district’s `autocbm.com` front door.
+- Breaking: Removed terminal groups and group cycling UI. Carets now flag missing punctuation directly at boundaries and are individually clickable.
+- UX: Clicking a word cycles its state and synchronizes both adjacent carets to the same state; clicking a caret cycles only that caret.
 - Added: Left-side Discard area to drag-remove tokens from the stream and KPIs; Undo button and Cmd/Ctrl+Z support.
 - Changed: KPIs compute CWS using word states plus caret flags instead of terminal groups.
 - Changed: Output pane now shows the fixer service's corrected text (`fixed`) when available; otherwise it reconstructs by applying normalized edits. This pane no longer reflects discarded tokens.

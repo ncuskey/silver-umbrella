@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-This application is a TypeScript React web app for Curriculum‑Based Measurement (CBM) written expression scoring. Built with Next.js 15, it provides automated scoring for educational assessments with interactive overrides and professional spell checking via the self-hosted LanguageTool + fixer services (mirrored in the docker stack) with optional Llama-based sanity checks.
+This application is a TypeScript React web app for Curriculum‑Based Measurement (CBM) written expression scoring. Built with Next.js 15, it layers interactive overrides on top of a self-hosted stack: LanguageTool + fixer for grammar, a rubric-aligned heuristics engine for CBM rules, and an Ollama-hosted Llama verifier for high-risk findings.
 
 ### Kiosk Mode (Student Writing)
 - Route: `src/app/kiosk/page.tsx`
@@ -34,6 +34,7 @@ This application is a TypeScript React web app for Curriculum‑Based Measuremen
 
 ## Breaking Changes (v9.0)
 
+- Added a heuristics + verifier pipeline: `analyzeText()` classifies sentences/number tokens, `/api/verifier` batches findings, and `runLlamaVerifier()` asks the local Ollama instance to confirm LanguageTool edits before they hit the UI.
 - Terminal groups are deprecated and no longer used in the UI or KPIs. The component `src/components/TerminalGroup.tsx` remains in the repo but is not referenced.
 - Missing punctuation is surfaced as caret flags at boundaries (from GB-derived insertions); carets are individually clickable. Clicking a word also synchronizes both adjacent carets to the word's state.
 - A left-side Discard area allows dragging tokens to hide them; Undo restores the last removal.
@@ -53,6 +54,13 @@ This application is a TypeScript React web app for Curriculum‑Based Measuremen
 - **Bundle Analysis**: @next/bundle-analyzer
 
 ### Recent Architectural Improvements
+
+#### Heuristics + Verifier Windows (v9.1)
+- **Sentence-aware heuristics**: `src/lib/cbmHeuristics.ts` tokenizes drafts, segments sentences, classifies numbers, and flags rubric violations (missing terminals, lowercase starts, fused sentences, unmatched wrappers).
+- **Dictionary seeds**: `src/data/cbmDictionaries.ts` packages abbreviations, proper nouns, and a baseline lexicon so heuristics stay deterministic offline.
+- **Verifier batching**: `src/lib/llamaVerifier.ts` merges heuristic findings with LanguageTool edits, selects high-signal windows, and sends JSON prompts to Ollama (`llama3.1:8b` by default).
+- **API surface**: `/api/verifier` (Node runtime) orchestrates heuristics + Llama checks and honors `LLAMA_SANITY_DISABLED`, `LLAMA_SANITY_CHECK`, `LLAMA_MAX_WINDOWS`, `LLAMA_MODEL`, and `OLLAMA_URL` environment variables.
+- **UI integration**: Llama findings land in the infractions drawer with `source: "llama"` and re-use caret indices so teachers can override or ignore them like any other advisory.
 
 #### (Deprecated) Terminal Group System (v8.1+)
 - **Single Clickable Units**: Terminal groups (^ . ^) implemented as single buttons with non-interactive inner glyphs
@@ -104,42 +112,52 @@ This application is a TypeScript React web app for Curriculum‑Based Measuremen
 ```
 /Users/nickcuskey/silver-umbrella/
 ├── src/
-│   ├── app/                    # Next.js App Router
-│   │   ├── api/               # API routes
-│   │   │   └── grammarbot/    # LanguageTool proxy endpoint
-│   │   │       └── v1/check/route.ts # Proxy route for grammar checking
-│   │   ├── globals.css        # Global styles with CSS variables
-│   │   ├── layout.tsx         # Root layout component
-│   │   └── page.tsx           # Main application component
+│   ├── app/                     # Next.js App Router
+│   │   ├── api/                 # API routes (Node runtime)
+│   │   │   ├── grammarbot/v1/check/route.ts   # Legacy GB-compatible proxy (wraps LanguageTool)
+│   │   │   ├── languagetool/route.ts          # LanguageTool passthrough with default rule tuning
+│   │   │   ├── languagetool/[...path]/route.ts # Streams arbitrary LT paths to the container
+│   │   │   ├── submissions/*                   # CRUD for timed writing submissions
+│   │   │   ├── verifier/route.ts               # Heuristics + Llama verifier orchestrator
+│   │   │   └── prompts/*                       # Prompt CRUD endpoints
+│   │   ├── globals.css           # Global styles with CSS variables
+│   │   ├── layout.tsx            # Root layout component
+│   │   └── page.tsx              # Main application component (scoring UI)
 │   ├── components/
-│   │   ├── ui/                # Reusable UI components (shadcn/ui)
-│   │   │   ├── badge.tsx      # Badge component
-│   │   │   ├── button.tsx     # Button with variants
-│   │   │   ├── card.tsx       # Card layout components
-│   │   │   ├── checkbox.tsx   # Checkbox input
-│   │   │   ├── input.tsx      # Text input
-│   │   │   ├── tabs.tsx       # Tab navigation (currently unused)
-│   │   │   └── textarea.tsx   # Textarea input
-│   │   ├── Token.tsx          # Token component with centralized status classes and bubbleCls
-│   │   └── TerminalGroup.tsx  # Single clickable terminal group component (^ . ^) with unified state
+│   │   ├── ui/                   # Reusable UI components (shadcn/ui)
+│   │   │   ├── badge.tsx         # Badge component
+│   │   │   ├── button.tsx        # Button with variants
+│   │   │   ├── card.tsx          # Card layout components
+│   │   │   ├── checkbox.tsx      # Checkbox input
+│   │   │   ├── input.tsx         # Text input
+│   │   │   ├── tabs.tsx          # Tab navigation (currently unused)
+│   │   │   └── textarea.tsx      # Textarea input
+│   │   ├── Token.tsx             # Token component with centralized status classes and bubbleCls
+│   │   └── TerminalGroup.tsx     # Legacy caret group component retained for reference
+│   ├── data/
+│   │   └── cbmDictionaries.ts    # Seed dictionaries for heuristics (abbreviations, proper nouns, lexicon)
 │   ├── lib/
-│   │   ├── gbClient.ts        # LanguageTool service client
-│   │   ├── gbToVT.ts          # LanguageTool to Virtual Terminal conversion
-│   │   ├── gbAnnotate.ts      # LanguageTool annotation and display logic (status mapping; preserves original casing)
-│   │   ├── gb-map.ts          # GB state mapping; builds clickable TerminalGroups from VT insertions
-│   │   ├── useTokensAndGroups.ts # State management hook for tokens and groups (legacy support)
-│   │   ├── paragraphUtils.ts  # Paragraph-aware terminal insertion with end-of-text support; ignores empty paragraphs and dedupes paragraph ends
-│   │   ├── tokenize.ts        # Text tokenization
-│   │   ├── types.ts           # Core type definitions
-│   │   ├── export.ts          # CSV and PDF export utilities
-│   │   ├── utils.ts           # Utility functions
-│   │   └── [LT/CWS internals] # Utilities used by tests and LT parity (cws-lt.ts, cws.ts, etc.)
-│   └── workers/               # Web Workers (currently unused)
+│   │   ├── cbmHeuristics.ts      # Sentence + boundary heuristics for CBM scoring
+│   │   ├── llamaVerifier.ts      # Ollama verifier window selection + prompt builder
+│   │   ├── gbClient.ts           # LanguageTool service client
+│   │   ├── gbToVT.ts             # LanguageTool to Virtual Terminal conversion
+│   │   ├── gbAnnotate.ts         # LanguageTool annotation and display logic
+│   │   ├── gb-map.ts             # Legacy grouping helper (caret scaffolding)
+│   │   ├── useTokensAndGroups.ts # State management hook (legacy support)
+│   │   ├── paragraphUtils.ts     # Paragraph-aware terminal insertion
+│   │   ├── tokenize.ts           # Text tokenization
+│   │   ├── types.ts              # Core type definitions
+│   │   ├── export.ts             # CSV and PDF export utilities
+│   │   ├── utils.ts              # Utility functions
+│   │   └── [LT/CWS internals]    # Utilities used by tests and LT parity (cws-lt.ts, cws.ts, etc.)
+│   └── workers/                  # Web Workers (currently unused)
 ├── tests/                     # Test files
 │   └── cws.spec.ts           # Golden tests for CWS rules
 ├── __tests__/                 # Additional test files
 ├── scripts/                   # Build and utility scripts (currently unused)
 ├── public/                    # Static assets (currently minimal)
+├── docs/
+│   └── apache-index.html      # HTML redirect used by Apache front door
 ├── Configuration Files
 │   ├── package.json           # Dependencies and scripts
 │   ├── next.config.js         # Next.js configuration
@@ -161,7 +179,7 @@ This application is a TypeScript React web app for Curriculum‑Based Measuremen
 - **Caret-Only Punctuation Flags**: Missing terminals flagged on carets; no terminal groups in UI
 - (Spelling page removed) 
 - **LanguageTool Integration**: Professional spell checking and grammar analysis via LanguageTool service
-- **Interactive UI**: Clickable carets, tokens, and terminal groups with keyboard navigation
+- **Interactive UI**: Clickable carets and tokens with keyboard navigation
 - **Output Text (Corrected)**: Blue box shows LanguageTool's full corrected text, with local edit-application fallback
 - **Focus Management**: Visual focus indicators and selection rings for accessibility
 - **Export Functionality**: CSV audit export and PDF report generation
@@ -170,7 +188,7 @@ This application is a TypeScript React web app for Curriculum‑Based Measuremen
 **Main Components**:
 - `CBMApp`: Root component
 - `WritingScorer`: Written expression assessment tool
-- `TerminalGroup`: Unified terminal group component for ^ . ^ units
+- `TerminalGroup`: Legacy component retained for historical comparison (not rendered in production)
 - `SentenceList`: Displays parsed sentences
 - `InfractionList`: Shows flagged issues aggregated by tag + replacement with counts, sorted by frequency
 - Tooltip styling: see `src/app/globals.css` (`.tt[data-tip]`). Tokens, carets, and dots attach `data-tip` for rule and terminal labels.
@@ -186,7 +204,7 @@ This application is a TypeScript React web app for Curriculum‑Based Measuremen
 
 2. **WSC (Words Spelled Correctly)**
    - Uses LanguageTool service for professional spell checking
-   - Supports manual overrides via terminal group cycling
+   - Supports manual overrides via word/caret state cycling and discard lane
    - Implementation: `calcWSC()` with `spellErrorSetFromGB()`
 
 3. **CWS (Correct Writing Sequences)**
@@ -279,14 +297,11 @@ interface DisplayToken extends Token {
 ## Key Features
 
 ### Interactive Scoring
-- **Word Overrides**: Click words to toggle WSC scoring
-- **Terminal Group Cycling**: Click any member of (^ . ^) groups to cycle entire group state
-- **Unified Group State**: All members of terminal groups maintain synchronized visual state
-- **Caret Navigation**: Click carets (^) to cycle CWS states
-- **Visual Feedback**: Color-coded indicators for correct/incorrect/advisory
-- **Keyboard Navigation**: Arrow keys, Enter/Space for accessibility
-- **Focus Management**: Visual focus indicators with yellow outline rings
-- **Selection Rings**: Visual selection indicators for both tokens and groups
+- **Word overrides**: Click tokens to cycle `ok → maybe → bad`; adjacent carets inherit the same state automatically.
+- **Caret toggles**: Click individual carets to cycle their boundary status without affecting surrounding words.
+- **Discard lane**: Drag tokens or carets into the left discard panel to exclude them from KPIs; Undo restores the last removal.
+- **Visual feedback**: Color-coded pills, caret rings, and selection outlines convey state and focus.
+- **Keyboard navigation**: Arrow keys and Enter/Space still iterate through tokens for accessibility-friendly review.
 
 ### State Management System
 
@@ -296,6 +311,22 @@ interface DisplayToken extends Token {
 - **Click Handling**: Only word tokens are clickable, with proper disabled state for other token types
 - **Type Safety**: Full TypeScript support with `TokenModel` interface
 
+#### Heuristics Engine (`src/lib/cbmHeuristics.ts`)
+- **Sentence detection**: Splits drafts into sentence spans, noting whether each terminates via punctuation, newline, capitalization, or EOF.
+- **Rubric rules**: Flags lowercase sentence starts, missing terminals, fused sentences, unmatched quotes/brackets, double spaces, and Oxford-comma preferences.
+- **Dictionary lookups**: Merges default abbreviations/proper nouns with optional overrides and tracks unknown word indices for Llama escalation.
+- **Number classification**: Labels ordinal/cardinal/time/date/fraction tokens for CBM scoring and optional rubric tweaks.
+- **Metadata export**: Returns `HeuristicsResult` with token snapshots, issues (word + boundary), and metadata for downstream consumers.
+
+#### Llama Verifier (`src/lib/llamaVerifier.ts`)
+- **Window selection**: Picks up to `maxWindows` sentence slices containing unknown words or missing terminals not already covered by LanguageTool edits.
+- **Prompt building**: Emits JSON prompts enumerating token indices/values plus existing findings so the LLM only flags net-new concerns.
+- **Ollama transport**: Sends non-streaming JSON requests to the configured Ollama URL/model (defaults to `llama3.1:8b`).
+- **Finding normalization**: Rewrites LLM responses to `LlamaFinding` objects that align with UI token indices and share `HeuristicIssue` fields.
+- **Failure handling**: Surfaces transport/parse errors as `llama_http_*` or `llama_empty` messages for quick debugging.
+
+> Legacy (v8.x): Terminal groups are no longer rendered in production but remain documented for historical context.
+
 #### TerminalGroup Component (`src/components/TerminalGroup.tsx`)
 - **Unified Wrapper**: Wraps `^ . ^` as single clickable units with unified borders
 - **State Management**: Uses `TerminalGroupModel` interface with proper state tracking
@@ -304,6 +335,8 @@ interface DisplayToken extends Token {
 - **Accessibility**: Full keyboard navigation and ARIA support for groups
 
 #### State Management Hooks
+
+> Legacy helper retained for older data migrations.
 
 ##### useTokensAndGroups (`src/lib/useTokensAndGroups.ts`)
 - **Immutable Updates**: Uses `useCallback` with `map()` for immutable state changes
@@ -319,8 +352,8 @@ interface DisplayToken extends Token {
 
 ##### computeKpis (`src/lib/computeKpis.ts`)
 - **Immediate KPI Computation**: Pure function that calculates KPIs from current state
-- **Interleaved Sequence Logic**: Builds sequence of words and terminal groups for CWS calculation
-- **Status-based Scoring**: Uses current status values to determine correct/incorrect sequences
+- **Boundary-aware logic**: Merges visible tokens with caret states to determine eligible CWS boundaries (no terminal groups).
+- **Status-based Scoring**: Uses current word/caret status plus discard flags to determine correct/incorrect sequences.
 - **Performance Optimized**: Efficient calculations with proper type safety
 
 ##### UI State Management (`src/state/ui.ts`)
@@ -328,6 +361,8 @@ interface DisplayToken extends Token {
 - **State Synchronization**: Ensures UI state and KPIs stay in sync
 - **Console Logging**: Debug output for KPI changes after each toggle
 - **Type Safety**: Full TypeScript support with proper interfaces
+
+> Legacy mapping layer used for VT-era state seeding; retained for compatibility with archived exports.
 
 #### GB State Mapping (`src/lib/gb-map.ts`)
 - **Initial State Application**: `bootstrapStatesFromGB()` applies initial states from GB edits
