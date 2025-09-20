@@ -42,6 +42,20 @@ else
   log "docker-compose.local.yml not found; skipping container startup"
 fi
 
+if [[ "${START_CF_TUNNEL:-1}" == "1" ]]; then
+  if command -v cloudflared >/dev/null 2>&1; then
+    CF_TUNNEL_CMD="${CF_TUNNEL_CMD:-cloudflared tunnel run ${CF_TUNNEL_NAME:-autocbm}}"
+    CF_LOG_PATH="${CF_TUNNEL_LOG:-${ROOT_DIR}/cloudflared.log}"
+    log "Starting Cloudflare tunnel (${CF_TUNNEL_CMD})"
+    nohup bash -c "$CF_TUNNEL_CMD" >> "$CF_LOG_PATH" 2>&1 &
+    log "Cloudflare tunnel logs: $CF_LOG_PATH"
+  else
+    log "cloudflared not available; skipping tunnel startup"
+  fi
+else
+  log "Skipping Cloudflare tunnel (START_CF_TUNNEL=${START_CF_TUNNEL})"
+fi
+
 log "Building Next.js standalone output"
 npm run build
 

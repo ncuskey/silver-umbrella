@@ -87,9 +87,11 @@ This script performs the following:
 4. Builds the standalone Next.js output (`npm run build`).
 5. Syncs `.next/static` and `public/` into `.next/standalone/` so the standalone server can serve assets.
 6. Optionally runs the smoke tests (`RUN_SMOKE_TESTS=0` to skip).
-7. Launches the standalone server (`npm start`).
+7. Starts a Cloudflare tunnel if `cloudflared` is installed (disable with `START_CF_TUNNEL=0`, customize command via `CF_TUNNEL_CMD` or `CF_TUNNEL_NAME`).
+8. Launches the standalone server (`npm start`).
 
 You can pass environment flags such as `SKIP_INSTALL=1` or `RUN_SMOKE_TESTS=0 scripts/cold-start.sh` to tailor the run.
+Cloudflare tunnel output is written to `cloudflared.log` by default; override with `CF_TUNNEL_LOG=/path/to/log`.
 
 ### Standalone build layout
 
