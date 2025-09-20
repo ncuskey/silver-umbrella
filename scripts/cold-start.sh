@@ -13,6 +13,20 @@ log() {
   printf '\n[ColdStart] %s\n' "$1"
 }
 
+free_port() {
+  local port="$1"
+  if ! command -v lsof >/dev/null 2>&1; then
+    return
+  fi
+  local pids
+  pids=$(lsof -ti :"$port" 2>/dev/null || true)
+  if [[ -n "$pids" ]]; then
+    log "Freeing port $port (pids: $pids)"
+    kill $pids 2>/dev/null || kill -9 $pids 2>/dev/null || true
+    sleep 1
+  fi
+}
+
 ensure_tool() {
   local tool="$1"
   if ! command -v "$tool" >/dev/null 2>&1; then
@@ -51,9 +65,16 @@ if command -v ollama >/dev/null 2>&1; then
     if command -v brew >/dev/null 2>&1 && brew services list | grep -q "^ollama"; then
       brew services stop ollama || log "brew services stop ollama reported an error (continuing)"
     fi
+    if [[ "${FORCE_FREE_PORTS:-1}" == "1" ]]; then
+      free_port 11434
+    fi
   else
     log "Skipping host Ollama stop (STOP_HOST_OLLAMA=${STOP_HOST_OLLAMA})"
   fi
+fi
+
+if [[ "${FORCE_FREE_PORTS:-1}" == "1" ]]; then
+  free_port 11434
 fi
 
 if command -v docker >/dev/null 2>&1 || command -v docker-compose >/dev/null 2>&1; then
