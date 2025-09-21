@@ -147,7 +147,7 @@ export async function POST(req: Request) {
 
   const modeRaw = typeof body.mode === "string" ? body.mode.toLowerCase() : "quick";
   if (modeRaw === "audit") {
-    return handleAuditMode(body as AuditBody);
+    return handleAuditMode(req, body as AuditBody);
   }
 
   const text = typeof body.text === "string" ? body.text : "";
@@ -251,10 +251,12 @@ function buildAuditUserMessage(text: string, matches: AuditMatch[], maxMissed: n
     "LT_MATCHES:",
     ...items,
     "",
+    "You MUST return exactly one lt_review entry for each LT_MATCH line above.",
+    "",
     "Respond with a STRICT JSON object that matches exactly:",
     "{",
     `  "lt_review": [`,
-    `    { "id": "m1", "decision": "CORRECT"|"INCORRECT", "reason": "≤12 words", "suggestion": "≤4 words or """ }`,
+    `    { "id": "m1", "decision": "CORRECT", "reason": "≤12 words", "suggestion": "≤4 words or """ }`,
     "  ],",
     `  "missed": [`,
     `    { "start": 0, "end": 0, "label": "SPELL"|"GRAMMAR"|"PUNC"|"STYLE"|"CASING"|"OTHER", "reason": "≤12 words", "suggestion": "≤4 words or """ }`,
@@ -263,7 +265,58 @@ function buildAuditUserMessage(text: string, matches: AuditMatch[], maxMissed: n
   ].join("\n");
 }
 
-async function handleAuditMode(body: AuditBody) {
+function coerceDecision(value: unknown) {
+  const text = typeof value === "string" ? value.toUpperCase() : "";
+  return text === "INCORRECT" ? "INCORRECT" : "CORRECT";
+}
+
+const ALLOWED_LABELS = new Set(["SPELL", "GRAMMAR", "PUNC", "STYLE", "CASING", "OTHER"]);
+
+function coerceLabel(value: unknown) {
+  const text = (value ?? "").toString().toUpperCase();
+  if (ALLOWED_LABELS.has(text)) return text;
+  if (/^CASE|CAP/.test(text)) return "CASING";
+  if (/PUNCT/.test(text)) return "PUNC";
+  return "OTHER";
+}
+
+function clampSpan(start: unknown, end: unknown, textLength: number) {
+  const s = Number(start);
+  const e = Number(end);
+  const safeStart = Number.isFinite(s) ? Math.max(0, Math.min(textLength, s)) : 0;
+  const safeEnd = Number.isFinite(e) ? Math.max(safeStart, Math.min(textLength, e)) : safeStart;
+  return [safeStart, safeEnd] as const;
+}
+
+function sanitizeAudit(text: string, parsed: any) {
+  const out = { lt_review: [] as Array<{ id: string; decision: "CORRECT" | "INCORRECT"; reason: string; suggestion: string }>, missed: [] as Array<{ start: number; end: number; label: string; reason: string; suggestion: string }> };
+
+  for (const r of Array.isArray(parsed?.lt_review) ? parsed.lt_review : []) {
+    if (!r || typeof r !== "object" || !r.id) continue;
+    out.lt_review.push({
+      id: String(r.id),
+      decision: coerceDecision((r as any).decision),
+      reason: ((r as any).reason || "").toString().slice(0, 120),
+      suggestion: ((r as any).suggestion ?? "").toString().slice(0, 32)
+    });
+  }
+
+  for (const m of Array.isArray(parsed?.missed) ? parsed.missed : []) {
+    if (!m || typeof m !== "object") continue;
+    const [start, end] = clampSpan((m as any).start, (m as any).end, text.length);
+    out.missed.push({
+      start,
+      end,
+      label: coerceLabel((m as any).label),
+      reason: ((m as any).reason || "").toString().slice(0, 120),
+      suggestion: ((m as any).suggestion ?? "").toString().slice(0, 32)
+    });
+  }
+
+  return out;
+}
+
+async function handleAuditMode(req: Request, body: AuditBody) {
   if (typeof body.text !== "string") {
     return invalid("Field 'text' is required and must be a string");
   }
@@ -272,11 +325,21 @@ async function handleAuditMode(body: AuditBody) {
   const matches = normalizeAuditMatches(body.lt?.matches);
   const maxMissed = clampMaxMissed(body.limits?.max_missed ?? 10);
 
+  const requestUrl = new URL(req.url);
+  const modelOverride = requestUrl.searchParams.get("model");
+
   const baseUrl = (process.env.LLM_BASE_URL || DEFAULT_BASE_URL).replace(/\/$/, "");
-  const auditModel = process.env.LLM_MODEL ?? "phi3:mini";
+  const auditModel = modelOverride || process.env.LLM_MODEL || "phi3:mini";
   const timeoutMs = Number(process.env.LLM_TIMEOUT_MS || DEFAULT_TIMEOUT_MS);
   const externalCallsDisabled = process.env.EXTERNAL_CALLS_DISABLED === "1";
   const baseIsLocal = isLocalUrl(baseUrl);
+
+  console.log("[AUDIT] env", process.env.LLM_BASE_URL, process.env.LLM_MODEL);
+  console.log("[AUDIT] req", {
+    text: text.slice(0, 80),
+    ltCount: matches.length,
+    maxMissed
+  });
 
   if (externalCallsDisabled && !baseIsLocal) {
     return auditOfflineResponse();
@@ -332,29 +395,45 @@ async function handleAuditMode(body: AuditBody) {
     }
 
     const raw = String(data?.choices?.[0]?.message?.content || "").trim();
+    console.log("[AUDIT] raw", raw.slice(0, 200));
     if (!raw) {
       return auditOfflineResponse();
     }
 
     const jsonStr = extractFirstJsonObject(raw);
     if (!jsonStr) {
-      return auditOfflineResponse();
+      return NextResponse.json(
+        { lt_review: [], missed: [], offline: false, parse_error: true },
+        { status: 200, headers: baseHeaders() }
+      );
     }
 
     let parsed: any;
     try {
       parsed = JSON.parse(jsonStr);
     } catch {
-      return auditOfflineResponse();
+      return NextResponse.json(
+        { lt_review: [], missed: [], offline: false, parse_error: true },
+        { status: 200, headers: baseHeaders() }
+      );
     }
 
-    const ltReview = Array.isArray(parsed.lt_review) ? parsed.lt_review : [];
-    const missed = Array.isArray(parsed.missed) ? parsed.missed : [];
+    console.log("[AUDIT] parsed", {
+      lt_review: Array.isArray(parsed?.lt_review) ? parsed.lt_review.length : 0,
+      missed: Array.isArray(parsed?.missed) ? parsed.missed.length : 0
+    });
 
-    return NextResponse.json(
-      { lt_review: ltReview, missed },
-      { status: 200, headers: baseHeaders() }
-    );
+    const result = sanitizeAudit(text, parsed);
+    const payload = { ...result, offline: false, parse_error: false };
+
+    if (!(result.lt_review.length || result.missed.length)) {
+      return NextResponse.json(
+        { ...payload, empty_result: true },
+        { status: 200, headers: baseHeaders() }
+      );
+    }
+
+    return NextResponse.json(payload, { status: 200, headers: baseHeaders() });
   } catch (err: any) {
     if (err?.name === "AbortError") {
       return auditOfflineResponse();
@@ -382,4 +461,3 @@ function extractFirstJsonObject(value: string): string | null {
   }
   return null;
 }
-
