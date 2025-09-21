@@ -35,11 +35,13 @@ free_port() {
     return
   fi
   local pids
-  pids=$(lsof -ti :"$port" 2>/dev/null || true)
+  pids=$(lsof -iTCP:"$port" -sTCP:LISTEN -nP 2>/dev/null | awk 'NR>1 && /ollama/ {print $2}')
   if [[ -n "$pids" ]]; then
-    log "Freeing port $port (pids: $pids)"
+    log "Freeing port $port (ollama pids: $pids)"
     kill $pids 2>/dev/null || kill -9 $pids 2>/dev/null || true
     sleep 1
+  else
+    log "Port $port is not held by Ollama; leaving it"
   fi
 }
 
