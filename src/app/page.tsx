@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Info, AlertTriangle, ListChecks, Settings } from "lucide-react";
 import type { Token as LibToken, VirtualTerminalInsertion } from "@/lib/types";
-import { checkWithLanguageTool, type LtResponse } from "@/lib/ltClient";
+import { buildLtMatchId, checkWithLanguageTool, type LtResponse } from "@/lib/ltClient";
 import { ltToTokens, type TokenHint } from "@/lib/languagetoolAdapter";
 import { gbEditsToInsertions } from "@/lib/gbToVT";
 import { annotateFromGb, buildCaretRow, groupInsertionsByBoundary, type CaretState, type DisplayToken as GbDisplayToken } from "@/lib/gbAnnotate";
@@ -950,15 +950,91 @@ function WritingScorer() {
     setLtHints([]);
     (async () => {
       const resp = await checkWithLanguageTool(text);
-      if (alive) {
-        setGb(resp);
-        setLtHints(ltToTokens(resp));
-        // Initialize token models and terminal groups from GB data
-        const gbEdits = resp?.edits ?? [];
-        const { tokenModels: newTokenModels } = bootstrapStatesFromGB(text, tokens, gbEdits) as any;
-        setTokenModels(newTokenModels);
-      }
+      if (!alive) return;
+
+      const matchesArray = Array.isArray(resp?.matches) ? (resp.matches as any[]) : [];
+      const matchesWithIds = matchesArray.map((m, i) => ({
+        ...m,
+        id: typeof m?.id === "string" && m.id ? m.id : buildLtMatchId(m as any, i)
+      }));
+
+      const ltEdits: any[] = Array.isArray(resp?.edits) ? resp.edits : [];
+      const textLength = text.length;
+
+      const auditPayloadMatches = matchesWithIds.map((m) => ({
+        id: m.id,
+        start: m?.offset ?? 0,
+        end: (m?.offset ?? 0) + (m?.length ?? 0),
+        label: m?.rule?.id || "LT",
+        message: m?.message || "",
+        replace: m?.replacements?.[0]?.value || (Array.isArray(m?.replacements) && typeof m.replacements[0] === "string" ? m.replacements[0] : "")
+      }));
+
+      const auditRes = await fetch("/api/verifier", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          mode: "audit",
+          text,
+          lt: { matches: auditPayloadMatches },
+          limits: { max_missed: 10 }
+        })
+      })
+        .then(r => r.json())
+        .catch(() => ({ lt_review: [], missed: [], offline: true }));
+
+      if (!alive) return;
+
+      const falsePos = new Set(
+        (auditRes.lt_review || [])
+          .filter((r: any) => r && r.decision === "INCORRECT")
+          .map((r: any) => r.id)
+          .filter(Boolean)
+      );
+
+      const filteredLtEdits = ltEdits.filter((e: any) => {
+        const editId = typeof e?.id === "string" ? e.id : undefined;
+        return !editId || !falsePos.has(editId);
+      });
+
+      const missedEdits = (auditRes.missed || []).map((m: any, j: number) => {
+        const rawStart = Number(m?.start);
+        const rawEnd = Number(m?.end);
+        const safeStart = Number.isFinite(rawStart) ? rawStart : 0;
+        const safeEnd = Number.isFinite(rawEnd) ? rawEnd : safeStart;
+        const start = Math.max(0, Math.min(textLength, safeStart));
+        const end = Math.max(start, Math.min(textLength, safeEnd));
+        const labelUpper = typeof m?.label === "string" && m.label ? m.label.toUpperCase() : "OTHER";
+        const errCat = labelUpper === "GRAMMAR" ? "GRMR" : labelUpper;
+        const suggestion = typeof m?.suggestion === "string" ? m.suggestion : "";
+        const reason = typeof m?.reason === "string" ? m.reason : "";
+
+        return {
+          start,
+          end,
+          message: reason || "Issue",
+          ruleId: m?.label || "LLM",
+          replace: suggestion,
+          err_cat: errCat,
+          err_type: labelUpper || "GENERAL",
+          err_desc: reason,
+          severity: "WARN",
+          suggestions: suggestion ? [suggestion] : [],
+          edit_type: suggestion ? "MODIFY" : "REPLACE",
+          id: `missed_${j + 1}`
+        };
+      });
+
+      const mergedEdits = [...filteredLtEdits, ...missedEdits];
+      const respWithMerged: LtResponse = { ...resp, matches: matchesWithIds, edits: mergedEdits };
+
+      setGb(respWithMerged);
+      setLtHints(ltToTokens({ matches: matchesWithIds }));
+
+      const { tokenModels: newTokenModels } = bootstrapStatesFromGB(text, tokens, mergedEdits) as any;
+      setTokenModels(newTokenModels);
     })();
+
     return () => { alive = false; };
   }, [text, tokens, setTokenModels]);
 
@@ -1260,7 +1336,7 @@ function WritingScorer() {
       const spanRaw = text.slice(safeStart, safeEnd);
       const span = spanRaw.trim() || spanRaw;
       return {
-        source: "LT",
+        source: hint.source || "LT",
         ruleId: hint.ruleId || "LT_RULE",
         label: hint.label,
         span,

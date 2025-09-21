@@ -15,6 +15,7 @@
     "test:run": "vitest run",
     "smoke:lt": "curl -s -o /dev/null -w \"%{http_code}\\n\" -X POST http://localhost:${PORT:-3000}/api/languagetool/v1/check -H 'content-type: application/json' --data '{\"text\":\"We was runned fast.\",\"language\":\"en-US\"}'",
     "smoke:llm": "curl -s -o /dev/null -w \"%{http_code}\\n\" -X POST http://localhost:${PORT:-3000}/api/verifier -H 'content-type: application/json' --data '{\"text\":\"sample\",\"mode\":\"quick\"}'",
+    "smoke:audit": "curl -s -X POST http://localhost:${PORT:-3000}/api/verifier -H 'content-type: application/json' --data '{\"mode\":\"audit\",\"text\":\"We was runned fast...\",\"lt\":{\"matches\":[{\"id\":\"m1\",\"start\":3,\"end\":6,\"label\":\"GRAMMAR\"}]}}' | jq .",
     "size:report": "du -sh node_modules/* | sort -h | tail -n 30",
     "analyze": "ANALYZE=1 NODE_OPTIONS='--max-old-space-size=4096' next build",
     "ocr:score": "node scripts/ocr-score.js"

@@ -35,6 +35,7 @@ A TypeScript React web application for Curriculum‑Based Measurement (CBM) writ
 
 - **LanguageTool**: `${LT_BASE_URL:-http://127.0.0.1:8010}` (`/v2/check` endpoint, consumed by `/api/languagetool/v1/check`).
 - **Llama verifier**: `${LLM_BASE_URL:-http://127.0.0.1:11434/v1}` (Ollama-compatible `/chat/completions`, consumed by `/api/verifier`).
+- `POST /api/verifier { mode:"audit", text, lt:{matches}, limits:{max_missed} }` → `{ lt_review, missed }`
 
 Smoke test both services after bringing up the stack:
 

@@ -1,7 +1,10 @@
 export type LtMatch = {
   message: string;
+  shortMessage?: string;
   offset: number;
   length: number;
+  id?: string;
+  replacements?: Array<{ value?: string } | string>;
   rule: { id: string; description: string; issueType?: string };
 };
 
@@ -11,6 +14,7 @@ export type LtEdit = {
   message: string;
   ruleId: string;
   replace?: string;
+  id?: string;
   err_cat?: 'SPELL' | 'GRMR' | 'PUNC' | 'STYLE' | 'CASING' | 'OTHER';
   err_type?: string;
   err_desc?: string;
@@ -82,7 +86,15 @@ function deriveEditType(len: number, replace?: string): 'INSERT' | 'DELETE' | 'M
   return 'MODIFY';
 }
 
-function toLegacyEdit(match: LtMatch): LtEdit {
+export function buildLtMatchId(match: LtMatch, index = 0): string {
+  const start = Math.max(0, typeof match?.offset === 'number' ? match.offset : 0);
+  const length = Math.max(0, typeof match?.length === 'number' ? match.length : 0);
+  const end = Math.max(start, start + length);
+  const ruleId = typeof match?.rule?.id === 'string' && match.rule.id ? match.rule.id : 'LT_RULE';
+  return `${ruleId}#${start}-${end}#${index}`;
+}
+
+function toLegacyEdit(match: LtMatch, index: number): LtEdit {
   const start = Math.max(0, match.offset);
   const end = Math.max(start, start + Math.max(0, match.length));
   const message = (match.message || match.rule?.description || "Issue").trim();
@@ -97,12 +109,15 @@ function toLegacyEdit(match: LtMatch): LtEdit {
     : [];
   const edit_type = deriveEditType(match.length ?? (end - start), firstReplacement);
 
+  const id = typeof match.id === 'string' && match.id ? match.id : buildLtMatchId(match, index);
+
   return {
     start,
     end,
     message,
     ruleId,
     replace: firstReplacement,
+    id,
     err_cat,
     err_type,
     err_desc: match.message || match.rule?.description || '',
