@@ -84,14 +84,16 @@ if command -v colima >/dev/null 2>&1; then
   else
     log "Skipping Colima restart (RESTART_COLIMA=${RESTART_COLIMA})"
   fi
-  if colima help 2>/dev/null | grep -q "docker-env"; then
-    if eval "$(colima docker-env --shell bash)" >/dev/null 2>&1; then
+  if colima help 2>/dev/null | grep -q "\benv\b"; then
+    if eval "$(colima env --shell bash)" >/dev/null 2>&1; then
       log "Configured Docker CLI to use Colima daemon"
     else
-      log "Warning: failed to configure docker-env; Docker commands may not connect"
+      log "Warning: failed to configure docker env; Docker commands may not connect"
     fi
   else
-    log "Colima version does not support docker-env command; ensure Docker CLI points to Colima"
+    export DOCKER_HOST="unix://$HOME/.colima/default/docker.sock"
+    unset DOCKER_TLS_VERIFY DOCKER_CERT_PATH
+    log "Colima env command not available; using DOCKER_HOST=$DOCKER_HOST"
   fi
 fi
 
