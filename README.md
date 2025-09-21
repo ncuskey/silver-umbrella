@@ -88,7 +88,7 @@ This script performs the following:
 5. Syncs `.next/static` and `public/` into `.next/standalone/` so the standalone server can serve assets.
 6. Optionally runs the smoke tests (`RUN_SMOKE_TESTS=0` to skip).
 7. Uses `nvm` (if available) to switch to Node.js 20, then restarts Colima and sets Docker to talk to its socket (via `colima env` or `DOCKER_HOST=unix://$HOME/.colima/default/docker.sock`) so the daemon is ready (`RESTART_COLIMA=0` to skip).
-8. Stops a host-side Ollama service if detected and frees port 11434 (`STOP_HOST_OLLAMA=0` or `FORCE_FREE_PORTS=0` to skip).
+8. Stops a host-side Ollama service if detected and frees port 11434 (`STOP_HOST_OLLAMA=0` or `FORCE_FREE_PORTS=0` to skip). The bundled docker-compose maps Ollama to host port 11435; `LLM_BASE_URL` defaults to `http://127.0.0.1:11435/v1`.
 9. Starts a Cloudflare tunnel if `cloudflared` is installed (disable with `START_CF_TUNNEL=0`, customize command via `CF_TUNNEL_CMD` or `CF_TUNNEL_NAME`).
 10. Launches the standalone server (`npm start`).
 

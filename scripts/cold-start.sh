@@ -13,6 +13,8 @@ log() {
   printf '\n[ColdStart] %s\n' "$1"
 }
 
+export LLM_BASE_URL="${LLM_BASE_URL:-http://127.0.0.1:11435/v1}"
+
 if [[ -z "${NVM_DIR:-}" && -d "$HOME/.nvm" ]]; then
   export NVM_DIR="$HOME/.nvm"
 fi
