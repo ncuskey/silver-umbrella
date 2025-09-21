@@ -47,6 +47,20 @@ free_port() {
   fi
 }
 
+kill_port_generic() {
+  local port="$1"
+  if ! command -v lsof >/dev/null 2>&1; then
+    return
+  fi
+  local pids
+  pids=$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)
+  if [[ -n "$pids" ]]; then
+    log "Terminating processes on port $port (pids: $pids)"
+    kill $pids 2>/dev/null || kill -9 $pids 2>/dev/null || true
+    sleep 1
+  fi
+}
+
 wait_for_docker() {
   local attempts=${1:-30}
   local delay=${2:-2}
@@ -200,6 +214,10 @@ if [[ "${RUN_SMOKE_TESTS:-1}" == "1" ]]; then
   fi
 else
   log "Skipping smoke tests (RUN_SMOKE_TESTS=${RUN_SMOKE_TESTS})"
+fi
+
+if [[ "${KILL_APP_PORT:-1}" == "1" ]]; then
+  kill_port_generic "${PORT:-3000}"
 fi
 
 log "Starting standalone server"
