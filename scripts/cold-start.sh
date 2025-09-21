@@ -199,6 +199,9 @@ fi
 log "Syncing .next/static into standalone output"
 rm -rf "$STANDALONE_DIR/static"
 cp -R "$STATIC_SRC" "$STANDALONE_DIR/static"
+mkdir -p "$STANDALONE_DIR/.next"
+rm -rf "$STANDALONE_DIR/.next/static"
+ln -snf "../../static" "$STANDALONE_DIR/.next/static"
 
 log "Syncing public/ into standalone output"
 rm -rf "$STANDALONE_DIR/public"
