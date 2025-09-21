@@ -65,6 +65,94 @@ export interface HeuristicsResult {
 
 const SENTENCE_TERMINATORS = new Set([".", "!", "?"]);
 const CLOSING_PUNCT_ADJ = new Set([",", ";", ":"]);
+const PAST_TIME_WORDS = new Set([
+  "yesterday",
+  "ago",
+  "earlier",
+  "previously",
+  "once",
+  "formerly",
+]);
+
+const LAST_TIME_TARGETS = new Set([
+  "night",
+  "evening",
+  "morning",
+  "afternoon",
+  "week",
+  "weekend",
+  "month",
+  "year",
+  "summer",
+  "winter",
+  "spring",
+  "fall",
+  "semester",
+  "quarter",
+  "friday",
+  "saturday",
+  "sunday",
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "holiday",
+  "christmas",
+  "thanksgiving",
+  "halloween",
+  "birthday",
+]);
+
+const IRREGULAR_PAST_FORMS = new Map<string, string>([
+  ["am", "was"],
+  ["are", "were"],
+  ["is", "was"],
+  ["be", "was"],
+  ["begin", "began"],
+  ["break", "broke"],
+  ["bring", "brought"],
+  ["build", "built"],
+  ["buy", "bought"],
+  ["choose", "chose"],
+  ["come", "came"],
+  ["do", "did"],
+  ["draw", "drew"],
+  ["drink", "drank"],
+  ["drive", "drove"],
+  ["eat", "ate"],
+  ["fall", "fell"],
+  ["feel", "felt"],
+  ["find", "found"],
+  ["fly", "flew"],
+  ["get", "got"],
+  ["give", "gave"],
+  ["go", "went"],
+  ["grow", "grew"],
+  ["have", "had"],
+  ["hear", "heard"],
+  ["keep", "kept"],
+  ["know", "knew"],
+  ["leave", "left"],
+  ["make", "made"],
+  ["meet", "met"],
+  ["read", "read"],
+  ["ride", "rode"],
+  ["run", "ran"],
+  ["say", "said"],
+  ["see", "saw"],
+  ["sell", "sold"],
+  ["send", "sent"],
+  ["sit", "sat"],
+  ["speak", "spoke"],
+  ["spend", "spent"],
+  ["stand", "stood"],
+  ["swim", "swam"],
+  ["take", "took"],
+  ["teach", "taught"],
+  ["tell", "told"],
+  ["think", "thought"],
+  ["write", "wrote"],
+]);
 
 function toLower(word: string): string {
   return word.toLowerCase();
@@ -144,6 +232,74 @@ function dictionarySet(options?: HeuristicsOptions): Set<string> {
     return new Set([...DEFAULT_DICTIONARY, ...options.dictionary].map(toLower));
   }
   return DEFAULT_DICTIONARY;
+}
+
+function findNextWordIndex(tokens: Token[], start: number, end: number): number {
+  for (let i = start; i <= end; i += 1) {
+    if (isWordToken(tokens[i])) return i;
+  }
+  return -1;
+}
+
+function findPrevWordIndex(tokens: Token[], start: number, min: number): number {
+  for (let i = start; i >= min; i -= 1) {
+    if (isWordToken(tokens[i])) return i;
+  }
+  return -1;
+}
+
+function sentenceHasPastCue(tokens: Token[], sentence: SentenceInfo): boolean {
+  for (let i = sentence.startToken; i <= sentence.endToken; i += 1) {
+    const tok = tokens[i];
+    if (!isWordToken(tok)) continue;
+    const lower = tok.raw.toLowerCase();
+    if (PAST_TIME_WORDS.has(lower)) return true;
+    if (lower === "last") {
+      const nextIdx = findNextWordIndex(tokens, i + 1, sentence.endToken);
+      if (nextIdx !== -1) {
+        const nextLower = tokens[nextIdx].raw.toLowerCase();
+        if (LAST_TIME_TARGETS.has(nextLower)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+function detectPastTenseIssues(text: string, tokens: Token[], sentences: SentenceInfo[]): HeuristicIssue[] {
+  const issues: HeuristicIssue[] = [];
+
+  for (const sentence of sentences) {
+    if (!sentenceHasPastCue(tokens, sentence)) continue;
+
+    for (let i = sentence.startToken; i <= sentence.endToken; i += 1) {
+      const tok = tokens[i];
+      if (!isWordToken(tok)) continue;
+      const lower = tok.raw.toLowerCase();
+      const expected = IRREGULAR_PAST_FORMS.get(lower);
+      if (!expected) continue;
+      if (lower === expected.toLowerCase()) continue;
+
+      const prevIdx = findPrevWordIndex(tokens, i - 1, sentence.startToken);
+      if (prevIdx !== -1) {
+        const prevLower = tokens[prevIdx].raw.toLowerCase();
+        if (prevLower === "did" || prevLower === "had" || prevLower === "has" || prevLower === "have" || prevLower === "to") {
+          continue;
+        }
+      }
+
+      const suggestion = expected;
+      issues.push({
+        rule: "PAST_TENSE_CUE",
+        severity: "warning",
+        message: `Consider using the past-tense form "${suggestion}" instead of "${tok.raw}" when writing about the past`,
+        tokenIndices: [tok.idx],
+        span: [tok.start ?? 0, tok.end ?? 0],
+        suggestion,
+      });
+    }
+  }
+
+  return issues;
 }
 
 function isAbbreviationCandidate(word: string, punctuation: string, abbreviationLookup: Set<string>): boolean {
@@ -469,11 +625,12 @@ export function analyzeText(text: string, options?: HeuristicsOptions): Heuristi
   const dictionary = dictionarySet(options);
   const properNouns = properNounSet(options);
   const metadata = collectDictionaryMetadata(tokens, dictionary, properNouns, options);
+  const pastIssues = detectPastTenseIssues(text, tokens, sentences);
 
   return {
     tokens,
     sentences,
-    wordIssues: [...spacingResults.wordIssues],
+    wordIssues: [...spacingResults.wordIssues, ...pastIssues],
     boundaryIssues: spacingResults.boundaryIssues,
     metadata,
   };
